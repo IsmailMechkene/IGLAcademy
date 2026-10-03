@@ -1,0 +1,34 @@
+appId: com.ismalearn.app
+productName: IsmaLearn
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+extraResources:
+  - from: assets
+    to: assets
+    filter:
+      - "**/*"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  # NOTE: executable signing/metadata editing (rcedit) is disabled because the
+  # winCodeSign tools cannot be extracted without Windows symlink privileges
+  # (requires admin or Developer Mode). The app exe keeps default Electron
+  # metadata; the icon is applied afterwards — see "scripts/brand-exe.mjs".
+  # Re-enable by removing this line on a machine with symlink privileges.
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: IsmaLearn
+  uninstallDisplayName: IsmaLearn
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
