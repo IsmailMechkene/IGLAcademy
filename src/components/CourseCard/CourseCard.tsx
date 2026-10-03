@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { BookOpen, GraduationCap } from 'lucide-react';
+import { BookOpen, Play } from 'lucide-react';
 import type { CourseWithProgress } from '../../types';
-import { api } from '../../services/api';
 import { useApp } from '../../App';
+import { cleanTitle } from '../../utils/titles';
+import CourseCover from '../CourseCover/CourseCover';
 import ProgressBar from '../ProgressBar/ProgressBar';
 import styles from './CourseCard.module.css';
 
@@ -12,51 +12,37 @@ interface Props {
 
 export default function CourseCard({ course }: Props) {
   const { navigate } = useApp();
-  const [thumb, setThumb] = useState<string | null>(null);
+  const displayTitle = cleanTitle(course.title);
 
-  useEffect(() => {
-    let cancelled = false;
-    api()
-      .courses.thumbnailUrl(course.id)
-      .then((url) => {
-        if (!cancelled) setThumb(url);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [course.id]);
+  const open = () => navigate({ name: 'course', courseId: course.id });
 
   return (
     <div
       className={`card ${styles.card}`}
-      onClick={() => navigate({ name: 'course', courseId: course.id })}
+      onClick={open}
       role="button"
       tabIndex={0}
+      title={displayTitle !== course.title ? course.title : undefined}
+      aria-label={`Open course: ${displayTitle}`}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') navigate({ name: 'course', courseId: course.id });
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
       }}
     >
       <div className={styles.thumbnail}>
-        {thumb ? (
-          <img
-            src={thumb}
-            alt=""
-            loading="lazy"
-            onError={() => setThumb(null)}
-          />
-        ) : (
-          <div className={styles.thumbnailPlaceholder}>
-            <GraduationCap size={36} strokeWidth={1.5} />
-          </div>
-        )}
+        <CourseCover courseId={course.id} title={course.title} />
+        <span className={styles.playOverlay} aria-hidden="true">
+          <Play size={22} fill="currentColor" />
+        </span>
       </div>
       <div className={styles.body}>
-        <div className={styles.title}>{course.title}</div>
+        <div className={styles.title}>{displayTitle}</div>
         <div className={styles.meta}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <BookOpen size={13} />
-            {course.lessonCount} lessons
+          <span className={styles.lessonCount}>
+            <BookOpen size={13} aria-hidden="true" />
+            {course.completedCount} of {course.lessonCount} lessons
           </span>
           <span className={styles.percent}>{course.progressPercent}%</span>
         </div>

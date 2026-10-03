@@ -26,15 +26,15 @@
 }
 
 .searchInput {
-  padding-left: 36px;
+  /* Higher specificity than .input so the icon padding always wins,
+     regardless of stylesheet order in the bundle. */
+  padding-left: 40px;
+}
+
+.searchWrap .searchInput {
+  padding-left: 40px;
 }
 
 .spacer {
   flex: 1;
-}
-
-.title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-secondary);
 }

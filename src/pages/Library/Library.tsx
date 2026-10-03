@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, Search, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FolderOpen, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X, MoreVertical,
+} from 'lucide-react';
 import type { CourseWithProgress, ImportResult, RescanResult } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
@@ -13,10 +15,9 @@ interface Props {
 }
 
 export default function Library({ filter = 'all' }: Props) {
-  const { navigate, refreshAll, refreshKey, searchQuery, setSearchQuery } = useApp();
+  const { navigate, refreshAll, refreshKey, searchQuery } = useApp();
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
-  const [importing, setImporting] = useState(false);
   const [dialog, setDialog] = useState<
     | { kind: 'importing' }
     | { kind: 'result'; result: ImportResult }
@@ -58,7 +59,6 @@ export default function Library({ filter = 'all' }: Props) {
   }, [courses, filter, searchQuery]);
 
   const handleImport = async () => {
-    setImporting(true);
     setDialog({ kind: 'importing' });
     try {
       const result = await api().courses.import();
@@ -69,8 +69,6 @@ export default function Library({ filter = 'all' }: Props) {
         kind: 'result',
         result: { status: 'error', error: err instanceof Error ? err.message : 'Import failed' },
       });
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -114,32 +112,27 @@ export default function Library({ filter = 'all' }: Props) {
           <h1>{titles[filter].title}</h1>
           <p>{titles[filter].subtitle}</p>
         </div>
-        <div className={styles.toolbar}>
-          <div className={styles.searchWrap}>
-            <span className={styles.searchIcon}>
-              <Search size={15} />
-            </span>
-            <input
-              className="input"
-              style={{ paddingLeft: 34 }}
-              placeholder="Filter courses..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <button className="btn btn-primary" onClick={handleImport} disabled={importing}>
-            <FolderOpen size={16} />
-            {importing ? 'Importing...' : 'Import Course'}
-          </button>
-        </div>
       </div>
 
       {loading ? (
-        <div className="muted">Loading courses...</div>
+        <div className={styles.courseGrid} aria-label="Loading courses">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={`card ${styles.skeletonCard}`} aria-hidden="true">
+              <div className={`skeleton ${styles.skeletonThumb}`} />
+              <div className={styles.skeletonBody}>
+                <div className={`skeleton ${styles.skeletonLine}`} style={{ width: '85%' }} />
+                <div className={`skeleton ${styles.skeletonLine}`} style={{ width: '55%' }} />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className={`card ${styles.emptyState}`}>
           {filter === 'all' ? (
             <>
+              <div className={styles.emptyIcon}>
+                <FolderOpen size={30} strokeWidth={1.8} />
+              </div>
               <h2>No courses yet</h2>
               <p>Import a course folder to start learning.</p>
               <button className="btn btn-primary" onClick={handleImport}>
@@ -147,45 +140,43 @@ export default function Library({ filter = 'all' }: Props) {
                 Import Course
               </button>
             </>
+          ) : filter === 'completed' ? (
+            <>
+              <div className={styles.emptyIcon}>
+                <CheckCircle2 size={30} strokeWidth={1.8} />
+              </div>
+              <h2>No completed courses yet</h2>
+              <p>Finish all lessons in a course to see it here.</p>
+              <button className="btn btn-primary" onClick={() => navigate({ name: 'library' })}>
+                <FolderOpen size={16} />
+                Browse My Courses
+              </button>
+            </>
           ) : (
             <>
-              <h2>{filter === 'completed' ? 'No completed courses yet' : 'No courses in progress'}</h2>
-              <p className="muted">
-                {filter === 'completed'
-                  ? 'Complete all lessons in a course to see it here.'
-                  : 'Start learning a course to see it here.'}
-              </p>
+              <div className={styles.emptyIcon}>
+                <PlayCircle size={30} strokeWidth={1.8} />
+              </div>
+              <h2>No courses in progress</h2>
+              <p>Start learning a course to see it here.</p>
+              <button className="btn btn-primary" onClick={() => navigate({ name: 'library' })}>
+                <FolderOpen size={16} />
+                Browse My Courses
+              </button>
             </>
           )}
         </div>
       ) : (
         <div className={styles.courseGrid}>
           {filtered.map((course) => (
-            <div key={course.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div key={course.id} className={styles.cardWrap}>
               <CourseCard course={course} />
-              <div style={{ display: 'flex', gap: 6, padding: '0 2px' }}>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  title="Rescan for new files"
-                  onClick={() => handleRescan(course.id)}
-                >
-                  <RefreshCw size={13} /> Rescan
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  title="Rename course"
-                  onClick={() => setDialog({ kind: 'rename', course })}
-                >
-                  <Pencil size={13} /> Rename
-                </button>
-                <button
-                  className="btn btn-danger btn-sm"
-                  title="Remove course (files are not deleted)"
-                  onClick={() => setDialog({ kind: 'delete', course })}
-                >
-                  <Trash2 size={13} /> Remove
-                </button>
-              </div>
+              <CourseMenu
+                courseTitle={course.title}
+                onRescan={() => handleRescan(course.id)}
+                onRename={() => setDialog({ kind: 'rename', course })}
+                onRemove={() => setDialog({ kind: 'delete', course })}
+              />
             </div>
           ))}
         </div>
@@ -340,6 +331,86 @@ export default function Library({ filter = 'all' }: Props) {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function CourseMenu({
+  courseTitle,
+  onRescan,
+  onRename,
+  onRemove,
+}: {
+  courseTitle: string;
+  onRescan: () => void;
+  onRename: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const close = () => {
+    setOpen(false);
+    btnRef.current?.focus();
+  };
+
+  const run = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  return (
+    <div
+      className={styles.menuWrap}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        className={`${styles.menuBtn} ${open ? styles.menuBtnOpen : ''}`}
+        aria-label={`Actions for ${courseTitle}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+      >
+        <MoreVertical size={17} />
+      </button>
+      {open && (
+        <>
+          <div className={styles.menuScrim} onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            className={`card ${styles.menu}`}
+            role="menu"
+            aria-label={`Actions for ${courseTitle}`}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                close();
+              }
+            }}
+          >
+            <button type="button" role="menuitem" className={styles.menuItem} onClick={run(onRescan)}>
+              <RefreshCw size={14} /> Rescan for new files
+            </button>
+            <button type="button" role="menuitem" className={styles.menuItem} onClick={run(onRename)}>
+              <Pencil size={14} /> Rename course
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={`${styles.menuItem} ${styles.menuItemDanger}`}
+              onClick={run(onRemove)}
+            >
+              <Trash2 size={14} /> Remove course
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

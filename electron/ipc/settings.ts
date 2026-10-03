@@ -18,7 +18,7 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('settings:set', (_e, key: unknown, value: unknown) => {
     const k = requireString(key, 'key', 100);
     // Validate known setting values
-    if (k === 'theme') requireEnum(value, ['dark', 'light'] as const, 'theme');
+    if (k === 'theme') requireEnum(value, ['dark', 'light', 'system'] as const, 'theme');
     if (k === 'resumePlayback') requireEnum(value, ['ask', 'always', 'never'] as const, 'resumePlayback');
     if (k === 'duplicateImportBehavior') requireEnum(value, ['ask', 'skip', 'rescan'] as const, 'duplicateImportBehavior');
     if (k === 'defaultPlaybackSpeed') {

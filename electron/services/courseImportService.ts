@@ -18,7 +18,7 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
   if (scanned.lessonCount === 0) {
     return {
       status: 'error',
-      error: 'No video files were found in the selected folder. IsmaLearn imports courses that contain MP4, WebM or MKV videos.',
+      error: 'No videos or practice tests were found in the selected folder. IsmaLearn imports courses that contain MP4, WebM, MKV or HTML practice-test files.',
     };
   }
 
@@ -40,7 +40,7 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
         insertLesson(db, sectionId, {
           title: lesson.title,
           filePath: lesson.filePath,
-          fileType: 'video',
+          fileType: lesson.kind,
           position: lesson.position,
         });
       }
@@ -118,7 +118,7 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         insertLesson(db, sectionId, {
           title: scannedLesson.title,
           filePath: scannedLesson.filePath,
-          fileType: 'video',
+          fileType: scannedLesson.kind,
           position: scannedLesson.position,
         });
         addedLessons++;

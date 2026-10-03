@@ -11,7 +11,7 @@
   --border-strong: #3a4258;
   --text: #e9ebf2;
   --text-secondary: #a0a8ba;
-  --text-muted: #6b7386;
+  --text-muted: #9aa1b5;
   --accent: #7c6cf0;
   --accent-hover: #8f80f5;
   --accent-soft: rgba(124, 108, 240, 0.14);
@@ -22,12 +22,27 @@
   --danger-soft: rgba(248, 113, 113, 0.12);
   --warning: #fbbf24;
   --warning-soft: rgba(251, 191, 36, 0.12);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.14);
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
   --sidebar-width: 240px;
   --topbar-height: 60px;
+  /* spacing scale (4/8px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  /* type scale */
+  --font-size-title: 28px;
+  --font-size-section: 17px;
+  --font-size-body: 14px;
+  --font-size-caption: 12.5px;
 }
 
 [data-theme='light'] {
@@ -40,7 +55,7 @@
   --border-strong: #c9cedb;
   --text: #1b1e28;
   --text-secondary: #4d5568;
-  --text-muted: #8a91a3;
+  --text-muted: #5f6675;
   --accent: #6a58e8;
   --accent-hover: #5848d6;
   --accent-soft: rgba(106, 88, 232, 0.1);
@@ -51,6 +66,8 @@
   --danger-soft: rgba(220, 68, 70, 0.08);
   --warning: #b45309;
   --warning-soft: rgba(180, 83, 9, 0.1);
+  --info: #2563eb;
+  --info-soft: rgba(37, 99, 235, 0.1);
   --shadow: 0 8px 32px rgba(20, 24, 40, 0.08);
 }
 
@@ -185,10 +202,92 @@ body {
   color: var(--text-secondary);
 }
 
+/* visible keyboard focus everywhere */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.input:focus,
+select.select:focus {
+  outline: none;
+}
+
+/* themed native select (used with .selectWrap + chevron icon) */
+.selectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.selectWrap > svg {
+  position: absolute;
+  right: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+select.select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 200px;
+  max-width: 100%;
+  padding: 9px 32px 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+select.select:hover {
+  border-color: var(--border-strong);
+}
+
+select.select:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+select.select option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+/* skeleton loading shimmer */
+.skeleton {
+  background: var(--bg-hover);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.08) 50%, transparent 80%);
+  animation: shimmer 1.4s infinite;
+}
+
+[data-theme='light'] .skeleton::after {
+  background: linear-gradient(100deg, transparent 20%, rgba(20, 24, 40, 0.06) 50%, transparent 80%);
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -198,7 +297,6 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 6px;
-  border: 2px solid var(--bg);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -240,4 +338,18 @@ body {
 
 .fade-in {
   animation: fadeIn 0.25s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .fade-in {
+    animation: none;
+  }
 }

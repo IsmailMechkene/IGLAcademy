@@ -70,8 +70,20 @@ export default function App() {
       .catch(() => undefined);
   }, []);
 
+  // Apply theme; 'system' follows the OS color scheme and tracks changes
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
+    const resolveTheme = () => {
+      if (settings.theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      return settings.theme;
+    };
+    document.documentElement.setAttribute('data-theme', resolveTheme());
+    if (settings.theme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const listener = () => document.documentElement.setAttribute('data-theme', resolveTheme());
+    mq.addEventListener('change', listener);
+    return () => mq.removeEventListener('change', listener);
   }, [settings.theme]);
 
   // Save playback position when the window closes

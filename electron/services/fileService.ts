@@ -77,6 +77,8 @@ const MIME_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.vtt': 'text/vtt',
+  '.html': 'text/html',
+  '.htm': 'text/html',
 };
 
 /**

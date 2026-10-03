@@ -1,10 +1,48 @@
-import { useEffect, useState } from 'react';
-import { Database, Info, Moon, RotateCcw, Sun } from 'lucide-react';
-import { PLAYBACK_SPEEDS } from '../../types';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Database, Info, Monitor, Moon, RotateCcw, Sun, ChevronDown } from 'lucide-react';
+import { PLAYBACK_SPEEDS, type AppSettings } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatBytes } from '../../utils/format';
+import SegmentedControl, { type SegmentOption } from '../../components/SegmentedControl/SegmentedControl';
 import styles from './Settings.module.css';
+
+const THEME_OPTIONS: Array<SegmentOption<AppSettings['theme']>> = [
+  { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
+  { value: 'light', label: 'Light', icon: <Sun size={14} /> },
+  { value: 'system', label: 'System', icon: <Monitor size={14} /> },
+];
+
+const SPEED_OPTIONS: Array<SegmentOption<number>> = PLAYBACK_SPEEDS.map((s) => ({
+  value: s,
+  label: `${s}×`,
+}));
+
+function ThemedSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <span className="selectWrap">
+      <select
+        className="select"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {children}
+      </select>
+      <ChevronDown size={15} aria-hidden="true" />
+    </span>
+  );
+}
 
 export default function Settings() {
   const { settings, updateSettings, refreshAll } = useApp();
@@ -26,22 +64,20 @@ export default function Settings() {
 
       <section className={`card ${styles.section}`}>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {settings.theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+          {settings.theme === 'light' ? <Sun size={16} /> : settings.theme === 'system' ? <Monitor size={16} /> : <Moon size={16} />}
           Appearance
         </h2>
         <div className={styles.settingRow}>
           <div className={styles.settingInfo}>
             <div className={styles.settingLabel}>Theme</div>
-            <div className={styles.settingDesc}>Dark is easier on the eyes during long study sessions.</div>
+            <div className={styles.settingDesc}>System follows your OS light/dark setting automatically.</div>
           </div>
-          <select
-            className={`input ${styles.select}`}
+          <SegmentedControl
+            label="Theme"
             value={settings.theme}
-            onChange={(e) => updateSettings({ theme: e.target.value as 'dark' | 'light' })}
-          >
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
+            onChange={(theme) => updateSettings({ theme })}
+            options={THEME_OPTIONS}
+          />
         </div>
       </section>
 
@@ -52,17 +88,12 @@ export default function Settings() {
             <div className={styles.settingLabel}>Default playback speed</div>
             <div className={styles.settingDesc}>Applied to every lesson you open.</div>
           </div>
-          <select
-            className={`input ${styles.select}`}
+          <SegmentedControl
+            label="Default playback speed"
             value={settings.defaultPlaybackSpeed}
-            onChange={(e) => updateSettings({ defaultPlaybackSpeed: Number(e.target.value) })}
-          >
-            {PLAYBACK_SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {s}x
-              </option>
-            ))}
-          </select>
+            onChange={(speed) => updateSettings({ defaultPlaybackSpeed: speed })}
+            options={SPEED_OPTIONS}
+          />
         </div>
         <div className={styles.settingRow}>
           <div className={styles.settingInfo}>
@@ -71,15 +102,15 @@ export default function Settings() {
               Decide what happens when you reopen a lesson you have already started.
             </div>
           </div>
-          <select
-            className={`input ${styles.select}`}
+          <ThemedSelect
+            label="Resume playback"
             value={settings.resumePlayback}
-            onChange={(e) => updateSettings({ resumePlayback: e.target.value as 'ask' | 'always' | 'never' })}
+            onChange={(v) => updateSettings({ resumePlayback: v as AppSettings['resumePlayback'] })}
           >
             <option value="ask">Always ask</option>
             <option value="always">Always resume</option>
             <option value="never">Always start from beginning</option>
-          </select>
+          </ThemedSelect>
         </div>
       </section>
 
@@ -92,17 +123,15 @@ export default function Settings() {
               IsmaLearn detects when you import a folder that is already in your library.
             </div>
           </div>
-          <select
-            className={`input ${styles.select}`}
+          <ThemedSelect
+            label="When a duplicate course is imported"
             value={settings.duplicateImportBehavior}
-            onChange={(e) =>
-              updateSettings({ duplicateImportBehavior: e.target.value as 'ask' | 'skip' | 'rescan' })
-            }
+            onChange={(v) => updateSettings({ duplicateImportBehavior: v as AppSettings['duplicateImportBehavior'] })}
           >
             <option value="ask">Show options</option>
             <option value="skip">Skip import</option>
             <option value="rescan">Rescan existing course</option>
-          </select>
+          </ThemedSelect>
         </div>
       </section>
 

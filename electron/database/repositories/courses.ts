@@ -30,7 +30,7 @@ export function listCourses(db: Database.Database): CourseWithProgress[] {
     .prepare(
       `SELECT c.*,
         (SELECT COUNT(*) FROM sections s WHERE s.course_id = c.id) AS section_count,
-        (SELECT COUNT(*) FROM lessons l JOIN sections s ON l.section_id = s.id WHERE s.course_id = c.id AND l.file_type = 'video') AS lesson_count,
+        (SELECT COUNT(*) FROM lessons l JOIN sections s ON l.section_id = s.id WHERE s.course_id = c.id AND l.file_type IN ('video', 'practice')) AS lesson_count,
         (SELECT COUNT(*) FROM lesson_progress lp JOIN lessons l ON lp.lesson_id = l.id JOIN sections s ON l.section_id = s.id WHERE s.course_id = c.id AND lp.completed = 1) AS completed_count,
         (SELECT COALESCE(SUM(lp.watched_seconds), 0) FROM lesson_progress lp JOIN lessons l ON lp.lesson_id = l.id JOIN sections s ON l.section_id = s.id WHERE s.course_id = c.id) AS watched_seconds
       FROM courses c
@@ -109,7 +109,7 @@ export function getCourseDetail(db: Database.Database, id: number): CourseDetail
     `SELECT l.*, lp.completed, lp.completed_at, lp.position_seconds, lp.watched_seconds
      FROM lessons l
      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
-     WHERE l.section_id = ? AND l.file_type = 'video'
+     WHERE l.section_id = ? AND l.file_type IN ('video', 'practice')
      ORDER BY l.position`,
   );
 
@@ -124,7 +124,7 @@ export function getCourseDetail(db: Database.Database, id: number): CourseDetail
       sectionId: l.section_id,
       title: l.title,
       filePath: l.file_path,
-      fileType: 'video' as const,
+      fileType: l.file_type as 'video' | 'practice',
       duration: l.duration,
       position: l.position,
       completed: l.completed === 1,
@@ -179,7 +179,7 @@ export function getLesson(db: Database.Database, lessonId: number): LessonWithPr
     sectionId: row.section_id,
     title: row.title,
     filePath: row.file_path,
-    fileType: row.file_type as 'video' | 'resource',
+    fileType: row.file_type as 'video' | 'practice' | 'resource',
     duration: row.duration,
     position: row.position,
     completed: row.completed === 1,
@@ -209,7 +209,7 @@ export function renameSection(db: Database.Database, sectionId: number, title: s
 export function insertLesson(
   db: Database.Database,
   sectionId: number,
-  data: { title: string; filePath: string; fileType: 'video' | 'resource'; position: number },
+  data: { title: string; filePath: string; fileType: 'video' | 'practice' | 'resource'; position: number },
 ): number {
   const info = db
     .prepare('INSERT INTO lessons (section_id, title, file_path, file_type, position) VALUES (?, ?, ?, ?, ?)')

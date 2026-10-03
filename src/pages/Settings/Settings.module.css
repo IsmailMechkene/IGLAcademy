@@ -8,9 +8,10 @@
 }
 
 .header h1 {
-  font-size: 22px;
+  font-size: var(--font-size-title);
   font-weight: 700;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .section {
@@ -27,15 +28,15 @@
 }
 
 .settingRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 16px 20px;
 }
 
 .settingInfo {
-  flex: 1;
   min-width: 0;
+  max-width: 420px;
 }
 
 .settingLabel {
@@ -44,20 +45,33 @@
 }
 
 .settingDesc {
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--text-muted);
   margin-top: 2px;
+  text-wrap: pretty;
 }
 
-.select {
-  width: 200px;
-  flex-shrink: 0;
+@media (max-width: 640px) {
+  .settingRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settingInfo {
+    max-width: none;
+  }
 }
 
 .infoGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .infoGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .infoItem {

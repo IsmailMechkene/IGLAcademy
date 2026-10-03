@@ -100,12 +100,12 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
         </h3>
         <div className={styles.headerActions}>
           {view !== 'list' && (
-            <button className={styles.iconBtn} title="Back to notes" onClick={() => setView('list')}>
+            <button className={styles.iconBtn} title="Back to notes" aria-label="Back to notes" onClick={() => setView('list')}>
               <X size={15} />
             </button>
           )}
           {view === 'list' && (
-            <button className={styles.iconBtn} title="New note" onClick={createNote}>
+            <button className={styles.iconBtn} title="New note" aria-label="New note" onClick={createNote}>
               <Plus size={16} />
             </button>
           )}
@@ -179,6 +179,7 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
                 className="btn btn-danger btn-sm"
                 onClick={() => deleteNote(activeNote.id)}
                 title="Delete note"
+                aria-label="Delete note"
               >
                 <Trash2 size={13} />
               </button>

@@ -144,6 +144,32 @@ describe('course import', () => {
     expect(getCourseDetail(db, courseId)).toBeNull();
     expect(listNotes(db)).toHaveLength(0);
   });
+
+  it('imports HTML practice tests as completable lessons', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-practice-')));
+    const courseRoot = path.join(root, 'DVA-C02 Practice Exams');
+    fs.mkdirSync(path.join(courseRoot, '01. practice-test'), { recursive: true });
+    fs.writeFileSync(path.join(courseRoot, '01. practice-test', '1.1 Practice Test #1.html'), '<html></html>');
+    fs.writeFileSync(path.join(courseRoot, '01. practice-test', '1.2 Practice Test #2.html'), '<html></html>');
+    fs.writeFileSync(path.join(courseRoot, 'intro.mp4'), '');
+
+    const result = importCourse(db, courseRoot);
+    expect(result.status).toBe('imported');
+    expect(result.lessonCount).toBe(3);
+
+    const detail = getCourseDetail(db, result.courseId!)!;
+    expect(detail.sections).toHaveLength(2);
+    const practiceSection = detail.sections.find((s) => s.lessons[0]?.fileType === 'practice')!;
+    expect(practiceSection.lessons).toHaveLength(2);
+    expect(practiceSection.lessons[0].fileType).toBe('practice');
+
+    // counts include practice lessons and they can be completed manually
+    expect(detail.lessonCount).toBe(3);
+    setCompleted(db, practiceSection.lessons[0].id, true);
+    const updated = getCourseDetail(db, result.courseId!)!;
+    expect(updated.completedCount).toBe(1);
+    expect(listCourses(db)[0].lessonCount).toBe(3);
+  });
 });
 
 describe('rescan', () => {

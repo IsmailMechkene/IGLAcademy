@@ -6,6 +6,7 @@ import {
   scanCourseDirectory,
   titleFromFileName,
   isVideoFile,
+  isPracticeFile,
   isResourceFile,
 } from '../electron/services/courseScanner';
 
@@ -89,6 +90,28 @@ describe('course folder scanning', () => {
     expect(scanned.thumbnailPath).toBe(path.join(root, 'cover.jpg'));
   });
 
+  it('detects HTML practice tests as lessons, including practice-only folders', () => {
+    const root = makeTempCourse({
+      '01. practice-test': [
+        '1.1 Practice Test #1 (DVA-C02).html',
+        '1.2 Practice Test #2 (DVA-C02).html',
+      ],
+      '02 - Videos': ['01 - Intro.mp4', '2.1 Practice Test #3.htm'],
+    });
+
+    const scanned = scanCourseDirectory(root);
+    expect(scanned.sections.map((s) => s.title)).toEqual(['01 practice-test', '02 - Videos']);
+
+    const practiceSection = scanned.sections[0];
+    expect(practiceSection.lessons).toHaveLength(2);
+    expect(practiceSection.lessons.every((l) => l.kind === 'practice')).toBe(true);
+
+    // videos and practice files merge into one naturally-sorted lesson list
+    const mixed = scanned.sections[1].lessons;
+    expect(mixed.map((l) => l.kind)).toEqual(['video', 'practice']);
+    expect(scanned.lessonCount).toBe(4);
+  });
+
   it('throws a clear error for a missing directory', () => {
     expect(() => scanCourseDirectory(path.join(os.tmpdir(), 'does-not-exist-xyz'))).toThrow(
       /not found/i,
@@ -111,6 +134,9 @@ describe('file type helpers', () => {
     expect(isVideoFile('lesson.webm')).toBe(true);
     expect(isVideoFile('lesson.mkv')).toBe(true);
     expect(isVideoFile('lesson.avi')).toBe(false);
+    expect(isPracticeFile('test.html')).toBe(true);
+    expect(isPracticeFile('test.HTM')).toBe(true);
+    expect(isPracticeFile('notes.pdf')).toBe(false);
     expect(isResourceFile('notes.pdf')).toBe(true);
     expect(isResourceFile('subs.srt')).toBe(true);
     expect(isResourceFile('readme.md')).toBe(true);

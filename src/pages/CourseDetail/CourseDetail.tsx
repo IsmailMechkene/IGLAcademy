@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft, BookOpen, CheckCircle2, ChevronDown, ListChecks, Pencil, PlayCircle,
-  RefreshCw, GraduationCap,
+  ArrowLeft, BookOpen, CheckCircle2, ChevronDown, FileText, ListChecks, Pencil, PlayCircle,
+  RefreshCw,
 } from 'lucide-react';
 import type { CourseDetail as CourseDetailType } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatTime } from '../../utils/format';
+import { cleanTitle } from '../../utils/titles';
+import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
 import QuizManager from '../../components/Quiz/QuizManager';
 import styles from './CourseDetail.module.css';
@@ -19,7 +21,6 @@ export default function CourseDetail({ courseId }: Props) {
   const { navigate, refreshAll, refreshKey } = useApp();
   const [course, setCourse] = useState<CourseDetailType | null>(null);
   const [loading, setLoading] = useState(true);
-  const [thumb, setThumb] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Set<number>>(new Set());
   const [renaming, setRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -40,12 +41,6 @@ export default function CourseDetail({ courseId }: Props) {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    api()
-      .courses.thumbnailUrl(courseId)
-      .then((url) => {
-        if (!cancelled) setThumb(url);
-      })
-      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -97,11 +92,7 @@ export default function CourseDetail({ courseId }: Props) {
 
       <div className={styles.header}>
         <div className={styles.thumbnail}>
-          {thumb ? (
-            <img src={thumb} alt="" />
-          ) : (
-            <GraduationCap size={48} strokeWidth={1.4} />
-          )}
+          <CourseCover courseId={course.id} title={course.title} />
         </div>
         <div className={styles.headerInfo}>
           {renaming ? (
@@ -133,7 +124,7 @@ export default function CourseDetail({ courseId }: Props) {
               </button>
             </div>
           ) : (
-            <h1>{course.title}</h1>
+            <h1 title={course.title}>{cleanTitle(course.title)}</h1>
           )}
           {course.description && <p className={styles.description}>{course.description}</p>}
           <div className={styles.metaRow}>
@@ -211,6 +202,8 @@ export default function CourseDetail({ courseId }: Props) {
                       <span className={styles.statusIcon}>
                         {lesson.completed ? (
                           <CheckCircle2 size={17} color="var(--success)" />
+                        ) : lesson.fileType === 'practice' ? (
+                          <FileText size={17} color="var(--text-muted)" />
                         ) : (
                           <PlayCircle size={17} color="var(--text-muted)" />
                         )}

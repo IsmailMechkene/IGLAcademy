@@ -4,6 +4,8 @@ import { naturalSort } from './naturalSort';
 
 // Supported media / resource formats
 export const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mkv'] as const;
+// HTML practice tests (e.g. downloaded Udemy practice exams)
+export const PRACTICE_EXTENSIONS = ['.html', '.htm'] as const;
 export const RESOURCE_EXTENSIONS = [
   '.pdf', '.txt', '.md', '.vtt', '.srt',
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
@@ -19,6 +21,7 @@ export interface ScannedResource {
 export interface ScannedLesson {
   title: string;
   filePath: string;
+  kind: 'video' | 'practice';
   position: number;
 }
 
@@ -43,6 +46,10 @@ function extOf(filePath: string): string {
 
 export function isVideoFile(filePath: string): boolean {
   return (VIDEO_EXTENSIONS as readonly string[]).includes(extOf(filePath));
+}
+
+export function isPracticeFile(filePath: string): boolean {
+  return (PRACTICE_EXTENSIONS as readonly string[]).includes(extOf(filePath));
 }
 
 export function isResourceFile(filePath: string): boolean {
@@ -72,7 +79,8 @@ interface DirEntry {
 /**
  * Recursively scans a course directory and produces a structured course:
  * - subfolders become sections
- * - video files become lessons
+ * - video files become video lessons
+ * - HTML files become practice-test lessons (e.g. downloaded practice exams)
  * - resources (pdf, txt, md, subtitles, images) attach to their section
  * - everything is sorted naturally and deterministically
  */
@@ -104,6 +112,7 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
   // Group files by directory
   interface DirContent {
     videos: string[];
+    practice: string[];
     resources: ScannedResource[];
   }
   const contentByDir = new Map<string, DirContent>();
@@ -114,13 +123,15 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     } catch {
       continue;
     }
-    const content: DirContent = { videos: [], resources: [] };
+    const content: DirContent = { videos: [], practice: [], resources: [] };
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (entry.name.startsWith('.')) continue;
       const filePath = path.join(dir, entry.name);
       if (isVideoFile(entry.name)) {
         content.videos.push(filePath);
+      } else if (isPracticeFile(entry.name)) {
+        content.practice.push(filePath);
       } else if (isResourceFile(entry.name)) {
         content.resources.push({
           fileName: entry.name,
@@ -132,11 +143,28 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     contentByDir.set(rel, content);
   }
 
-  // Build sections: every directory containing at least one video becomes a section.
-  // The root directory (rel === '') becomes the default section when it has videos.
+  /** Merges videos + practice files into one naturally-sorted lesson list. */
+  const buildLessons = (videos: string[], practice: string[]): ScannedLesson[] => {
+    const files = [
+      ...videos.map((filePath) => ({ filePath, kind: 'video' as const })),
+      ...practice.map((filePath) => ({ filePath, kind: 'practice' as const })),
+    ];
+    return naturalSort(files, (f) => path.basename(f.filePath)).map((l, i) => ({
+      title: titleFromFileName(l.filePath),
+      filePath: l.filePath,
+      kind: l.kind,
+      position: i + 1,
+    }));
+  };
+
+  const hasLessons = (content: DirContent): boolean =>
+    content.videos.length > 0 || content.practice.length > 0;
+
+  // Build sections: every directory with videos or practice tests becomes a section.
+  // The root directory (rel === '') becomes the default section when it has lessons.
   const DEFAULT_SECTION_TITLE = 'Course Content';
   const sections: ScannedSection[] = [];
-  const rootContent = contentByDir.get('') ?? { videos: [], resources: [] };
+  const rootContent = contentByDir.get('') ?? { videos: [], practice: [], resources: [] };
 
   const sortedDirs = naturalSort(dirs.filter((d) => d.rel !== ''), (d) => d.rel);
 
@@ -146,14 +174,10 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
 
   for (const { rel } of sortedDirs) {
     const content = contentByDir.get(rel);
-    if (!content || content.videos.length === 0) continue;
+    if (!content || !hasLessons(content)) continue;
     const section: ScannedSection = {
       title: titleFromFolderName(path.posix.basename(rel)),
-      lessons: naturalSort(content.videos, (f) => path.basename(f)).map((filePath, i) => ({
-        title: titleFromFileName(filePath),
-        filePath,
-        position: i + 1,
-      })),
+      lessons: buildLessons(content.videos, content.practice),
       resources: naturalSort(content.resources, (r) => r.fileName),
       position: sections.length + 1,
     };
@@ -161,15 +185,11 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     sectionByRel.set(rel, section);
   }
 
-  // Root-level videos go into a default section
-  if (rootContent.videos.length > 0) {
+  // Root-level lessons go into a default section
+  if (hasLessons(rootContent)) {
     const defaultSection: ScannedSection = {
       title: DEFAULT_SECTION_TITLE,
-      lessons: naturalSort(rootContent.videos, (f) => path.basename(f)).map((filePath, i) => ({
-        title: titleFromFileName(filePath),
-        filePath,
-        position: i + 1,
-      })),
+      lessons: buildLessons(rootContent.videos, rootContent.practice),
       resources: naturalSort(rootContent.resources, (r) => r.fileName),
       position: 0,
     };
@@ -177,14 +197,14 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     sectionByRel.set('', defaultSection);
   }
 
-  // Resources in directories without videos attach to the nearest ancestor
+  // Resources in directories without lessons attach to the nearest ancestor
   // section (e.g. "02 - EC2/Resources/notes.pdf" belongs to "02 - EC2").
-  // Anything without a video-containing ancestor gets a "Resources" section.
+  // Anything without a lesson-containing ancestor gets a "Resources" section.
   const leftover: ScannedResource[] = [];
   for (const { rel } of dirs) {
     if (rel === '') continue;
     const content = contentByDir.get(rel);
-    if (!content || content.videos.length > 0 || content.resources.length === 0) continue;
+    if (!content || hasLessons(content) || content.resources.length === 0) continue;
 
     let probe: string | null = rel;
     let target: ScannedSection | undefined;

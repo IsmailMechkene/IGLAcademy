@@ -1,14 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   BookOpen, Clock, CheckCircle2, Target, PlayCircle, FolderOpen, GraduationCap, ArrowRight,
 } from 'lucide-react';
-import type { CourseWithProgress, LearningStats } from '../../types';
+import type { CourseWithProgress, LearningStats, LessonActivity } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
-import { formatHours } from '../../utils/format';
+import { formatHours, timeAgo } from '../../utils/format';
+import { cleanTitle } from '../../utils/titles';
 import CourseCard from '../../components/CourseCard/CourseCard';
+import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
 import styles from './Dashboard.module.css';
+
+function ProgressRing({ percent }: { percent: number }) {
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  const filled = Math.max(0, Math.min(100, percent));
+  return (
+    <svg className={styles.ring} width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r={r} fill="none" stroke="var(--bg-hover)" strokeWidth="5" />
+      <circle
+        cx="20"
+        cy="20"
+        r={r}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeDasharray={`${(filled / 100) * c} ${c}`}
+        transform="rotate(-90 20 20)"
+      />
+    </svg>
+  );
+}
 
 export default function Dashboard() {
   const { navigate, refreshKey } = useApp();
@@ -16,6 +40,7 @@ export default function Dashboard() {
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [continueCourseId, setContinueCourseId] = useState<number | null>(null);
   const [recentIds, setRecentIds] = useState<number[]>([]);
+  const [activity, setActivity] = useState<LessonActivity | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,12 +52,22 @@ export default function Dashboard() {
       api().progress.mostRecentCourseId(),
       api().progress.recentCourseIds(6),
     ])
-      .then(([s, c, recentId, recent]) => {
+      .then(async ([s, c, recentId, recent]) => {
         if (cancelled) return;
         setStats(s);
         setCourses(c);
         setContinueCourseId(recentId);
         setRecentIds(recent);
+        if (recentId !== null) {
+          try {
+            const a = await api().progress.lastActivity(recentId);
+            if (!cancelled) setActivity(a);
+          } catch {
+            // hero still renders without activity details
+          }
+        } else if (!cancelled) {
+          setActivity(null);
+        }
       })
       .catch(() => undefined)
       .finally(() => {
@@ -44,7 +79,33 @@ export default function Dashboard() {
   }, [refreshKey]);
 
   if (loading) {
-    return <div className={styles.loading}>Loading your learning space...</div>;
+    return (
+      <div className={styles.page}>
+        <div className={styles.welcome}>
+          <div className="skeleton" style={{ width: 220, height: 28, borderRadius: 8 }} />
+          <div className="skeleton" style={{ width: 340, height: 16, borderRadius: 8 }} />
+        </div>
+        <div className={styles.statsGrid}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={`card ${styles.statCard}`} aria-hidden="true">
+              <div className="skeleton" style={{ width: 90, height: 30, borderRadius: 8 }} />
+              <div className="skeleton" style={{ width: 130, height: 14, borderRadius: 7 }} />
+            </div>
+          ))}
+        </div>
+        <div className={styles.courseGrid}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={`card ${styles.skeletonCard}`} aria-hidden="true">
+              <div className="skeleton" style={{ width: '100%', aspectRatio: '16 / 9' }} />
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="skeleton" style={{ width: '85%', height: 13, borderRadius: 6 }} />
+                <div className="skeleton" style={{ width: '55%', height: 13, borderRadius: 6 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (courses.length === 0) {
@@ -79,9 +140,43 @@ export default function Dashboard() {
 
   const continueCourse = courses.find((c) => c.id === continueCourseId) ?? null;
   const recentCourses = recentIds
+    .filter((id) => id !== continueCourseId)
     .map((id) => courses.find((c) => c.id === id))
     .filter((c): c is CourseWithProgress => Boolean(c))
     .slice(0, 6);
+
+  const statItems = [
+    {
+      icon: BookOpen,
+      chip: styles.chipViolet,
+      value: String(stats?.courseCount ?? 0),
+      label: 'Courses',
+      extra: null as ReactNode,
+    },
+    {
+      icon: Clock,
+      chip: styles.chipGreen,
+      value: formatHours(stats?.totalWatchedSeconds ?? 0),
+      label: 'Learning time',
+      extra: null as ReactNode,
+    },
+    {
+      icon: CheckCircle2,
+      chip: styles.chipAmber,
+      value: String(stats?.lessonsCompleted ?? 0),
+      label: `Lessons completed of ${stats?.totalLessons ?? 0}`,
+      extra: null as ReactNode,
+    },
+    {
+      icon: Target,
+      chip: styles.chipBlue,
+      value: `${stats?.overallProgressPercent ?? 0}%`,
+      label: 'Overall progress',
+      extra: <ProgressRing percent={stats?.overallProgressPercent ?? 0} />,
+    },
+  ];
+
+  const resumeLessonId = activity?.lessonId;
 
   return (
     <div className={`fade-in ${styles.page}`}>
@@ -91,39 +186,25 @@ export default function Dashboard() {
       </div>
 
       <div className={styles.statsGrid}>
-        <div className={`card ${styles.statCard}`}>
-          <span className={styles.statValue}>{stats?.courseCount ?? 0}</span>
-          <span className={styles.statLabel}>
-            <BookOpen size={14} /> Courses
-          </span>
-        </div>
-        <div className={`card ${styles.statCard}`}>
-          <span className={styles.statValue}>{formatHours(stats?.totalWatchedSeconds ?? 0)}</span>
-          <span className={styles.statLabel}>
-            <Clock size={14} /> Learning time
-          </span>
-        </div>
-        <div className={`card ${styles.statCard}`}>
-          <span className={styles.statValue}>
-            {stats?.lessonsCompleted ?? 0}
-            <span className="muted" style={{ fontSize: 15, fontWeight: 500 }}>
-              {' '}/ {stats?.totalLessons ?? 0}
-            </span>
-          </span>
-          <span className={styles.statLabel}>
-            <CheckCircle2 size={14} /> Lessons completed
-          </span>
-        </div>
-        <div className={`card ${styles.statCard}`}>
-          <span className={styles.statValue}>{stats?.overallProgressPercent ?? 0}%</span>
-          <span className={styles.statLabel}>
-            <Target size={14} /> Overall progress
-          </span>
-        </div>
+        {statItems.map((s) => {
+          const Icon = s.icon;
+          return (
+            <div key={s.label} className={`card ${styles.statCard}`}>
+              <div className={styles.statTop}>
+                <span className={`${styles.chip} ${s.chip}`}>
+                  <Icon size={16} />
+                </span>
+                {s.extra}
+              </div>
+              <span className={styles.statValue}>{s.value}</span>
+              <span className={styles.statLabel}>{s.label}</span>
+            </div>
+          );
+        })}
       </div>
 
       {continueCourse && (
-        <section>
+        <section aria-label="Continue Learning">
           <div className={styles.sectionHeader}>
             <h2>Continue Learning</h2>
           </div>
@@ -131,25 +212,45 @@ export default function Dashboard() {
             className={`card ${styles.continueCard}`}
             role="button"
             tabIndex={0}
+            title={continueCourse.title}
+            aria-label={`Continue learning: ${cleanTitle(continueCourse.title)}`}
             onClick={() => navigate({ name: 'course', courseId: continueCourse.id })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') navigate({ name: 'course', courseId: continueCourse.id });
             }}
           >
+            <div className={styles.continueThumb}>
+              <CourseCover courseId={continueCourse.id} title={continueCourse.title} />
+            </div>
             <div className={styles.continueInfo}>
-              <span className={styles.continueTitle}>{continueCourse.title}</span>
+              <span className={styles.continueTitle}>{cleanTitle(continueCourse.title)}</span>
               <span className={styles.continueMeta}>
-                <span>{continueCourse.completedCount} of {continueCourse.lessonCount} lessons completed</span>
+                {activity ? (
+                  <>
+                    <span className={styles.lastLesson}>{activity.lessonTitle}</span>
+                    <span>·</span>
+                    <span>Last watched {timeAgo(activity.updatedAt)}</span>
+                  </>
+                ) : (
+                  <span>{continueCourse.completedCount} of {continueCourse.lessonCount} lessons completed</span>
+                )}
+              </span>
+              <ProgressBar percent={continueCourse.progressPercent} />
+              <span className={styles.continueMeta}>
+                <span>{continueCourse.completedCount} of {continueCourse.lessonCount} lessons</span>
                 <span>·</span>
                 <span>{continueCourse.progressPercent}%</span>
               </span>
-              <ProgressBar percent={continueCourse.progressPercent} />
             </div>
             <button
               className="btn btn-primary"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate({ name: 'course', courseId: continueCourse.id });
+                if (resumeLessonId !== undefined) {
+                  navigate({ name: 'player', courseId: continueCourse.id, lessonId: resumeLessonId });
+                } else {
+                  navigate({ name: 'course', courseId: continueCourse.id });
+                }
               }}
             >
               <PlayCircle size={16} />
@@ -161,7 +262,7 @@ export default function Dashboard() {
       )}
 
       {recentCourses.length > 0 && (
-        <section>
+        <section aria-label="Recently opened">
           <div className={styles.sectionHeader}>
             <h2>Recently opened</h2>
           </div>

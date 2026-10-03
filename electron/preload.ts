@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CourseDetail, CourseWithProgress, Note, NoteInput,
   Quiz, QuizDetail, QuizAttemptSummary, QuizAttemptDetail, QuizInput,
-  AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths,
+  AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -35,6 +35,8 @@ const api = {
     stats: (): Promise<LearningStats> => ipcRenderer.invoke('progress:stats'),
     mostRecentCourseId: (): Promise<number | null> => ipcRenderer.invoke('progress:mostRecentCourseId'),
     recentCourseIds: (limit?: number): Promise<number[]> => ipcRenderer.invoke('progress:recentCourseIds', limit),
+    lastActivity: (courseId: number): Promise<LessonActivity | null> =>
+      ipcRenderer.invoke('progress:lastActivity', courseId),
   },
   notes: {
     list: (courseId?: number): Promise<Note[]> => ipcRenderer.invoke('notes:list', courseId),
@@ -67,6 +69,7 @@ const api = {
     getUrl: (lessonId: number): Promise<string> => ipcRenderer.invoke('media:getUrl', lessonId),
     checkFile: (lessonId: number): Promise<boolean> => ipcRenderer.invoke('media:checkFile', lessonId),
     locateFile: (lessonId: number): Promise<string | null> => ipcRenderer.invoke('media:locateFile', lessonId),
+    openExternal: (lessonId: number): Promise<void> => ipcRenderer.invoke('media:openExternal', lessonId),
   },
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),

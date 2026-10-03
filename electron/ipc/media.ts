@@ -1,6 +1,7 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, shell } from 'electron';
+import { pathToFileURL } from 'node:url';
 import { getDb } from '../database/connection';
-import { getMediaUrl, checkFileExists } from '../services/fileService';
+import { getMediaUrl, checkFileExists, resolveLessonFile } from '../services/fileService';
 import { updateLessonFilePath, getLesson } from '../database/repositories/courses';
 import { requireId } from '../services/validate';
 
@@ -15,6 +16,12 @@ export function registerMediaIpc(): void {
     return checkFileExists(db, requireId(lessonId, 'lessonId'));
   });
 
+  // Opens a lesson file (e.g. an HTML practice test) in the system browser
+  // for full interactivity. The path is resolved and containment-checked first.
+  ipcMain.handle('media:openExternal', async (_e, lessonId: unknown) => {
+    const filePath = resolveLessonFile(db, requireId(lessonId, 'lessonId'));
+    await shell.openExternal(pathToFileURL(filePath).href);
+  });
   // Lets the user relocate a missing lesson file via a native file dialog.
   ipcMain.handle('media:locateFile', async (_e, lessonId: unknown) => {
     const id = requireId(lessonId, 'lessonId');

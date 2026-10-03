@@ -15,7 +15,7 @@ export interface VideoPlayerHandle {
 }
 
 interface Props {
-  src: string;
+  src?: string;
   onEnded?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onPrev?: () => void;
@@ -28,10 +28,11 @@ interface Props {
   missing?: boolean;
   /** Non-empty when the file exists but the browser cannot play it. */
   loadError?: string | null;
+  mediaKind?: 'video' | 'practice';
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
-  { src, onEnded, onTimeUpdate, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing, loadError },
+  { src, onEnded, onTimeUpdate, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing, loadError, mediaKind = 'video' },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -130,10 +131,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
       <div className={styles.player} ref={containerRef}>
         <div className={styles.errorState}>
           <AlertTriangle size={40} color="var(--warning)" />
-          <h3>Video file not found</h3>
+          <h3>{mediaKind === 'practice' ? 'Practice test not found' : 'Video file not found'}</h3>
           <p>
             This lesson's file appears to have been moved or deleted. Your progress is saved —
-            locate the file to keep watching.
+            locate the file to keep {mediaKind === 'practice' ? 'studying' : 'watching'}.
           </p>
           {onMissingFile && (
             <button className="btn btn-ghost" onClick={onMissingFile}>
@@ -218,17 +219,17 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
           <span className={styles.time}>{formatTime(duration)}</span>
         </div>
         <div className={styles.controlRow}>
-          <button className={styles.controlBtn} onClick={onPrev} disabled={!hasPrev} title="Previous lesson">
+          <button className={styles.controlBtn} onClick={onPrev} disabled={!hasPrev} title="Previous lesson" aria-label="Previous lesson">
             <SkipBack size={19} />
           </button>
-          <button className={styles.controlBtn} onClick={togglePlay} title={playing ? 'Pause' : 'Play'}>
+          <button className={styles.controlBtn} onClick={togglePlay} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>
             {playing ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
           </button>
-          <button className={styles.controlBtn} onClick={onNext} disabled={!hasNext} title="Next lesson">
+          <button className={styles.controlBtn} onClick={onNext} disabled={!hasNext} title="Next lesson" aria-label="Next lesson">
             <SkipForward size={19} />
           </button>
           <div className={styles.volumeWrap}>
-            <button className={styles.controlBtn} onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
+            <button className={styles.controlBtn} onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'} aria-label={muted ? 'Unmute' : 'Mute'}>
               {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
             <input
@@ -249,6 +250,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
               className={styles.controlBtn}
               onClick={() => setSpeedMenuOpen((o) => !o)}
               title="Playback speed"
+              aria-label="Playback speed"
+              aria-expanded={speedMenuOpen}
               style={{ width: 'auto', padding: '0 10px', fontSize: 13, fontWeight: 600 }}
             >
               {speed}x
@@ -270,7 +273,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
               </div>
             )}
           </div>
-          <button className={styles.controlBtn} onClick={toggleFullscreen} title="Fullscreen">
+          <button className={styles.controlBtn} onClick={toggleFullscreen} title="Fullscreen" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
             {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
         </div>

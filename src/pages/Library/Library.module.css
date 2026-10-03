@@ -15,9 +15,10 @@
 }
 
 .header h1 {
-  font-size: 22px;
+  font-size: var(--font-size-title);
   font-weight: 700;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .header p {
@@ -26,25 +27,98 @@
   font-size: 13.5px;
 }
 
-.toolbar {
+/* card wrapper + hover actions menu */
+.cardWrap {
+  position: relative;
+}
+
+.menuWrap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+}
+
+.menuBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: rgba(10, 12, 18, 0.55);
+  color: #fff;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.18s ease, background 0.15s ease, transform 0.1s ease;
+  backdrop-filter: blur(4px);
 }
 
-.searchWrap {
-  position: relative;
-  width: 320px;
+.menuBtn:hover {
+  background: rgba(10, 12, 18, 0.8);
 }
 
-.searchIcon {
+.cardWrap:hover .menuBtn,
+.menuWrap:focus-within .menuBtn,
+.menuBtnOpen {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .menuBtn {
+    opacity: 1;
+  }
+}
+
+.menuScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  cursor: default;
+}
+
+.menu {
   position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
+  top: 36px;
+  right: 0;
+  z-index: 41;
+  min-width: 200px;
+  padding: 6px;
   display: flex;
-  pointer-events: none;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s ease;
+}
+
+.menuItem:hover {
+  background: var(--bg-hover);
+}
+
+.menuItemDanger {
+  color: var(--danger);
+}
+
+.menuItemDanger:hover {
+  background: var(--danger-soft);
 }
 
 .courseGrid {
@@ -71,6 +145,42 @@
 .emptyState p {
   color: var(--text-secondary);
   margin: 0 0 12px;
+}
+
+.emptyIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+/* skeleton loading cards */
+.skeletonCard {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.skeletonThumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.skeletonBody {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeletonLine {
+  height: 13px;
+  border-radius: 6px;
 }
 
 .filterInfo {

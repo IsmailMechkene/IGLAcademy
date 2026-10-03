@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../database/connection';
-import { savePosition, setCompleted, getStats, getMostRecentCourseId, getRecentlyOpenedCourseIds } from '../database/repositories/progress';
+import { savePosition, setCompleted, getStats, getMostRecentCourseId, getRecentlyOpenedCourseIds, getLastActivity } from '../database/repositories/progress';
 import { requireId } from '../services/validate';
 
 export function registerProgressIpc(): void {
@@ -26,5 +26,9 @@ export function registerProgressIpc(): void {
   ipcMain.handle('progress:recentCourseIds', (_e, limit?: unknown) => {
     const n = typeof limit === 'number' && Number.isInteger(limit) && limit > 0 ? Math.min(limit, 20) : 5;
     return getRecentlyOpenedCourseIds(db, n);
+  });
+
+  ipcMain.handle('progress:lastActivity', (_e, courseId: unknown) => {
+    return getLastActivity(db, requireId(courseId, 'courseId'));
   });
 }

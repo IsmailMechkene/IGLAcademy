@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, FileText } from 'lucide-react';
 import type { CourseDetail } from '../../types';
 import styles from './LessonSidebar.module.css';
 
@@ -32,6 +32,8 @@ export default function LessonSidebar({ course, activeLessonId, onSelectLesson, 
                 <span className={styles.statusIcon}>
                   {lesson.completed ? (
                     <CheckCircle2 size={16} color="var(--success)" />
+                  ) : lesson.fileType === 'practice' ? (
+                    <FileText size={16} color="var(--text-muted)" />
                   ) : (
                     <Circle size={16} color="var(--text-muted)" />
                   )}

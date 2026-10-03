@@ -23,7 +23,7 @@ export interface Lesson {
   sectionId: number;
   title: string;
   filePath: string;
-  fileType: 'video' | 'resource';
+  fileType: 'video' | 'practice' | 'resource';
   duration: number | null;
   position: number;
 }
@@ -133,8 +133,16 @@ export interface LearningStats {
   overallProgressPercent: number;
 }
 
+/** The most recently touched lesson of a course (for Continue Learning). */
+export interface LessonActivity {
+  lessonId: number;
+  lessonTitle: string;
+  sectionTitle: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'system';
   defaultPlaybackSpeed: number;
   resumePlayback: 'ask' | 'always' | 'never';
   duplicateImportBehavior: 'ask' | 'skip' | 'rescan';

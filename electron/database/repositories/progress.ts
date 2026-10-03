@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import type { LearningStats } from '../../../src/types';
+import type { LearningStats, LessonActivity } from '../../../src/types';
 
 export function savePosition(db: Database.Database, lessonId: number, seconds: number): void {
   db.prepare(
@@ -40,7 +40,7 @@ export function getStats(db: Database.Database): LearningStats {
         (SELECT COUNT(*) FROM courses) AS course_count,
         (SELECT COALESCE(SUM(watched_seconds), 0) FROM lesson_progress) AS total_watched,
         (SELECT COUNT(*) FROM lesson_progress WHERE completed = 1) AS completed,
-        (SELECT COUNT(*) FROM lessons WHERE file_type = 'video') AS total_lessons`,
+        (SELECT COUNT(*) FROM lessons WHERE file_type IN ('video', 'practice')) AS total_lessons`,
     )
     .get() as { course_count: number; total_watched: number; completed: number; total_lessons: number };
 
@@ -80,4 +80,28 @@ export function getRecentlyOpenedCourseIds(db: Database.Database, limit = 5): nu
     .prepare('SELECT id FROM courses WHERE last_opened_at IS NOT NULL ORDER BY last_opened_at DESC LIMIT ?')
     .all(limit) as Array<{ id: number }>;
   return rows.map((r) => r.id);
+}
+
+/** Returns the most recently touched lesson of a course (by progress update). */
+export function getLastActivity(db: Database.Database, courseId: number): LessonActivity | null {
+  const row = db
+    .prepare(
+      `SELECT l.id AS lesson_id, l.title AS lesson_title, s.title AS section_title, lp.updated_at
+       FROM lesson_progress lp
+       JOIN lessons l ON l.id = lp.lesson_id
+       JOIN sections s ON s.id = l.section_id
+       WHERE s.course_id = ?
+       ORDER BY lp.updated_at DESC
+       LIMIT 1`,
+    )
+    .get(courseId) as
+    | { lesson_id: number; lesson_title: string; section_title: string; updated_at: string }
+    | undefined;
+  if (!row) return null;
+  return {
+    lessonId: row.lesson_id,
+    lessonTitle: row.lesson_title,
+    sectionTitle: row.section_title,
+    updatedAt: row.updated_at,
+  };
 }

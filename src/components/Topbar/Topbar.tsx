@@ -4,15 +4,6 @@ import { useApp } from '../../App';
 import { api } from '../../services/api';
 import styles from './Topbar.module.css';
 
-const TITLES: Record<string, string> = {
-  dashboard: 'Dashboard',
-  library: 'My Courses',
-  'in-progress': 'In Progress',
-  completed: 'Completed',
-  notes: 'Notes',
-  settings: 'Settings',
-};
-
 export default function Topbar() {
   const { route, navigate, refreshAll, searchQuery, setSearchQuery } = useApp();
   const [importing, setImporting] = useState(false);
@@ -45,23 +36,21 @@ export default function Topbar() {
     }
   };
 
-  const title = TITLES[route.name] ?? 'IsmaLearn';
-
   return (
     <header className={styles.topbar}>
       <div className={styles.searchWrap}>
-        <span className={styles.searchIcon}>
+        <span className={styles.searchIcon} aria-hidden="true">
           <Search size={16} />
         </span>
         <input
           className={`input ${styles.searchInput}`}
           placeholder="Search courses..."
+          aria-label="Search courses"
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
         />
       </div>
       <div className={styles.spacer} />
-      <span className={styles.title}>{title}</span>
       <button className="btn btn-primary" onClick={handleImport} disabled={importing}>
         <FolderOpen size={16} />
         {importing ? 'Importing...' : 'Import Course'}

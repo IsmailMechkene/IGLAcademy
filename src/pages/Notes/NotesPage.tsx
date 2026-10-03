@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, FileText, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
+import { Check, FileText, FolderOpen, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
 import type { Note } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
@@ -104,8 +104,9 @@ export default function NotesPage() {
             </span>
             <input
               className="input"
-              style={{ paddingLeft: 34 }}
+              style={{ paddingLeft: 40 }}
               placeholder="Search notes..."
+              aria-label="Search notes"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
             />
@@ -123,6 +124,12 @@ export default function NotesPage() {
           <StickyNote size={32} style={{ opacity: 0.4, marginBottom: 4 }} />
           <h2>{search ? 'No notes match your search' : 'No notes yet'}</h2>
           <p>{search ? 'Try a different search term.' : 'Open a lesson and use the notes panel to write your first note.'}</p>
+          {!search && (
+            <button className="btn btn-primary" onClick={() => navigate({ name: 'library' })}>
+              <FolderOpen size={16} />
+              Browse courses
+            </button>
+          )}
         </div>
       ) : (
         <div className={styles.notesList}>

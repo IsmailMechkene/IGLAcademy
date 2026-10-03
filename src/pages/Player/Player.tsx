@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatTime } from '../../utils/format';
 import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlayer/VideoPlayer';
+import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
 import NotesPanel from '../../components/NotesPanel/NotesPanel';
 import styles from './Player.module.css';
@@ -32,6 +33,7 @@ export default function Player({ courseId, lessonId }: Props) {
   const [completed, setCompleted] = useState(false);
   const [lessonTitle, setLessonTitle] = useState('');
   const [sectionTitle, setSectionTitle] = useState('');
+  const [lessonKind, setLessonKind] = useState<'video' | 'practice'>('video');
 
   const playerRef = useRef<VideoPlayerHandle>(null);
   const lastSaveRef = useRef(0);
@@ -92,6 +94,7 @@ export default function Player({ courseId, lessonId }: Props) {
             completedRef.current = found.lesson.completed;
             setLessonTitle(found.lesson.title);
             setSectionTitle(found.section.title);
+            setLessonKind(found.lesson.fileType === 'practice' ? 'practice' : 'video');
 
             const pos = found.lesson.positionSeconds;
             const dur = found.lesson.duration ?? 0;
@@ -286,23 +289,32 @@ export default function Player({ courseId, lessonId }: Props) {
 
       <div className={styles.main}>
         <div className={styles.playerArea}>
-          {mediaUrl && (
-            <VideoPlayer
-              ref={playerRef}
-              src={mediaUrl}
-              defaultSpeed={settings.defaultPlaybackSpeed}
-              hasPrev={currentIdx > 0}
-              hasNext={currentIdx >= 0 && currentIdx < lessons.length - 1}
-              onPrev={handlePrev}
-              onNext={handleNext}
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={handleEnded}
-              missing={fileMissing}
-              onMissingFile={handleLocateFile}
-              onError={handleVideoError}
-              loadError={loadError}
-            />
-          )}
+          {mediaUrl || fileMissing ? (
+            lessonKind === 'practice' && !fileMissing ? (
+              <PracticeViewer
+                src={mediaUrl ?? ''}
+                title={lessonTitle}
+                lessonId={currentLessonId}
+              />
+            ) : (
+              <VideoPlayer
+                ref={playerRef}
+                src={mediaUrl ?? undefined}
+                defaultSpeed={settings.defaultPlaybackSpeed}
+                hasPrev={currentIdx > 0}
+                hasNext={currentIdx >= 0 && currentIdx < lessons.length - 1}
+                onPrev={handlePrev}
+                onNext={handleNext}
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={handleEnded}
+                missing={fileMissing}
+                mediaKind={lessonKind}
+                onMissingFile={handleLocateFile}
+                onError={handleVideoError}
+                loadError={loadError}
+              />
+            )
+          ) : null}
         </div>
         <div className={styles.playerBar}>
           <button className="btn btn-ghost btn-sm" onClick={() => navigate({ name: 'course', courseId })}>
