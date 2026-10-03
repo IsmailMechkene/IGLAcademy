@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import type Database from 'better-sqlite3';
 import { getCourse, getLesson } from '../database/repositories/courses';
 
@@ -63,4 +64,69 @@ export function checkFileExists(db: Database.Database, lessonId: number): boolea
   } catch {
     return false;
   }
+}
+
+const MIME_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.vtt': 'text/vtt',
+};
+
+/**
+ * Serves a local file as an HTTP-style response with explicit Range support.
+ * Video seeking depends on correct 206 Partial Content responses — a plain
+ * passthrough does not reliably forward ranges for file URLs, which leaves
+ * the player able to load metadata but unable to seek or resume.
+ */
+export function serveMediaFile(filePath: string, rangeHeader: string | null): Response {
+  const size = fs.statSync(filePath).size;
+  const contentType =
+    MIME_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
+
+  if (rangeHeader) {
+    const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+    if (match) {
+      let start = match[1] === '' ? Number.NaN : parseInt(match[1], 10);
+      let end = match[2] === '' ? Number.NaN : parseInt(match[2], 10);
+      if (Number.isNaN(start) && !Number.isNaN(end)) {
+        // Suffix range: last N bytes
+        start = Math.max(0, size - end);
+        end = size - 1;
+      }
+      if (Number.isNaN(end) || end >= size) end = size - 1;
+      if (!Number.isNaN(start) && start < size && start <= end) {
+        const stream = Readable.toWeb(fs.createReadStream(filePath, { start, end }));
+        return new Response(stream as ReadableStream, {
+          status: 206,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Length': String(end - start + 1),
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+      return new Response('Range not satisfiable', {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${size}` },
+      });
+    }
+  }
+
+  const stream = Readable.toWeb(fs.createReadStream(filePath));
+  return new Response(stream as ReadableStream, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': String(size),
+      'Accept-Ranges': 'bytes',
+    },
+  });
 }

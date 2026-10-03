@@ -26,6 +26,7 @@ export default function Player({ courseId, lessonId }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesWidth, setNotesWidth] = useState(340);
   const [completed, setCompleted] = useState(false);
@@ -73,6 +74,7 @@ export default function Player({ courseId, lessonId }: Props) {
     let cancelled = false;
     setMediaUrl(null);
     setFileMissing(false);
+    setLoadError(null);
 
     api()
       .media.getUrl(currentLessonId)
@@ -233,6 +235,12 @@ export default function Player({ courseId, lessonId }: Props) {
     if (!exists) {
       setMediaUrl(null);
       setFileMissing(true);
+    } else {
+      // The file is there but Chromium cannot play it (unsupported codec/container)
+      setLoadError(
+        'The file exists but could not be decoded. MP4 (H.264) and WebM play best — ' +
+        'MKV support depends on the codecs inside the container.',
+      );
     }
   }, [currentLessonId]);
 
@@ -292,6 +300,7 @@ export default function Player({ courseId, lessonId }: Props) {
               missing={fileMissing}
               onMissingFile={handleLocateFile}
               onError={handleVideoError}
+              loadError={loadError}
             />
           )}
         </div>

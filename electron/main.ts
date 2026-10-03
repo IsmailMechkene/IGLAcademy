@@ -1,8 +1,7 @@
-import { app, BrowserWindow, shell, protocol, net } from 'electron';
+import { app, BrowserWindow, shell, protocol } from 'electron';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { getDb } from './database/connection';
-import { resolveLessonFile, resolveThumbnailFile } from './services/fileService';
+import { resolveLessonFile, resolveThumbnailFile, serveMediaFile } from './services/fileService';
 import { registerCourseIpc } from './ipc/courses';
 import { registerProgressIpc } from './ipc/progress';
 import { registerNotesIpc } from './ipc/notes';
@@ -12,6 +11,21 @@ import { registerMediaIpc } from './ipc/media';
 import { registerAppIpc } from './ipc/app';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+
+// Custom schemes must be registered as privileged BEFORE the app is ready.
+// Without standard+secure privileges, Chromium silently refuses to load
+// media:// URLs in <video>/<img> tags (black player, no error surfaced).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 /**
  * Serves course media (videos, thumbnails) to the renderer through an opaque
@@ -35,7 +49,7 @@ function registerMediaProtocol(): void {
             ? resolveThumbnailFile(db, id)
             : null;
       if (!filePath) return new Response('Not found', { status: 404 });
-      return net.fetch(pathToFileURL(filePath).href);
+      return serveMediaFile(filePath, request.headers.get('range'));
     } catch {
       return new Response('Not found', { status: 404 });
     }

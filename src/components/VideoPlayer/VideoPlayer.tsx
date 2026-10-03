@@ -26,10 +26,12 @@ interface Props {
   onMissingFile?: () => void;
   onError?: () => void;
   missing?: boolean;
+  /** Non-empty when the file exists but the browser cannot play it. */
+  loadError?: string | null;
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
-  { src, onEnded, onTimeUpdate, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing },
+  { src, onEnded, onTimeUpdate, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing, loadError },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -138,6 +140,18 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
               Locate file
             </button>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.player} ref={containerRef}>
+        <div className={styles.errorState}>
+          <AlertTriangle size={40} color="var(--danger)" />
+          <h3>This video could not be played</h3>
+          <p>{loadError}</p>
         </div>
       </div>
     );
