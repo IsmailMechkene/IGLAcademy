@@ -1,0 +1,22 @@
+.progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.progress.lg {
+  height: 8px;
+}
+
+.bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.bar.complete {
+  background: var(--success);
+}

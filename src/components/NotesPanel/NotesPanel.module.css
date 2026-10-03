@@ -1,0 +1,186 @@
+.panel {
+  height: 100%;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.headerActions {
+  display: flex;
+  gap: 4px;
+}
+
+.iconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.iconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.noteCard {
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.noteCard:hover {
+  border-color: var(--border-strong);
+}
+
+.noteCard.active {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.noteTitle {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notePreview {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.noteDate {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.emptyNotes {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 24px 12px;
+}
+
+.editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editorHeader {
+  padding: 12px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editorTitle {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.editorMeta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editorToolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.editorBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+
+.editorTextarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  resize: none;
+  outline: none;
+}
+
+.editorTextarea::placeholder {
+  color: var(--text-muted);
+}
+
+.preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.previewEmpty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.resizeHandle {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.resizeHandle:hover,
+.resizeHandle.dragging {
+  background: var(--accent);
+}
