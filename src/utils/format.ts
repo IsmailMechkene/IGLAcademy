@@ -67,3 +67,13 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
   if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
   return formatDate(iso);
 }
+
+/** Countdown clock for timed exams: "9:59", "2:09:59". */
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return `${h > 0 ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}`;
+}

@@ -57,11 +57,13 @@ async function waitForDebugger() {
 function cdpEvaluate(wsUrl, expression, timeoutMs = 90000) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
+    const networkResponses = [];
     const timer = setTimeout(() => {
       try { ws.close(); } catch { /* noop */ }
       reject(new Error('CDP evaluate timed out'));
     }, timeoutMs);
     ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ id: 2, method: 'Network.enable', params: {} }));
       ws.send(JSON.stringify({
         id: 1,
         method: 'Runtime.evaluate',
@@ -75,13 +77,21 @@ function cdpEvaluate(wsUrl, expression, timeoutMs = 90000) {
       } catch {
         return;
       }
+      if (msg.method === 'Network.responseReceived' && msg.params?.response) {
+        networkResponses.push({
+          url: msg.params.response.url,
+          status: msg.params.response.status,
+          mimeType: msg.params.response.mimeType,
+        });
+        return;
+      }
       if (msg.id !== 1) return;
       clearTimeout(timer);
       try { ws.close(); } catch { /* noop */ }
       if (msg.error) reject(new Error(`CDP error: ${JSON.stringify(msg.error)}`));
       else if (msg.result?.exceptionDetails) {
         reject(new Error(`page exception: ${JSON.stringify(msg.result.exceptionDetails).slice(0, 500)}`));
-      } else resolve(msg.result?.result?.value);
+      } else resolve({ value: msg.result?.result?.value, network: networkResponses });
     });
     ws.addEventListener('error', (e) => {
       clearTimeout(timer);
@@ -99,6 +109,32 @@ fs.mkdirSync(userDataDir, { recursive: true });
 let child = null;
 try {
   await downloadSample(path.join(courseDir, '01 - Sample Lesson.mp4'));
+  fs.writeFileSync(
+    path.join(courseDir, '02 - Practice Test #1.html'),
+    '<!doctype html><html><body><script>const quizData = ' + JSON.stringify({
+      quiz_title: 'Verify Exam',
+      questions: [
+        {
+          assessment_type: 'multiple-choice',
+          prompt: {
+            question: '<p>What is 2+2?</p>',
+            answers: ['<p>3</p>', '<p>4</p>'],
+            explanation: '<p>Basic math</p>',
+          },
+          correct_response: ['b'],
+        },
+        {
+          assessment_type: 'multi-select',
+          prompt: {
+            question: '<p>Select evens.</p>',
+            answers: ['<p>1</p>', '<p>2</p>', '<p>4</p>'],
+            explanation: '',
+          },
+          correct_response: ['b', 'c'],
+        },
+      ],
+    }) + ';</script></body></html>',
+  );
 
   const electronBin = process.platform === 'win32'
     ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
@@ -115,6 +151,7 @@ try {
   console.log(`[verify] attached to "${page.title}"`);
 
   const courseDirJson = JSON.stringify(courseDir);
+  const htmlPathJson = JSON.stringify(path.join(courseDir, '02 - Practice Test #1.html'));
   const expression = `(async function() {
     try {
       var api = null;
@@ -171,19 +208,72 @@ try {
         v.src = url;
       });
       v.remove();
-      return out;
+      if (!out.ok) return out;
+
+      // Practice test: served as text/html and readable in an in-app frame
+      var practice = detail.sections.flatMap(function(s) { return s.lessons; })
+        .find(function(l) { return l.fileType === 'practice'; });
+      if (!practice) return { ok: false, stage: 'no-practice-lesson' };
+      var practiceUrl = await api.media.getUrl(practice.id);
+      var frameOut = await new Promise(function(resolve) {
+        var done = false;
+        var timer = setTimeout(function() {
+          if (done) return; done = true;
+          resolve({ loaded: false, stage: 'practice-timeout' });
+        }, 15000);
+        var f = document.createElement('iframe');
+        // NOTE: cross-origin reads are blocked by design (opaque media://
+        // origin), so a fired load event is the success signal here.
+        f.addEventListener('load', function() {
+          if (done) return; done = true; clearTimeout(timer);
+          f.remove();
+          resolve({ loaded: true });
+        });
+        f.addEventListener('error', function() {
+          if (done) return; done = true; clearTimeout(timer);
+          f.remove();
+          resolve({ loaded: false, stage: 'practice-error' });
+        });
+        f.src = practiceUrl;
+        f.style.display = 'none';
+        document.body.appendChild(f);
+      });
+      return { ok: out.ok, video: out, practiceUrl: practiceUrl, frameLoaded: frameOut.loaded,
+        examCheck: await (async function() {
+          // Register the course folder as an exam source, load the file-direct
+          // exam, and answer everything correctly.
+          await api.practice.addFolderPath(${courseDirJson});
+          var exam = await api.practice.load(${htmlPathJson});
+          if (!exam || exam.questions.length !== 2) {
+            return { ok: false, stage: 'exam-load', exam: exam };
+          }
+          if (exam.questions[1].correctIndices.join(',') !== '1,2') {
+            return { ok: false, stage: 'exam-multi', q: exam.questions[1] };
+          }
+          var selections = exam.questions.map(function(q) { return q.correctIndices; });
+          var attempt = await api.practice.submit(${htmlPathJson}, selections);
+          var history = await api.practice.history(${htmlPathJson});
+          return { ok: attempt.percent === 100 && history.length === 1, percent: attempt.percent,
+            history: history.length };
+        })() };
     } catch (e) {
       return { ok: false, stage: 'exception', message: String((e && e.message) || e) };
     }
   })()`;
 
-  const result = await cdpEvaluate(page.webSocketDebuggerUrl, expression);
+  const { value: result, network } = await cdpEvaluate(page.webSocketDebuggerUrl, expression);
   console.log('[verify] result:', JSON.stringify(result));
 
-  if (result?.ok) {
-    console.log('[verify] PASS: video metadata + seek work through media://');
+  // Ground truth for the practice test: a 200 text/html subresource response.
+  // (The renderer itself cannot read it back — opaque cross-origin, by design.)
+  const practiceHit = (network ?? []).find((r) => r.url === result?.practiceUrl);
+  console.log('[verify] practice response:', JSON.stringify(practiceHit ?? null));
+
+  if (result?.ok && result.frameLoaded && practiceHit && practiceHit.status === 200 && practiceHit.mimeType === 'text/html' && result.examCheck?.ok) {
+    console.log('[verify] PASS: video + seek work, practice HTML served, file-direct exam submit (100%) + history OK');
+    console.log('[verify] exam:', JSON.stringify(result.examCheck));
   } else {
-    console.error('[verify] FAIL');
+    console.error('[verify] FAIL:', JSON.stringify(result?.examCheck ?? result));
     process.exitCode = 1;
   }
 } catch (err) {

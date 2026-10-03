@@ -82,6 +82,8 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctIndex: number;
+  /** All correct option indices (length 1 for single-choice). */
+  correctIndices: number[];
   explanation: string;
   position: number;
 }
@@ -91,6 +93,8 @@ export interface Quiz {
   courseId: number;
   sectionId: number | null;
   sectionTitle: string | null;
+  /** Lesson this quiz was imported from (practice exams), if any. */
+  sourceLessonId: number | null;
   title: string;
   description: string;
   createdAt: string;
@@ -100,6 +104,42 @@ export interface Quiz {
 
 export interface QuizDetail extends Quiz {
   questions: QuizQuestion[];
+}
+
+/** A folder or file registered as a practice-exam source (parsed live, never imported). */
+export interface ExamSource {
+  id: number;
+  path: string;
+  kind: 'file' | 'dir';
+  createdAt: string;
+}
+
+/** One practice test discovered by scanning an exam source. */
+export interface PracticeExamFile {
+  filePath: string;
+  title: string;
+  questionCount: number;
+  multiCount: number;
+  skipped: number;
+  /** Unparseable files carry only filePath + error. */
+  error?: string;
+  attemptCount: number;
+  bestPercent: number | null;
+  lastAttemptAt: string | null;
+}
+
+/** Full parsed content of one practice test, for the exam runners. */
+export interface PracticeExamContent {
+  title: string;
+  description: string;
+  questions: PracticeExamQuestion[];
+}
+
+export interface PracticeExamQuestion {
+  question: string;
+  options: string[];
+  correctIndices: number[];
+  explanation: string;
 }
 
 export interface QuizAttemptSummary {
@@ -116,7 +156,10 @@ export interface QuizAttemptAnswer {
   question: string;
   options: string[];
   correctIndex: number;
+  correctIndices: number[];
   selectedIndex: number;
+  /** Full selected set (single-choice: one element). */
+  selectedIndices: number[];
   isCorrect: boolean;
   explanation: string;
 }
@@ -195,12 +238,33 @@ export interface QuizQuestionInput {
   question: string;
   options: string[];
   correctIndex: number;
+  correctIndices: number[];
   explanation: string;
 }
 
 export interface AnswerInput {
   questionId: number;
   selectedIndex: number;
+  /** Optional full selection set; defaults to [selectedIndex]. */
+  selectedIndices?: number[];
+}
+
+export interface PracticeFileImportResult {
+  status: 'imported' | 'duplicate' | 'cancelled' | 'error';
+  courseId?: number;
+  lessonId?: number;
+  quizId?: number;
+  skipped?: number;
+  /** Set when the file was kept as a lesson but could not be parsed as an exam. */
+  parseError?: string;
+  error?: string;
+}
+
+export interface PracticeFolderImportResult {
+  scanned: number;
+  imported: Array<{ quizId: number; courseId: number; title: string }>;
+  duplicates: Array<{ quizId: number; courseId: number; title: string }>;
+  failed: Array<{ file: string; error: string }>;
 }
 
 export interface AppPaths {

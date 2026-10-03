@@ -8,7 +8,7 @@ import { requireId, requireString, optionalId, optionalString, ValidationError }
 import type { QuizQuestionInput, AnswerInput } from '../../src/types';
 
 export function validateQuestionInput(q: unknown, index: number): QuizQuestionInput {
-  const data = q as { question?: unknown; options?: unknown; correctIndex?: unknown; explanation?: unknown };
+  const data = q as { question?: unknown; options?: unknown; correctIndex?: unknown; correctIndices?: unknown; explanation?: unknown };
   const question = requireString(data.question, `question ${index + 1}`, 1000);
   if (!Array.isArray(data.options)) throw new ValidationError(`question ${index + 1}: options must be an array`);
   const options = data.options.map((o, i) => requireString(o, `question ${index + 1} option ${i + 1}`, 500));
@@ -18,12 +18,33 @@ export function validateQuestionInput(q: unknown, index: number): QuizQuestionIn
   if (!Number.isInteger(ci) || ci < 0 || ci >= options.length) {
     throw new ValidationError(`question ${index + 1}: correctIndex must be a valid option index`);
   }
+  // Optional full correct set (multi-select); defaults to the single index.
+  let correctIndices: number[];
+  if (Array.isArray(data.correctIndices) && data.correctIndices.length > 0) {
+    correctIndices = [...new Set(data.correctIndices)].filter(
+      (n): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < options.length,
+    ).sort((a, b) => (a as number) - (b as number)) as number[];
+    if (correctIndices.length === 0) {
+      throw new ValidationError(`question ${index + 1}: correctIndices must contain valid option indices`);
+    }
+  } else {
+    correctIndices = [ci];
+  }
   return {
     question,
     options,
-    correctIndex: ci,
+    correctIndex: correctIndices[0],
+    correctIndices,
     explanation: optionalString(data.explanation, `question ${index + 1} explanation`, 2000),
   };
+}
+
+/** Exact set match: a multi-select answer is correct only when complete. */
+function setsEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort((x, y) => x - y);
+  const sortedB = [...b].sort((x, y) => x - y);
+  return sortedA.every((v, i) => v === sortedB[i]);
 }
 
 export function registerQuizIpc(): void {
@@ -86,21 +107,36 @@ export function registerQuizIpc(): void {
     if (!quiz) throw new ValidationError('Quiz not found');
     if (!Array.isArray(answers)) throw new ValidationError('answers must be an array');
 
-    const parsed: AnswerInput[] = answers.map((a, i) => {
-      const data = a as { questionId?: unknown; selectedIndex?: unknown };
-      return {
-        questionId: requireId(data.questionId, `answer ${i + 1} questionId`),
-        selectedIndex: requireId(data.selectedIndex, `answer ${i + 1} selectedIndex`),
-      };
+    const parsed: AnswerInput[] = (answers as unknown[]).map((a: unknown, i: number) => {
+      const data = a as { questionId?: unknown; selectedIndex?: unknown; selectedIndices?: unknown };
+      const questionId = requireId(data.questionId, `answer ${i + 1} questionId`);
+      let selectedIndices: number[];
+      if (Array.isArray(data.selectedIndices)) {
+        // May be empty (unanswered on auto-submit) — counts as incorrect.
+        selectedIndices = [...new Set(data.selectedIndices)].filter(
+          (n): n is number => Number.isInteger(n) && (n as number) >= 0,
+        ) as number[];
+      } else {
+        selectedIndices = [requireId(data.selectedIndex, `answer ${i + 1} selectedIndex`)];
+      }
+      return { questionId, selectedIndex: selectedIndices[0] ?? -1, selectedIndices };
     });
 
     const answerRows = parsed.map((a) => {
       const question = quiz.questions.find((q) => q.id === a.questionId);
       if (!question) throw new ValidationError(`Unknown question id ${a.questionId}`);
-      if (a.selectedIndex < 0 || a.selectedIndex >= question.options.length) {
+      const selectedIndices = (a.selectedIndices ?? [a.selectedIndex]).filter(
+        (n) => Number.isInteger(n) && n >= 0 && n < question.options.length,
+      );
+      if (selectedIndices.length === 0) {
         throw new ValidationError(`Invalid option selected for question ${a.questionId}`);
       }
-      return { questionId: a.questionId, selectedIndex: a.selectedIndex, isCorrect: a.selectedIndex === question.correctIndex };
+      return {
+        questionId: a.questionId,
+        selectedIndex: selectedIndices[0],
+        selectedIndices,
+        isCorrect: setsEqual(selectedIndices, question.correctIndices),
+      };
     });
 
     return insertAttempt(db, qid, answerRows);

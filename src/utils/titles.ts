@@ -44,3 +44,42 @@ export function titleHue(title: string): number {
   }
   return Math.abs(h) % 360;
 }
+
+const EXAM_CODE_NAMES: Record<string, string> = {
+  'SAA-C03': 'AWS Certified Solutions Architect – Associate',
+  'DVA-C02': 'AWS Certified Developer – Associate',
+  'CLF-C02': 'AWS Certified Cloud Practitioner',
+  'AIF-C01': 'AWS Certified AI Practitioner',
+  'SAP-C02': 'AWS Certified Solutions Architect – Professional',
+  'DOP-C02': 'AWS Certified DevOps Engineer – Professional',
+  'SCS-C02': 'AWS Certified Security – Specialty',
+  'MLS-C01': 'AWS Certified Machine Learning – Specialty',
+  'MLA-C01': 'AWS Certified Machine Learning Engineer – Associate',
+  'ANS-C01': 'AWS Certified Advanced Networking – Specialty',
+  'DAS-C01': 'AWS Certified Data Analytics – Specialty',
+  'DEA-C01': 'AWS Certified Data Engineer – Associate',
+  'SOA-C02': 'AWS Certified SysOps Administrator – Associate',
+};
+
+export interface ExamGroup {
+  /** Exam code like SAA-C03, or null when no code was found. */
+  code: string | null;
+  /** Display name used for grouping. */
+  name: string;
+}
+
+/** Derives the associated certification exam from a practice-exam title. */
+export function examGroupInfo(title: string): ExamGroup {
+  const codeMatch = /\b([A-Z]{2,4}-C\d{2})\b/.exec(title ?? '');
+  if (codeMatch) {
+    const code = codeMatch[1];
+    return { code, name: EXAM_CODE_NAMES[code] ?? code };
+  }
+  const certMatch = /aws certified ([a-z0-9][a-z0-9&+.'\- ]*?)(?:\s*[-–—:|]\s*|\s*\(|\s*$)/i.exec(title ?? '');
+  if (certMatch) {
+    const words = certMatch[1].trim().split(/\s+/).filter(Boolean);
+    const name = `AWS Certified ${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`;
+    return { code: null, name };
+  }
+  return { code: null, name: 'Other practice exams' };
+}

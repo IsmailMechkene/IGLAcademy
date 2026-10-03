@@ -8,6 +8,7 @@ import { registerNotesIpc } from './ipc/notes';
 import { registerQuizIpc } from './ipc/quizzes';
 import { registerSettingsIpc } from './ipc/settings';
 import { registerMediaIpc } from './ipc/media';
+import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -102,6 +103,7 @@ app.whenReady().then(() => {
   registerQuizIpc();
   registerSettingsIpc();
   registerMediaIpc();
+  registerPracticeIpc();
   registerAppIpc();
 
   createWindow();

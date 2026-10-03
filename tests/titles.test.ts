@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTitle, courseInitials, titleHue } from '../src/utils/titles';
+import { cleanTitle, courseInitials, titleHue, examGroupInfo } from '../src/utils/titles';
 
 describe('cleanTitle', () => {
   it('strips marketplace prefixes and suffixes', () => {
@@ -55,5 +55,33 @@ describe('titleHue', () => {
     expect(a).toBeLessThan(360);
     expect(titleHue('AWS Solutions Architect')).toBe(a);
     expect(titleHue('Something else')).not.toBe(a);
+  });
+});
+
+describe('examGroupInfo', () => {
+  it('extracts known exam codes with certification names', () => {
+    expect(examGroupInfo('Practice Test #1 (AWS Certified Solutions Architect Associate SAA-C03)')).toEqual({
+      code: 'SAA-C03',
+      name: 'AWS Certified Solutions Architect – Associate',
+    });
+    expect(examGroupInfo('Practice Test #1 (AWS Certified Developer Associate - DVA-C02)')).toEqual({
+      code: 'DVA-C02',
+      name: 'AWS Certified Developer – Associate',
+    });
+  });
+
+  it('falls back to the raw code for unknown exams', () => {
+    expect(examGroupInfo('Practice Test #1 (XYZ-C99)')).toEqual({ code: 'XYZ-C99', name: 'XYZ-C99' });
+  });
+
+  it('derives a group from the certification name when no code is present', () => {
+    expect(examGroupInfo('Practice Test #1 - AWS Certified Solutions Architect Associate')).toEqual({
+      code: null,
+      name: 'AWS Certified Solutions Architect Associate',
+    });
+  });
+
+  it('groups unrecognized titles under Other', () => {
+    expect(examGroupInfo('Random Networking Quiz')).toEqual({ code: null, name: 'Other practice exams' });
   });
 });

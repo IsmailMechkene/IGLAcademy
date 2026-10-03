@@ -3,6 +3,7 @@ import type {
   CourseDetail, CourseWithProgress, Note, NoteInput,
   Quiz, QuizDetail, QuizAttemptSummary, QuizAttemptDetail, QuizInput,
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
+  ExamSource, PracticeExamFile, PracticeExamContent,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -58,6 +59,26 @@ const api = {
     attempts: (quizId: number): Promise<QuizAttemptSummary[]> => ipcRenderer.invoke('quizzes:attempts', quizId),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
       ipcRenderer.invoke('quizzes:attemptDetail', attemptId),
+  },
+  practice: {
+    listSources: (): Promise<ExamSource[]> => ipcRenderer.invoke('practice:listSources'),
+    addFolder: (): Promise<ExamSource | null> => ipcRenderer.invoke('practice:addFolder'),
+    addFile: (): Promise<ExamSource | null> => ipcRenderer.invoke('practice:addFile'),
+    addFolderPath: (dirPath: string): Promise<ExamSource> =>
+      ipcRenderer.invoke('practice:addFolderPath', dirPath),
+    addFilePath: (filePath: string): Promise<ExamSource> =>
+      ipcRenderer.invoke('practice:addFilePath', filePath),
+    removeSource: (sourceId: number): Promise<void> =>
+      ipcRenderer.invoke('practice:removeSource', sourceId),
+    scan: (): Promise<PracticeExamFile[]> => ipcRenderer.invoke('practice:scan'),
+    load: (filePath: string): Promise<PracticeExamContent> =>
+      ipcRenderer.invoke('practice:load', filePath),
+    submit: (filePath: string, selections: number[][]): Promise<QuizAttemptDetail> =>
+      ipcRenderer.invoke('practice:submit', filePath, selections),
+    history: (filePath: string): Promise<QuizAttemptSummary[]> =>
+      ipcRenderer.invoke('practice:history', filePath),
+    attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
+      ipcRenderer.invoke('practice:attemptDetail', attemptId),
   },
   settings: {
     getAll: (): Promise<AppSettings> => ipcRenderer.invoke('settings:getAll'),

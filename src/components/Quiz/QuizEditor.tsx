@@ -14,7 +14,7 @@ interface QuestionDraft {
   key: number;
   question: string;
   options: string[];
-  correctIndex: number;
+  correctIndices: number[];
   explanation: string;
 }
 
@@ -23,7 +23,7 @@ const newDraft = (): QuestionDraft => ({
   key: ++draftKey,
   question: '',
   options: ['', '', '', ''],
-  correctIndex: 0,
+  correctIndices: [0],
   explanation: '',
 });
 
@@ -36,7 +36,7 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
           key: ++draftKey,
           question: q.question,
           options: [...q.options],
-          correctIndex: q.correctIndex,
+          correctIndices: [...q.correctIndices],
           explanation: q.explanation,
         }))
       : [newDraft()],
@@ -65,15 +65,28 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
     );
   };
 
+  const toggleCorrect = (key: number, index: number) => {
+    setQuestions((prev) =>
+      prev.map((q) => {
+        if (q.key !== key) return q;
+        const has = q.correctIndices.includes(index);
+        const correctIndices = has
+          ? q.correctIndices.filter((i) => i !== index)
+          : [...q.correctIndices, index].sort((a, b) => a - b);
+        return { ...q, correctIndices };
+      }),
+    );
+  };
+
   const removeOption = (key: number, index: number) => {
     setQuestions((prev) =>
       prev.map((q) => {
         if (q.key !== key || q.options.length <= 2) return q;
         const options = q.options.filter((_, i) => i !== index);
-        let correctIndex = q.correctIndex;
-        if (index < q.correctIndex) correctIndex--;
-        else if (index === q.correctIndex) correctIndex = 0;
-        return { ...q, options, correctIndex };
+        const correctIndices = q.correctIndices
+          .filter((i) => i !== index)
+          .map((i) => (i > index ? i - 1 : i));
+        return { ...q, options, correctIndices };
       }),
     );
   };
@@ -96,10 +109,15 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
         setError(`Question ${i + 1} has empty answer options.`);
         return;
       }
+      if (q.correctIndices.length === 0) {
+        setError(`Question ${i + 1} needs at least one correct answer.`);
+        return;
+      }
       validQuestions.push({
         question: q.question.trim(),
         options,
-        correctIndex: q.correctIndex,
+        correctIndex: q.correctIndices[0],
+        correctIndices: [...q.correctIndices],
         explanation: q.explanation.trim(),
       });
     }
@@ -173,17 +191,17 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>Answer options — select the correct one</label>
+                  <label>Answer options — check all correct answers</label>
                   <div className={styles.optionsList}>
                     {q.options.map((opt, oi) => (
                       <div key={oi} className={styles.optionRow}>
                         <input
-                          type="radio"
-                          name={`correct-${q.key}`}
+                          type="checkbox"
                           className={styles.radio}
-                          checked={q.correctIndex === oi}
-                          onChange={() => updateQuestion(q.key, { correctIndex: oi })}
+                          checked={q.correctIndices.includes(oi)}
+                          onChange={() => toggleCorrect(q.key, oi)}
                           title="Mark as correct answer"
+                          aria-label={`Option ${oi + 1} is correct`}
                         />
                         <input
                           className="input"

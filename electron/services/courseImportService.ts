@@ -90,7 +90,39 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       }
     }
 
+    // Paths already registered to a DIFFERENT course must not be poached
+    // (e.g. a subfolder imported as its own course).
+    const claimedByOther = new Set<string>();
+    const allLessons = db
+      .prepare(
+        `SELECT l.file_path, s.course_id FROM lessons l
+         JOIN sections s ON s.id = l.section_id`,
+      )
+      .all() as Array<{ file_path: string; course_id: number }>;
+    for (const row of allLessons) {
+      if (row.course_id !== courseId) claimedByOther.add(path.resolve(row.file_path));
+    }
+
     for (const scannedSection of scanned.sections) {
+      // Partition first so sections are only created when something is new.
+      const newLessons: typeof scannedSection.lessons = [];
+      for (const scannedLesson of scannedSection.lessons) {
+        const resolved = path.resolve(scannedLesson.filePath);
+        if (existingByPath.get(resolved)) {
+          // Unchanged — keep as is (progress preserved)
+          continue;
+        }
+        const byTitle = existingByTitle.get(`${scannedSection.title}::${scannedLesson.title}`);
+        if (byTitle) {
+          // File moved/renamed — re-link, keep progress
+          updateLessonFilePath(db, byTitle.id, scannedLesson.filePath);
+          continue;
+        }
+        if (claimedByOther.has(resolved)) continue;
+        newLessons.push(scannedLesson);
+      }
+      if (newLessons.length === 0) continue;
+
       // Match an existing section by title (case-insensitive)
       const existingSection = detail.sections.find(
         (s) => s.title.toLowerCase() === scannedSection.title.toLowerCase(),
@@ -100,20 +132,7 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         : insertSection(db, courseId, scannedSection.title, scannedSection.position);
       if (!existingSection) addedSections++;
 
-      for (const scannedLesson of scannedSection.lessons) {
-        const resolved = path.resolve(scannedLesson.filePath);
-        const byPath = existingByPath.get(resolved);
-        const byTitle = existingByTitle.get(`${scannedSection.title}::${scannedLesson.title}`);
-
-        if (byPath) {
-          // Unchanged — keep as is (progress preserved)
-          continue;
-        }
-        if (byTitle) {
-          // File moved/renamed — re-link, keep progress
-          updateLessonFilePath(db, byTitle.id, scannedLesson.filePath);
-          continue;
-        }
+      for (const scannedLesson of newLessons) {
         // Brand new lesson
         insertLesson(db, sectionId, {
           title: scannedLesson.title,

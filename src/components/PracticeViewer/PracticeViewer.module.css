@@ -16,9 +16,6 @@
 }
 
 .openExternal {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -38,4 +35,13 @@
 
 .openExternal:hover {
   background: var(--bg-active);
+}
+
+.actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }

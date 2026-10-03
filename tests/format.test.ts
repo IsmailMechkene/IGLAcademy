@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timeAgo, parseDbTime } from '../src/utils/format';
+import { timeAgo, parseDbTime, formatCountdown } from '../src/utils/format';
 
 const NOW = new Date('2026-10-03T20:00:00Z').getTime();
 
@@ -21,5 +21,17 @@ describe('timeAgo', () => {
   it('handles missing or invalid input', () => {
     expect(timeAgo(null)).toBe('—');
     expect(timeAgo('not-a-date')).toBe('—');
+  });
+});
+
+describe('formatCountdown', () => {
+  it('formats exam clocks', () => {
+    expect(formatCountdown(0)).toBe('0:00');
+    expect(formatCountdown(59)).toBe('0:59');
+    expect(formatCountdown(60)).toBe('1:00');
+    expect(formatCountdown(600)).toBe('10:00');
+    expect(formatCountdown(3600)).toBe('1:00:00');
+    expect(formatCountdown(65 * 120)).toBe('2:10:00');
+    expect(formatCountdown(-5)).toBe('0:00');
   });
 });

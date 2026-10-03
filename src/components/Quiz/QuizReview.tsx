@@ -45,9 +45,13 @@ export default function QuizReview({ attempt, quizTitle, onClose }: Props) {
                 <XCircle size={15} color="var(--danger)" style={{ flexShrink: 0, marginTop: 2 }} />
               )}
               <div>
-                <div className={styles.answerLabel}>Your answer</div>
+                <div className={styles.answerLabel}>
+                  {a.selectedIndices.length > 1 ? 'Your answers' : 'Your answer'}
+                </div>
                 <div style={{ color: a.isCorrect ? 'var(--success)' : 'var(--danger)' }}>
-                  {a.options[a.selectedIndex] ?? '(no answer)'}
+                  {a.selectedIndices.length > 0
+                    ? a.selectedIndices.map((i) => a.options[i] ?? '(no answer)').join(' · ')
+                    : '(no answer)'}
                 </div>
               </div>
             </div>
@@ -55,8 +59,12 @@ export default function QuizReview({ attempt, quizTitle, onClose }: Props) {
               <div className={styles.answerRow}>
                 <CheckCircle2 size={15} color="var(--success)" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <div className={styles.answerLabel}>Correct answer</div>
-                  <div style={{ color: 'var(--success)' }}>{a.options[a.correctIndex]}</div>
+                  <div className={styles.answerLabel}>
+                    {a.correctIndices.length > 1 ? 'Correct answers' : 'Correct answer'}
+                  </div>
+                  <div style={{ color: 'var(--success)' }}>
+                    {a.correctIndices.map((i) => a.options[i]).join(' · ')}
+                  </div>
                 </div>
               </div>
             )}

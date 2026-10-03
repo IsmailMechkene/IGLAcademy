@@ -34,6 +34,16 @@ import {
   getAttemptDetail,
   deleteQuiz,
 } from '../electron/database/repositories/quizzes';
+import {
+  registerSource,
+  scanLibrary,
+  loadExamFile,
+  submitExamAttempt,
+  listExamAttempts,
+  getExamAttemptDetail,
+  unregisterSource,
+} from '../electron/services/practiceLibraryService';
+import { listSources, listPracticeAttempts } from '../electron/database/repositories/practice';
 import { getAllSettings, setSetting } from '../electron/database/repositories/settings';
 import {
   checkFileExists,
@@ -96,6 +106,14 @@ describe('migrations', () => {
     const db2 = createDatabase(path.join(dbDir, 'test.db'));
     db2.close();
   });
+
+  it('applies the multi-answer and practice-source columns', () => {
+    const cols = (table: string) =>
+      (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    expect(cols('quiz_questions')).toContain('correct_indices');
+    expect(cols('quiz_attempt_answers')).toContain('selected_indices');
+    expect(cols('quizzes')).toContain('source_lesson_id');
+  });
 });
 
 describe('course import', () => {
@@ -125,12 +143,12 @@ describe('course import', () => {
     expect(getCourseBySourcePath(db, courseRoot)?.id).toBe(first.courseId);
   });
 
-  it('rejects folders without videos with a clear error', () => {
+  it('rejects folders without playable content with a clear error', () => {
     const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-empty-')));
     fs.writeFileSync(path.join(root, 'notes.pdf'), '');
     const result = importCourse(db, root);
     expect(result.status).toBe('error');
-    expect(result.error).toMatch(/no video files/i);
+    expect(result.error).toMatch(/no videos or practice tests/i);
   });
 
   it('removes a course and cascades related rows', () => {
@@ -169,6 +187,168 @@ describe('course import', () => {
     const updated = getCourseDetail(db, result.courseId!)!;
     expect(updated.completedCount).toBe(1);
     expect(listCourses(db)[0].lessonCount).toBe(3);
+  });
+
+  it('registers exam sources and scans them live from disk', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-lib-')));
+    const examPayload = (title: string) => ({
+      quiz_title: title,
+      questions: [
+        {
+          assessment_type: 'multiple-choice',
+          prompt: { question: '<p>Q?</p>', answers: ['<p>A</p>', '<p>B</p>'], explanation: '' },
+          correct_response: ['a'],
+        },
+      ],
+    });
+    const writeExam = (dir: string, name: string, title: string) => {
+      fs.writeFileSync(
+        path.join(dir, name),
+        `<html><body><script>const quizData = ${JSON.stringify(examPayload(title))};</script></body></html>`,
+      );
+    };
+    writeExam(root, '1.1 Practice Test #1.html', 'Exam One');
+    writeExam(root, '2.2 Practice Test #2.html', 'Exam Two');
+    fs.writeFileSync(path.join(root, 'notes.txt'), 'not an exam');
+    fs.writeFileSync(path.join(root, 'broken.html'), '<html><body>no quiz data</body></html>');
+
+    // registering twice returns the same source (idempotent)
+    const first = registerSource(db, root, 'dir');
+    const again = registerSource(db, root, 'dir');
+    expect(again.id).toBe(first.id);
+    expect(listSources(db)).toHaveLength(1);
+
+    // single files register too; wrong kinds and missing paths throw
+    const single = registerSource(db, path.join(root, '1.1 Practice Test #1.html'), 'file');
+    expect(single.kind).toBe('file');
+    expect(() => registerSource(db, path.join(root, 'lesson.mp4'), 'file')).toThrow();
+    expect(() => registerSource(db, path.join(root, 'nope.html'), 'file')).toThrow();
+    expect(() => registerSource(db, path.join(root, 'missing-dir'), 'dir')).toThrow();
+
+    const scanned = scanLibrary(db);
+    // folder scan + single-file source overlap on Exam One: listed once
+    expect(scanned.filter((f) => !f.error)).toHaveLength(2);
+    expect(scanned.filter((f) => f.error)).toHaveLength(1);
+    const one = scanned.find((f) => f.title === 'Exam One')!;
+    expect(one.questionCount).toBe(1);
+    expect(one.attemptCount).toBe(0);
+    expect(one.bestPercent).toBeNull();
+  });
+
+  it('loads exam content only from registered sources', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-libload-')));
+    const htmlPath = path.join(root, 'Exam.html');
+    fs.writeFileSync(
+      htmlPath,
+      `<html><body><script>const quizData = ${JSON.stringify({
+        quiz_title: 'Loaded Exam',
+        questions: [
+          {
+            assessment_type: 'multiple-choice',
+            prompt: { question: '<p>Q?</p>', answers: ['<p>A</p>', '<p>B</p>'], explanation: '<p>Why</p>' },
+            correct_response: ['b'],
+          },
+        ],
+      })};</script></body></html>`,
+    );
+
+    // unregistered files are rejected (renderer never learns raw paths)
+    expect(() => loadExamFile(db, htmlPath)).toThrow(/registered/i);
+
+    registerSource(db, root, 'dir');
+    const content = loadExamFile(db, htmlPath);
+    expect(content.title).toBe('Loaded Exam');
+    expect(content.questions).toHaveLength(1);
+    expect(content.questions[0].explanation).toBe('Why');
+
+    const broken = path.join(root, 'broken.html');
+    fs.writeFileSync(broken, '<html><body>nothing here</body></html>');
+    expect(() => loadExamFile(db, broken)).toThrow(/understand/i);
+  });
+
+  it('records attempts per file with history and review', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-libatt-')));
+    const htmlPath = path.join(root, 'Exam.html');
+    fs.writeFileSync(
+      htmlPath,
+      `<html><body><script>const quizData = ${JSON.stringify({
+        quiz_title: 'Attempt Exam',
+        questions: [
+          {
+            assessment_type: 'multiple-choice',
+            prompt: { question: '<p>Q1?</p>', answers: ['<p>A</p>', '<p>B</p>'], explanation: '' },
+            correct_response: ['a'],
+          },
+          {
+            assessment_type: 'multi-select',
+            prompt: { question: '<p>Q2?</p>', answers: ['<p>A</p>', '<p>B</p>', '<p>C</p>'], explanation: '' },
+            correct_response: ['a', 'c'],
+          },
+        ],
+      })};</script></body></html>`,
+    );
+    registerSource(db, root, 'dir');
+
+    // wrong multi-select subset scores 1/2
+    const partial = submitExamAttempt(db, htmlPath, [[0], [0]]);
+    expect(partial.score).toBe(1);
+    expect(partial.total).toBe(2);
+    expect(partial.percent).toBe(50);
+    expect(partial.answers[1].isCorrect).toBe(false);
+    expect(partial.answers[1].selectedIndices).toEqual([0]);
+
+    // perfect attempt
+    const perfect = submitExamAttempt(db, htmlPath, [[0], [0, 2]]);
+    expect(perfect.score).toBe(2);
+
+    // mismatched answer counts are rejected
+    expect(() => submitExamAttempt(db, htmlPath, [[0]])).toThrow(/match/i);
+    // out-of-range indices are dropped (counted wrong), not fatal
+    const dropped = submitExamAttempt(db, htmlPath, [[5], [0, 2]]);
+    expect(dropped.score).toBe(1);
+
+    const history = listExamAttempts(db, htmlPath);
+    expect(history).toHaveLength(3);
+    expect(history[0].id).toBe(dropped.id);
+
+    const scanned = scanLibrary(db).find((f) => f.filePath === htmlPath)!;
+    expect(scanned.attemptCount).toBe(3);
+    expect(scanned.bestPercent).toBe(100);
+
+    const review = getExamAttemptDetail(db, perfect.id);
+    expect(review?.answers[0].question).toBe('Q1?');
+
+    // removing the source deletes its attempts
+    const source = listSources(db)[0];
+    unregisterSource(db, source.id);
+    expect(listSources(db)).toHaveLength(0);
+    expect(listPracticeAttempts(db, htmlPath)).toHaveLength(0);
+    expect(() => loadExamFile(db, htmlPath)).toThrow(/registered/i);
+  });
+
+  it('loads content only from the exact registered file for file sources', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-libfile-')));
+    const htmlPath = path.join(root, 'Solo.html');
+    fs.writeFileSync(
+      htmlPath,
+      `<html><body><script>const quizData = ${JSON.stringify({
+        quiz_title: 'Solo Exam',
+        questions: [
+          {
+            assessment_type: 'multiple-choice',
+            prompt: { question: '<p>Q?</p>', answers: ['<p>A</p>', '<p>B</p>'], explanation: '' },
+            correct_response: ['a'],
+          },
+        ],
+      })};</script></body></html>`,
+    );
+    registerSource(db, htmlPath, 'file');
+    expect(loadExamFile(db, htmlPath).title).toBe('Solo Exam');
+    // sibling files are NOT covered by a file source
+    const sibling = path.join(root, 'Sibling.html');
+    fs.writeFileSync(sibling, '<html></html>');
+    expect(() => loadExamFile(db, sibling)).toThrow(/registered/i);
+    expect(scanLibrary(db)).toHaveLength(1);
   });
 });
 
@@ -261,7 +441,13 @@ describe('quizzes', () => {
   it('validates question input', () => {
     expect(
       validateQuestionInput({ question: 'Q?', options: ['a', 'b'], correctIndex: 0 }, 0),
-    ).toMatchObject({ question: 'Q?', correctIndex: 0 });
+    ).toMatchObject({ question: 'Q?', correctIndex: 0, correctIndices: [0] });
+    expect(
+      validateQuestionInput(
+        { question: 'Q?', options: ['a', 'b', 'c'], correctIndex: 0, correctIndices: [2, 0] },
+        0,
+      ),
+    ).toMatchObject({ correctIndex: 0, correctIndices: [0, 2] });
     expect(() => validateQuestionInput({ question: '', options: ['a', 'b'], correctIndex: 0 }, 0)).toThrow();
     expect(() => validateQuestionInput({ question: 'Q?', options: ['only-one'], correctIndex: 0 }, 0)).toThrow();
     expect(() => validateQuestionInput({ question: 'Q?', options: ['a', 'b'], correctIndex: 5 }, 0)).toThrow();
@@ -272,19 +458,19 @@ describe('quizzes', () => {
     const quizId = insertQuiz(db, { courseId, sectionId: null, title: 'Checkpoint', description: '' });
     const q1 = insertQuestion(db, quizId, {
       question: 'What is EC2?', options: ['Compute', 'Storage', 'DB', 'CDN'],
-      correctIndex: 0, explanation: 'Elastic Compute Cloud', position: 1,
+      correctIndex: 0, correctIndices: [0], explanation: 'Elastic Compute Cloud', position: 1,
     });
     const q2 = insertQuestion(db, quizId, {
       question: 'What is S3?', options: ['Compute', 'Storage', 'DB', 'CDN'],
-      correctIndex: 1, explanation: '', position: 2,
+      correctIndex: 1, correctIndices: [1], explanation: '', position: 2,
     });
 
     expect(listQuizzesForCourse(db, courseId)).toHaveLength(1);
     expect(getQuiz(db, quizId)?.questions).toHaveLength(2);
 
     const attemptId = insertAttempt(db, quizId, [
-      { questionId: q1, selectedIndex: 0, isCorrect: true },
-      { questionId: q2, selectedIndex: 2, isCorrect: false },
+      { questionId: q1, selectedIndex: 0, selectedIndices: [0], isCorrect: true },
+      { questionId: q2, selectedIndex: 2, selectedIndices: [2], isCorrect: false },
     ]);
     const detail = getAttemptDetail(db, attemptId)!;
     expect(detail.score).toBe(1);

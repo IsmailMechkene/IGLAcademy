@@ -352,3 +352,178 @@
   color: var(--text-muted);
   margin-left: auto;
 }
+
+/* mode picker */
+.modeWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 32px;
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.modeTitle {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.modeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .modeGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 22px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.modeCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--accent-border);
+}
+
+.modeIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modeIconPractice {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.modeIconExam {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.modeName {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.modeDesc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* timed exam bar */
+.examBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.timerUrgent {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* question navigator */
+.navigator {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.navDot {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  padding: 0;
+}
+
+.navDot:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.navAnswered {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.navFlagged {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.navCurrent {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.flagActive {
+  color: var(--warning) !important;
+  border-color: var(--warning) !important;
+}
+
+/* practice-mode reveal states */
+.optionBtn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.revealCorrect {
+  border-color: var(--success) !important;
+  background: var(--success-soft) !important;
+}
+
+.revealWrong {
+  border-color: var(--danger) !important;
+  background: var(--danger-soft) !important;
+}

@@ -8,6 +8,8 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import Library from './pages/Library/Library';
 import CourseDetail from './pages/CourseDetail/CourseDetail';
 import Player from './pages/Player/Player';
+import FileExamPage from './components/Quiz/FileExamPage';
+import PracticeExams from './pages/PracticeExams/PracticeExams';
 import NotesPage from './pages/Notes/NotesPage';
 import Settings from './pages/Settings/Settings';
 
@@ -18,6 +20,8 @@ export type Route =
   | { name: 'completed' }
   | { name: 'course'; courseId: number }
   | { name: 'player'; courseId: number; lessonId: number }
+  | { name: 'examfile'; filePath: string }
+  | { name: 'practice' }
   | { name: 'notes' }
   | { name: 'settings' };
 
@@ -110,6 +114,10 @@ export default function App() {
         return <CourseDetail courseId={route.courseId} />;
       case 'player':
         return <Player courseId={route.courseId} lessonId={route.lessonId} />;
+      case 'examfile':
+        return <FileExamPage filePath={route.filePath} />;
+      case 'practice':
+        return <PracticeExams />;
       case 'notes':
         return <NotesPage />;
       case 'settings':

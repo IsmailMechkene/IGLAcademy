@@ -9,9 +9,10 @@ interface Props {
 }
 
 /**
- * In-app preview for HTML practice tests. The frame is fully sandboxed
- * (no scripts from course files ever execute), so interactive tests are best
- * experienced via "Open in browser" — the static content still reads fine here.
+ * In-app preview for HTML practice tests found inside imported courses.
+ * The frame is fully sandboxed (no scripts from course files ever execute).
+ * For the full interactive exam experience, register the file's folder under
+ * Practice Exams in the sidebar.
  */
 export default function PracticeViewer({ src, title, lessonId }: Props) {
   return (
@@ -23,14 +24,16 @@ export default function PracticeViewer({ src, title, lessonId }: Props) {
         sandbox=""
         referrerPolicy="no-referrer"
       />
-      <button
-        className={styles.openExternal}
-        onClick={() => void api().media.openExternal(lessonId).catch(() => undefined)}
-        title="Open this practice test in your browser with full interactivity"
-      >
-        <ExternalLink size={14} />
-        Open in browser
-      </button>
+      <div className={styles.actions}>
+        <button
+          className={styles.openExternal}
+          onClick={() => void api().media.openExternal(lessonId).catch(() => undefined)}
+          title="Open this practice test in your browser with full interactivity"
+        >
+          <ExternalLink size={14} />
+          Open in browser
+        </button>
+      </div>
     </div>
   );
 }

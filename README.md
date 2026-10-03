@@ -109,6 +109,20 @@ copies — deleting the app database never deletes your videos.
    notes, and quizzes are preserved.
 
 Supported video: MP4, WebM, MKV (where Chromium can decode it).
+Supported practice tests: HTML/HTM (e.g. downloaded Udemy practice exams).
+Register a folder (or single file) under **Practice Exams** in the sidebar —
+tests are parsed live straight from your files (nothing is imported, moved, or
+copied) and grouped by certification (SAA-C03, DVA-C02, …).
+
+**Two exam modes.** Every exam offers a mode picker: **Practice mode** checks
+each answer instantly with explanations (untimed), while **Exam mode** runs
+under real AWS pacing (2 minutes per question — 130 minutes for a 65-question
+exam), hiding answers until submit, with a question navigator, flag-for-review,
+and automatic submission when time runs out. Passing is 70%.
+
+Attempt history (scores, dates, full answer review) is stored per file, so
+re-taking the same test tracks your progress over time. Removing a source
+deletes its history but never touches your files.
 Supported resources: PDF, TXT, MD, VTT/SRT, PNG/JPG/GIF/WebP/SVG.
 
 ## License

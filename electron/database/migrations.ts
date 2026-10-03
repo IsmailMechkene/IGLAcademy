@@ -118,6 +118,47 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: 'quiz_multi_answer_and_practice_source',
+    sql: `
+      -- Multiple correct answers per question (practice exams). Legacy rows
+      -- keep '[]' and fall back to the single correct_index value.
+      ALTER TABLE quiz_questions ADD COLUMN correct_indices TEXT NOT NULL DEFAULT '[]';
+      -- Selected option sets per attempt answer (single-choice rows reuse
+      -- selected_index; multi-select rows store the full set here).
+      ALTER TABLE quiz_attempt_answers ADD COLUMN selected_indices TEXT NOT NULL DEFAULT '[]';
+      -- Links an imported practice exam back to its source HTML lesson.
+      ALTER TABLE quizzes ADD COLUMN source_lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE;
+      CREATE INDEX idx_quizzes_source_lesson ON quizzes(source_lesson_id);
+    `,
+  },
+  {
+    version: 3,
+    name: 'practice_exam_library',
+    sql: `
+      -- Folders (or individual files) registered as practice-exam sources.
+      -- Exams are parsed live from these files; nothing is imported or copied.
+      CREATE TABLE exam_sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL DEFAULT 'dir',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- Attempts keyed by file path. Selections are stored aligned by
+      -- question position; question content is re-parsed from the file.
+      CREATE TABLE practice_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_path TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        selections TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_practice_attempts_path ON practice_attempts(source_path, created_at);
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {
