@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, StickyNote } from 'lucide-react';
+import { ArrowLeft, Bookmark, BookmarkPlus, CheckCircle2, Keyboard, ListVideo, RotateCcw, SkipForward, StickyNote } from 'lucide-react';
 import type { CourseDetail } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
@@ -9,17 +9,20 @@ import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
 import NotesPanel from '../../components/NotesPanel/NotesPanel';
 import LoadError from '../../components/LoadError/LoadError';
+import Modal from '../../components/Modal/Modal';
 import styles from './Player.module.css';
 
 interface Props {
   courseId: number;
   lessonId: number;
+  /** Optional position to jump to on open (bookmarks, review links). */
+  startAt?: number;
 }
 
 const COMPLETION_THRESHOLD = 0.9; // 90% watched counts as complete
 const POSITION_SAVE_INTERVAL = 5; // seconds
 
-export default function Player({ courseId, lessonId }: Props) {
+export default function Player({ courseId, lessonId, startAt }: Props) {
   const { navigate, settings, refreshAll } = useApp();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -37,6 +40,10 @@ export default function Player({ courseId, lessonId }: Props) {
   const [lessonKind, setLessonKind] = useState<'video' | 'practice'>('video');
   const [courseError, setCourseError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [showEndPrompt, setShowEndPrompt] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [bookmarkSaved, setBookmarkSaved] = useState(false);
+  const startAtRef = useRef<number | null>(startAt ?? null);
 
   const playerRef = useRef<VideoPlayerHandle>(null);
   const lastSaveRef = useRef(0);
@@ -192,19 +199,58 @@ export default function Player({ courseId, lessonId }: Props) {
   );
 
   const handleEnded = useCallback(() => {
-    if (!completedRef.current) {
-      completedRef.current = true;
-      setCompleted(true);
-      void api().progress.setCompleted(currentLessonId, true);
-      refreshAll();
-    }
     void api().progress.savePosition(currentLessonId, playerRef.current?.getDuration() ?? 0);
-  }, [currentLessonId, refreshAll]);
+    setShowEndPrompt(true);
+  }, [currentLessonId]);
+
+  const handleReplay = useCallback(() => {
+    setShowEndPrompt(false);
+    playerRef.current?.seek(0);
+    playerRef.current?.play();
+  }, []);
+
+  const handleBookmark = useCallback(async () => {
+    try {
+      await api().bookmarks.create({
+        courseId,
+        lessonId: currentLessonId,
+        positionSeconds: Math.floor(playerRef.current?.getCurrentTime() ?? currentTime),
+        title: `${lessonTitle || 'Lesson'} @ ${formatTime(playerRef.current?.getCurrentTime() ?? currentTime)}`,
+      });
+      setBookmarkSaved(true);
+      setTimeout(() => setBookmarkSaved(false), 1500);
+    } catch {
+      // bookmarking is best-effort; the Review page shows what stuck
+    }
+  }, [courseId, currentLessonId, currentTime, lessonTitle]);
+
+  const handleReviewLater = useCallback(async () => {
+    try {
+      await api().review.add({
+        courseId,
+        kind: 'lesson',
+        refId: String(currentLessonId),
+        title: lessonTitle || 'Lesson',
+      });
+    } catch {
+      // best-effort; manageable from the Review page
+    }
+  }, [courseId, currentLessonId, lessonTitle]);
+
+  // Jump links (bookmarks) can open the player at a position.
+  const handleLoadedMetadata = useCallback(() => {
+    if (startAtRef.current !== null && startAtRef.current > 0) {
+      const at = startAtRef.current;
+      startAtRef.current = null;
+      setTimeout(() => playerRef.current?.seek(at), 200);
+    }
+  }, []);
 
   const goToLesson = useCallback(
     (id: number) => {
       if (id === currentLessonId) return;
       savePosition();
+      setShowEndPrompt(false);
       setCurrentLessonId(id);
     },
     [currentLessonId, savePosition],
@@ -252,6 +298,86 @@ export default function Player({ courseId, lessonId }: Props) {
       );
     }
   }, [currentLessonId]);
+
+  // Keyboard shortcuts (ignored while typing or when a dialog is open).
+  // Registered after all lesson actions so the handler closes over them.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) return;
+      const player = playerRef.current;
+      if (!player || lessonKind !== 'video') {
+        if (e.key === '?') setShowShortcuts(true);
+        return;
+      }
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          player.togglePlay();
+          break;
+        case 'ArrowLeft':
+          player.seekBy(e.shiftKey ? -10 : -5);
+          break;
+        case 'ArrowRight':
+          player.seekBy(e.shiftKey ? 10 : 5);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          player.volumeBy(0.1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          player.volumeBy(-0.1);
+          break;
+        case 'f':
+        case 'F':
+          player.toggleFullscreen();
+          break;
+        case 'm':
+        case 'M':
+          player.toggleMute();
+          break;
+        case 'n':
+        case 'N':
+          handleNext();
+          break;
+        case 'p':
+        case 'P':
+          handlePrev();
+          break;
+        case 'b':
+        case 'B':
+          void handleBookmark();
+          break;
+        case 'c':
+        case 'C':
+          handleToggleComplete();
+          break;
+        case '[':
+          player.cycleSpeed(-1);
+          break;
+        case ']':
+          player.cycleSpeed(1);
+          break;
+        case '?':
+          setShowShortcuts(true);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lessonKind, handleNext, handlePrev, handleBookmark, handleToggleComplete]);
 
   // Notes panel resize
   const handleResizeMouseMove = useCallback(
@@ -321,6 +447,7 @@ export default function Player({ courseId, lessonId }: Props) {
                 onNext={handleNext}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handleEnded}
+                onLoadedMetadata={handleLoadedMetadata}
                 missing={fileMissing}
                 mediaKind={lessonKind}
                 onMissingFile={handleLocateFile}
@@ -338,6 +465,35 @@ export default function Player({ courseId, lessonId }: Props) {
             <div className={styles.lessonTitle}>{lessonTitle || 'Loading...'}</div>
             <div className={styles.lessonSection}>{sectionTitle}</div>
           </div>
+          {lessonKind === 'video' && (
+            <>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleBookmark}
+                title="Bookmark this moment (B)"
+                aria-label="Bookmark current position"
+              >
+                {bookmarkSaved ? <CheckCircle2 size={15} color="var(--success)" /> : <Bookmark size={15} />}
+                {bookmarkSaved ? 'Saved' : 'Bookmark'}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleReviewLater}
+                title="Review this lesson later"
+                aria-label="Add lesson to review later queue"
+              >
+                <BookmarkPlus size={15} /> Later
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowShortcuts(true)}
+                title="Keyboard shortcuts (?)"
+                aria-label="Show keyboard shortcuts"
+              >
+                <Keyboard size={15} />
+              </button>
+            </>
+          )}
           <button
             className={`btn btn-ghost ${styles.notesToggle}`}
             onClick={() => setNotesOpen((o) => !o)}
@@ -369,35 +525,106 @@ export default function Player({ courseId, lessonId }: Props) {
       )}
 
       {showResumePrompt && (
-        <div className={styles.overlay}>
-          <div className={`card ${styles.dialog}`}>
-            <h2>Resume where you left off?</h2>
-            <p>
-              You were at {formatTime(resumePosition)} in this lesson.
-            </p>
-            <div className={styles.dialogActions}>
+        <Modal label="Resume playback" onClose={() => setShowResumePrompt(false)}>
+          <h2>Resume where you left off?</h2>
+          <p>
+            You were at {formatTime(resumePosition)} in this lesson.
+          </p>
+          <div className={styles.dialogActions}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setShowResumePrompt(false);
+                startTimeRef.current = Date.now();
+              }}
+            >
+              Start over
+            </button>
+            <button
+              className="btn btn-primary"
+              data-autofocus
+              onClick={() => {
+                setShowResumePrompt(false);
+                setTimeout(() => playerRef.current?.seek(resumePosition), 200);
+                startTimeRef.current = Date.now();
+              }}
+            >
+              Resume
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showEndPrompt && (() => {
+        const nextLesson = lessons[currentIdx + 1];
+        return (
+          <Modal label="Lesson finished" onClose={() => setShowEndPrompt(false)}>
+            <h2>Lesson finished</h2>
+            <p>{lessonTitle}</p>
+            <div className={styles.endActions}>
               <button
-                className="btn btn-ghost"
+                className={`btn ${completed ? 'btn-ghost' : 'btn-primary'}`}
                 onClick={() => {
-                  setShowResumePrompt(false);
-                  startTimeRef.current = Date.now();
+                  handleToggleComplete();
+                  setShowEndPrompt(false);
                 }}
               >
-                Start over
+                <CheckCircle2 size={15} />
+                {completed ? 'Mark as incomplete' : 'Mark complete'}
               </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowResumePrompt(false);
-                  setTimeout(() => playerRef.current?.seek(resumePosition), 200);
-                  startTimeRef.current = Date.now();
-                }}
-              >
-                Resume
+              {nextLesson ? (
+                <button
+                  className="btn btn-primary"
+                  data-autofocus
+                  onClick={() => {
+                    setShowEndPrompt(false);
+                    goToLesson(nextLesson.id);
+                  }}
+                >
+                  <SkipForward size={15} /> Next lesson
+                </button>
+              ) : (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setShowEndPrompt(false);
+                    navigate({ name: 'course', courseId });
+                  }}
+                >
+                  <ListVideo size={15} /> Back to course
+                </button>
+              )}
+              <button className="btn btn-ghost" onClick={handleReplay}>
+                <RotateCcw size={15} /> Replay
               </button>
             </div>
+          </Modal>
+        );
+      })()}
+
+      {showShortcuts && (
+        <Modal label="Keyboard shortcuts" onClose={() => setShowShortcuts(false)}>
+          <h2>Keyboard shortcuts</h2>
+          <div className={styles.shortcutList}>
+            {[
+              ['Space', 'Play / pause'],
+              ['← / →', 'Seek 5 seconds (Shift: 10 seconds)'],
+              ['↑ / ↓', 'Volume up / down'],
+              ['F', 'Fullscreen'],
+              ['M', 'Mute'],
+              ['N / P', 'Next / previous lesson'],
+              ['[ / ]', 'Slower / faster playback'],
+              ['B', 'Bookmark this moment'],
+              ['C', 'Mark complete / incomplete'],
+              ['?', 'This list'],
+            ].map(([key, desc]) => (
+              <div key={key} className={styles.shortcutRow}>
+                <kbd className={styles.kbd}>{key}</kbd>
+                <span>{desc}</span>
+              </div>
+            ))}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

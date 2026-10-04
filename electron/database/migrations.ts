@@ -159,6 +159,80 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_practice_attempts_path ON practice_attempts(source_path, created_at);
     `,
   },
+  {
+    version: 4,
+    name: 'resources_retention_analytics',
+    sql: `
+      -- Course resources (pdf, text, markdown, subtitles, images) persisted
+      -- per section so they can be previewed, searched and opened.
+      CREATE TABLE resources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'other',
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_resources_section ON resources(section_id, position);
+
+      -- Timestamped bookmarks on lessons.
+      CREATE TABLE bookmarks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+        position_seconds REAL NOT NULL DEFAULT 0,
+        title TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_bookmarks_course ON bookmarks(course_id, created_at);
+
+      -- "Review later" queue entries (lessons, notes, quizzes, exams).
+      -- course_id is null for file-based exams, which belong to no course.
+      CREATE TABLE review_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        ref_id TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL DEFAULT '',
+        due_at TEXT NOT NULL DEFAULT (datetime('now')),
+        done INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_review_items_due ON review_items(done, due_at);
+
+      -- Flashcards (manual, from notes, or from quiz questions).
+      CREATE TABLE flashcard_decks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE flashcards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deck_id INTEGER NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
+        front TEXT NOT NULL,
+        back TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE flashcard_state (
+        card_id INTEGER PRIMARY KEY REFERENCES flashcards(id) ON DELETE CASCADE,
+        ease REAL NOT NULL DEFAULT 2.5,
+        interval_days REAL NOT NULL DEFAULT 0,
+        reps INTEGER NOT NULL DEFAULT 0,
+        due_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_flashcard_state_due ON flashcard_state(due_at);
+
+      -- Per-question timing and flagged questions for exam analytics.
+      ALTER TABLE practice_attempts ADD COLUMN durations TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE practice_attempts ADD COLUMN flags TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

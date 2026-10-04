@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { History, ListChecks, Pencil, PlayCircle, Plus, Trash2 } from 'lucide-react';
+import { History, Layers, ListChecks, Pencil, PlayCircle, Plus, Trash2 } from 'lucide-react';
 import type { Quiz, QuizDetail } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
@@ -16,7 +16,7 @@ interface Props {
 type View = 'list' | 'editor' | 'taker' | 'history';
 
 export default function QuizManager({ courseId }: Props) {
-  const { refreshKey } = useApp();
+  const { refreshKey, settings } = useApp();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [view, setView] = useState<View>('list');
   const [editingQuiz, setEditingQuiz] = useState<QuizDetail | null>(null);
@@ -81,6 +81,7 @@ export default function QuizManager({ courseId }: Props) {
     return (
       <QuizTaker
         quiz={takingQuiz}
+        passPercent={settings.examPassPercent}
         onClose={() => {
           setTakingQuiz(null);
           setView('list');
@@ -151,6 +152,21 @@ export default function QuizManager({ courseId }: Props) {
                   }}
                 >
                   <History size={14} />
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title="Make flashcards from this quiz"
+                  aria-label={`Make flashcards from ${quiz.title}`}
+                  onClick={async () => {
+                    try {
+                      await api().flashcards.fromQuiz({ courseId, quizId: quiz.id });
+                      await api().app.showError('Flashcards created', `A deck was created from "${quiz.title}". Open it from the Review page.`);
+                    } catch (err) {
+                      await api().app.showError('Could not create deck', err instanceof Error ? err.message : 'Unknown error');
+                    }
+                  }}
+                >
+                  <Layers size={14} />
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"

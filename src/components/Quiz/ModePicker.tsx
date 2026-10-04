@@ -9,6 +9,10 @@ interface Props {
   questionCount: number;
   multiCount: number;
   timeLimitMinutes: number;
+  shuffle: boolean;
+  onToggleShuffle: () => void;
+  secondsPerQuestion: number;
+  onPickDuration: (seconds: number) => void;
   onPick: (mode: ExamMode) => void;
   onBack: () => void;
 }
@@ -20,6 +24,10 @@ export default function ModePicker({
   questionCount,
   multiCount,
   timeLimitMinutes,
+  shuffle,
+  onToggleShuffle,
+  secondsPerQuestion,
+  onPickDuration,
   onPick,
   onBack,
 }: Props) {
@@ -38,6 +46,31 @@ export default function ModePicker({
           {description}
         </p>
       )}
+      <div className={styles.runOptions}>
+        <label className={styles.checkRow}>
+          <input
+            type="checkbox"
+            checked={shuffle}
+            onChange={onToggleShuffle}
+          />
+          Shuffle questions and answer order
+        </label>
+        <div className={styles.durationRow} role="radiogroup" aria-label="Exam pace">
+          {[60, 120, 180].map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={secondsPerQuestion === s}
+              className={`${styles.durationOption} ${secondsPerQuestion === s ? styles.durationActive : ''}`}
+              onClick={() => onPickDuration(s)}
+            >
+              {s / 60} min/q
+            </button>
+          ))}
+          <span className="muted" style={{ fontSize: 12.5 }}>= {timeLimitMinutes} min total</span>
+        </div>
+      </div>
       <div className={styles.modeGrid}>
         <button type="button" className={`card ${styles.modeCard}`} onClick={() => onPick('practice')}>
           <span className={`${styles.modeIcon} ${styles.modeIconPractice}`}>

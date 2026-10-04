@@ -1,15 +1,22 @@
-import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Lightbulb } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from 'lucide-react';
 import type { QuizDetail, QuizAttemptDetail, AnswerInput } from '../../types';
 import { api } from '../../services/api';
 import QuizReview from './QuizReview';
+import ExplanationBlock from './ExplanationBlock';
 import styles from './Quiz.module.css';
 
 interface Props {
   quiz: QuizDetail;
   onClose: () => void;
   /** Overrides the default submit pipeline (used for file-based exams). */
-  submitAnswers?: (answers: AnswerInput[]) => Promise<QuizAttemptDetail | null>;
+  submitAnswers?: (
+    answers: AnswerInput[],
+    timings: Record<number, number>,
+    flagged: number[],
+  ) => Promise<QuizAttemptDetail | null>;
+  /** Pass mark percent shown in review (default 70). */
+  passPercent?: number;
 }
 
 function setsEqual(a: number[], b: number[]): boolean {
@@ -23,13 +30,15 @@ function setsEqual(a: number[], b: number[]): boolean {
  * Practice mode: every answer is checked immediately with the explanation
  * shown, then the whole run is submitted for review + history at the end.
  */
-export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) {
+export default function PracticeRunner({ quiz, onClose, submitAnswers, passPercent = 70 }: Props) {
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Map<number, number[]>>(new Map());
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
+  const timingsRef = useRef(new Map<number, number>());
+  const activeRef = useRef<{ id: number; start: number } | null>(null);
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -76,6 +85,20 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
     setRevealed((prev) => new Set(prev).add(question.id));
   };
 
+  const flushTiming = () => {
+    const active = activeRef.current;
+    if (!active) return;
+    const elapsed = (Date.now() - active.start) / 1000;
+    timingsRef.current.set(active.id, (timingsRef.current.get(active.id) ?? 0) + elapsed);
+    activeRef.current = { id: active.id, start: Date.now() };
+  };
+
+  useEffect(() => {
+    flushTiming();
+    activeRef.current = { id: question.id, start: Date.now() };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
   const submit = async () => {
     setSubmitting(true);
     setSubmitError(false);
@@ -84,8 +107,11 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
         const sel = answers.get(q.id) ?? [];
         return { questionId: q.id, selectedIndex: sel[0] ?? -1, selectedIndices: sel };
       });
+      const timings: Record<number, number> = {};
+      flushTiming();
+      for (const [id, seconds] of timingsRef.current) timings[id] = Math.round(seconds * 10) / 10;
       const detail = submitAnswers
-        ? await submitAnswers(payload)
+        ? await submitAnswers(payload, timings, [])
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
           .then((attemptId) => api().quizzes.attemptDetail(attemptId));
@@ -97,7 +123,7 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
   };
 
   if (result) {
-    return <QuizReview attempt={result} quizTitle={quiz.title} onClose={onClose} />;
+    return <QuizReview attempt={result} quizTitle={quiz.title} onClose={onClose} passPercent={passPercent} />;
   }
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -157,10 +183,7 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
           })}
         </div>
         {isRevealed && question.explanation && (
-          <div className={styles.explanation}>
-            <Lightbulb size={13} style={{ display: 'vertical-align', marginRight: 5 }} />
-            {question.explanation}
-          </div>
+          <ExplanationBlock text={question.explanation} />
         )}
       </div>
 

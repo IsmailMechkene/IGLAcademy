@@ -1,15 +1,46 @@
-import { CheckCircle2, XCircle, ArrowLeft, Lightbulb } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, XCircle, ArrowLeft, Clock } from 'lucide-react';
 import type { QuizAttemptDetail } from '../../types';
+import ExplanationBlock from './ExplanationBlock';
 import styles from './Quiz.module.css';
+
+type ReviewFilter = 'all' | 'incorrect' | 'flagged';
 
 interface Props {
   attempt: QuizAttemptDetail;
   quizTitle: string;
   onClose: () => void;
+  /** Pass mark percent (default 70). */
+  passPercent?: number;
+  /** Pre-select a review filter (e.g. from exam analytics). */
+  initialFilter?: ReviewFilter;
 }
 
-export default function QuizReview({ attempt, quizTitle, onClose }: Props) {
-  const passed = attempt.percent >= 70;
+export default function QuizReview({ attempt, quizTitle, onClose, passPercent = 70, initialFilter = 'all' }: Props) {
+  const passed = attempt.percent >= passPercent;
+  const flaggedIds = new Set(attempt.flagged ?? []);
+  const incorrectCount = attempt.answers.filter((a) => !a.isCorrect).length;
+  const [filter, setFilter] = useState<ReviewFilter>(initialFilter);
+  const showFilters = incorrectCount > 0 || flaggedIds.size > 0;
+
+  const visible = attempt.answers.filter((a, i) => {
+    if (filter === 'incorrect' && a.isCorrect) return false;
+    if (filter === 'flagged' && !flaggedIds.has(a.questionId) && !flaggedIds.has(i)) return false;
+    return true;
+  });
+
+  const filterBtn = (value: ReviewFilter, label: string, count: number | null) => (
+    <button
+      key={value}
+      type="button"
+      className={`btn btn-sm ${filter === value ? 'btn-primary' : 'btn-ghost'}`}
+      aria-pressed={filter === value}
+      onClick={() => setFilter(value)}
+    >
+      {label}
+      {count !== null && <span className="muted"> {count}</span>}
+    </button>
+  );
 
   return (
     <div className={styles.reviewWrap}>
@@ -28,15 +59,31 @@ export default function QuizReview({ attempt, quizTitle, onClose }: Props) {
           <h2>{passed ? 'Well done!' : 'Keep practicing'}</h2>
           <p className="secondary" style={{ margin: 0 }}>
             You answered {attempt.score} of {attempt.total} questions correctly.
+            Passing score is {passPercent}%.
           </p>
         </div>
       </div>
 
+      {showFilters && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} role="group" aria-label="Filter reviewed questions">
+          {filterBtn('all', 'All', attempt.answers.length)}
+          {filterBtn('incorrect', 'Incorrect', incorrectCount)}
+          {flaggedIds.size > 0 && filterBtn('flagged', 'Flagged', flaggedIds.size)}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {attempt.answers.map((a, i) => (
+        {visible.map((a) => {
+          const i = attempt.answers.indexOf(a);
+          return (
           <div key={a.questionId} className={`card ${styles.reviewQuestion} ${a.isCorrect ? styles.correct : styles.incorrect}`}>
             <div className={styles.reviewQuestionText}>
               {i + 1}. {a.question}
+              {typeof a.seconds === 'number' && a.seconds > 0 && (
+                <span className={styles.timeChip} title="Time spent on this question">
+                  <Clock size={12} /> {a.seconds < 60 ? `${Math.round(a.seconds)}s` : `${Math.floor(a.seconds / 60)}m ${Math.round(a.seconds % 60)}s`}
+                </span>
+              )}
             </div>
             <div className={styles.answerRow}>
               {a.isCorrect ? (
@@ -68,14 +115,15 @@ export default function QuizReview({ attempt, quizTitle, onClose }: Props) {
                 </div>
               </div>
             )}
-            {a.explanation && (
-              <div className={styles.explanation}>
-                <Lightbulb size={13} style={{ display: 'vertical-align', marginRight: 5 }} />
-                {a.explanation}
-              </div>
-            )}
+            {a.explanation && <ExplanationBlock text={a.explanation} />}
           </div>
-        ))}
+          );
+        })}
+        {visible.length === 0 && (
+          <div className="card muted" style={{ padding: 24, textAlign: 'center' }}>
+            No questions match this filter.
+          </div>
+        )}
       </div>
     </div>
   );

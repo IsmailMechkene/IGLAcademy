@@ -12,11 +12,20 @@ interface Props {
   /** When set, the quiz runs as a timed exam with a navigator. */
   timeLimitSeconds?: number;
   /** Overrides the default submit pipeline (used for file-based exams). */
-  submitAnswers?: (answers: AnswerInput[]) => Promise<QuizAttemptDetail | null>;
+  submitAnswers?: (
+    answers: AnswerInput[],
+    timings: Record<number, number>,
+    flagged: number[],
+  ) => Promise<QuizAttemptDetail | null>;
+  /** Show flag-for-review controls even when untimed. */
+  enableFlags?: boolean;
+  /** Pass mark percent shown in review (default 70). */
+  passPercent?: number;
 }
 
-export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswers }: Props) {
+export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswers, enableFlags, passPercent = 70 }: Props) {
   const timed = timeLimitSeconds !== undefined && timeLimitSeconds > 0;
+  const flaggable = timed || enableFlags === true;
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Map<number, number[]>>(new Map());
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
@@ -24,6 +33,9 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
+  // Per-question dwell time (seconds), flushed on navigation and submit.
+  const timingsRef = useRef(new Map<number, number>());
+  const activeRef = useRef<{ id: number; start: number } | null>(null);
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -48,6 +60,20 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
     });
   };
 
+  const flushTiming = () => {
+    const active = activeRef.current;
+    if (!active) return;
+    const elapsed = (Date.now() - active.start) / 1000;
+    timingsRef.current.set(active.id, (timingsRef.current.get(active.id) ?? 0) + elapsed);
+    activeRef.current = { id: active.id, start: Date.now() };
+  };
+
+  useEffect(() => {
+    flushTiming();
+    activeRef.current = { id: question.id, start: Date.now() };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -57,8 +83,12 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
         const sel = answers.get(q.id) ?? [];
         return { questionId: q.id, selectedIndex: sel[0] ?? -1, selectedIndices: sel };
       });
+      const timings: Record<number, number> = {};
+      flushTiming();
+      for (const [id, seconds] of timingsRef.current) timings[id] = Math.round(seconds * 10) / 10;
+      const flaggedIds = [...flagged];
       const detail = submitAnswers
-        ? await submitAnswers(payload)
+        ? await submitAnswers(payload, timings, flaggedIds)
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
           .then((attemptId) => api().quizzes.attemptDetail(attemptId));
@@ -103,7 +133,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   };
 
   if (result) {
-    return <QuizReview attempt={result} quizTitle={quiz.title} onClose={onClose} />;
+    return <QuizReview attempt={result} quizTitle={quiz.title} onClose={onClose} passPercent={passPercent} />;
   }
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -146,7 +176,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
         </div>
       )}
 
-      {timed && (
+      {(timed || flaggable) && (
         <div className={styles.navigator} role="group" aria-label="Question navigator">
           {quiz.questions.map((q, i) => {
             const answered = (answers.get(q.id) ?? []).length > 0;
@@ -171,7 +201,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       <div className={`card ${styles.questionCard}`}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div className={styles.questionText}>{question.question}</div>
-          {timed && (
+          {flaggable && (
             <button
               type="button"
               className={`btn btn-ghost btn-sm ${flagged.has(question.id) ? styles.flagActive : ''}`}

@@ -9,6 +9,8 @@ import Library from './pages/Library/Library';
 import CourseDetail from './pages/CourseDetail/CourseDetail';
 import Player from './pages/Player/Player';
 import FileExamPage from './components/Quiz/FileExamPage';
+import ExamStats from './pages/ExamStats/ExamStats';
+import ReviewPage from './pages/Review/ReviewPage';
 import PracticeExams from './pages/PracticeExams/PracticeExams';
 import NotesPage from './pages/Notes/NotesPage';
 import Settings from './pages/Settings/Settings';
@@ -19,9 +21,11 @@ export type Route =
   | { name: 'in-progress' }
   | { name: 'completed' }
   | { name: 'course'; courseId: number }
-  | { name: 'player'; courseId: number; lessonId: number }
+  | { name: 'player'; courseId: number; lessonId: number; startAt?: number }
   | { name: 'examfile'; filePath: string }
+  | { name: 'examstats'; filePath: string }
   | { name: 'practice' }
+  | { name: 'review' }
   | { name: 'notes' }
   | { name: 'settings' };
 
@@ -100,6 +104,27 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
+  // Optional watched-folder rescan on startup (Settings → Course imports)
+  useEffect(() => {
+    let cancelled = false;
+    api()
+      .settings.get<boolean>('rescanOnStartup')
+      .then((enabled) => {
+        if (cancelled || enabled !== true) return;
+        return api()
+          .courses.rescanAll()
+          .then(() => {
+            if (!cancelled) refreshAll();
+          })
+          .catch(() => undefined);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const renderPage = () => {
     switch (route.name) {
       case 'dashboard':
@@ -113,9 +138,13 @@ export default function App() {
       case 'course':
         return <CourseDetail courseId={route.courseId} />;
       case 'player':
-        return <Player courseId={route.courseId} lessonId={route.lessonId} />;
+        return <Player courseId={route.courseId} lessonId={route.lessonId} startAt={route.startAt} />;
+      case 'review':
+        return <ReviewPage />;
       case 'examfile':
         return <FileExamPage filePath={route.filePath} />;
+      case 'examstats':
+        return <ExamStats filePath={route.filePath} />;
       case 'practice':
         return <PracticeExams />;
       case 'notes':

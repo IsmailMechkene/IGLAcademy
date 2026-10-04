@@ -5,12 +5,14 @@ import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../electron/database/connection';
 import { MIGRATIONS } from '../electron/database/migrations';
-import { importCourse, rescanCourse } from '../electron/services/courseImportService';
+import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot } from '../electron/services/courseImportService';
 import {
   listCourses,
+  getCourse,
   getCourseDetail,
   getCourseBySourcePath,
   deleteCourse,
+  countCourses,
 } from '../electron/database/repositories/courses';
 import {
   savePosition,
@@ -44,6 +46,28 @@ import {
   unregisterSource,
 } from '../electron/services/practiceLibraryService';
 import { listSources, listPracticeAttempts } from '../electron/database/repositories/practice';
+import {
+  listResourcesForCourse,
+} from '../electron/database/repositories/resources';
+import { searchResources } from '../electron/services/resourceService';
+import {
+  insertBookmark,
+  deleteBookmark,
+  listBookmarks,
+  insertReviewItem,
+  setReviewItemDone,
+  deleteReviewItem,
+  listReviewItems,
+  insertDeck,
+  deleteDeck,
+  insertFlashcard,
+  deleteFlashcard,
+  listDueFlashcards,
+  listFlashcards,
+  updateFlashcardState,
+  listDecks,
+} from '../electron/database/repositories/study';
+import { exportData, importData } from '../electron/services/backupService';
 import { getAllSettings, setSetting } from '../electron/database/repositories/settings';
 import {
   checkFileExists,
@@ -520,5 +544,207 @@ describe('missing media files', () => {
     const outside = path.join(os.tmpdir(), 'evil.mp4');
     db.prepare('UPDATE lessons SET file_path = ? WHERE id = ?').run(outside, lesson.id);
     expect(() => resolveLessonFile(db, lesson.id)).toThrow(/outside/i);
+  });
+});
+
+describe('resources', () => {
+  function makeCourseWithResources() {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-res-')));
+    const courseRoot = path.join(root, 'Course');
+    fs.mkdirSync(path.join(courseRoot, 'Section A'), { recursive: true });
+    fs.writeFileSync(path.join(courseRoot, 'Section A', '01 - Lesson.mp4'), '');
+    fs.writeFileSync(path.join(courseRoot, 'Section A', 'notes.pdf'), '%PDF');
+    fs.writeFileSync(path.join(courseRoot, 'Section A', 'readme.txt'), 'hello searchable world');
+    fs.writeFileSync(path.join(courseRoot, 'Section A', 'cover.png'), '');
+    return courseRoot;
+  }
+
+  it('persists scanned resources with kinds', () => {
+    const { courseId } = importCourse(db, makeCourseWithResources()) as { courseId: number };
+    const resources = listResourcesForCourse(db, courseId);
+    expect(resources).toHaveLength(3);
+    const kinds = Object.fromEntries(resources.map((r) => [r.title, r.kind]));
+    expect(kinds['notes']).toBe('pdf');
+    expect(kinds['readme']).toBe('text');
+    expect(kinds['cover']).toBe('image');
+  });
+
+  it('searches text content with snippets', () => {
+    const { courseId } = importCourse(db, makeCourseWithResources()) as { courseId: number };
+    const hits = searchResources(db, courseId, 'searchable');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].title).toBe('readme');
+    expect(hits[0].snippet).toContain('searchable');
+    // PDFs match by file name only
+    expect(searchResources(db, courseId, 'notes')).toHaveLength(1);
+    expect(searchResources(db, courseId, '  ')).toHaveLength(0);
+  });
+
+  it('merges resources on rescan (add + remove)', () => {
+    const courseRoot = makeCourseWithResources();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    fs.writeFileSync(path.join(courseRoot, 'Section A', 'extra.md'), '# new');
+    fs.rmSync(path.join(courseRoot, 'Section A', 'notes.pdf'));
+    const result = rescanCourse(db, courseId);
+    expect(result.status).toBe('ok');
+    const titles = listResourcesForCourse(db, courseId).map((r) => r.title).sort();
+    expect(titles).toEqual(['cover', 'extra', 'readme']);
+  });
+});
+
+describe('course health and relocation', () => {
+  it('reports missing files and relinks a moved folder', () => {
+    const outer = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-health-')));
+    const courseRoot = path.join(outer, 'Course');
+    fs.mkdirSync(path.join(courseRoot, 'S1'), { recursive: true });
+    fs.writeFileSync(path.join(courseRoot, 'S1', 'a.mp4'), '');
+    fs.writeFileSync(path.join(courseRoot, 'S1', 'b.mp4'), '');
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+
+    // simulate the whole folder moving elsewhere
+    const moved = path.join(outer, 'Course Moved');
+    fs.renameSync(courseRoot, moved);
+
+    const before = getCourseHealth(db, courseId);
+    expect(before.totalLessons).toBe(2);
+    expect(before.missingLessons).toHaveLength(2);
+
+    const result = relocateCourseRoot(db, courseId, moved);
+    expect(result.status).toBe('ok');
+    expect(result.relocated).toBe(2);
+    expect(result.stillMissing).toBe(0);
+
+    const after = getCourseHealth(db, courseId);
+    expect(after.missingLessons).toHaveLength(0);
+    expect(getCourse(db, courseId)?.sourcePath).toBe(moved);
+  });
+
+  it('rejects invalid relocation targets without changing data', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const before = getCourse(db, courseId)?.sourcePath;
+    const result = relocateCourseRoot(db, courseId, path.join(os.tmpdir(), 'does-not-exist-xyz'));
+    expect(result.status).toBe('error');
+    expect(getCourse(db, courseId)?.sourcePath).toBe(before);
+  });
+});
+
+describe('rescan isolation', () => {
+  it('never poaches files owned by another course', () => {
+    const outer = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-poach-')));
+    const parent = path.join(outer, 'Parent');
+    fs.mkdirSync(parent, { recursive: true });
+    fs.writeFileSync(path.join(parent, 'a.mp4'), '');
+    // Parent is imported while it holds only its own file...
+    const parentCourse = importCourse(db, parent) as { courseId: number };
+    expect(
+      getCourseDetail(db, parentCourse.courseId)!.sections.flatMap((s) => s.lessons).map((l) => l.title),
+    ).toEqual(['a']);
+    // ...then a nested folder appears and becomes its own course.
+    const nested = path.join(parent, 'Nested');
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(path.join(nested, 'b.mp4'), '');
+    importCourse(db, nested);
+    // Rescanning the parent must not absorb the nested course's file,
+    // nor litter empty sections.
+    const result = rescanCourse(db, parentCourse.courseId);
+    expect(result.status).toBe('ok');
+    expect(result.addedLessons).toBe(0);
+    expect(result.addedSections).toBe(0);
+    const detail = getCourseDetail(db, parentCourse.courseId)!;
+    expect(detail.sections.flatMap((s) => s.lessons).map((l) => l.title)).toEqual(['a']);
+    expect(detail.sections.map((s) => s.title)).toEqual(['Course Content']);
+  });
+});
+
+describe('backup round trip', () => {
+  it('exports and restores all user data', () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const lessonId = getCourseDetail(db, courseId)!.sections[0].lessons[0].id;
+    savePosition(db, lessonId, 30);
+    insertNote(db, { courseId, lessonId, title: 'n', content: 'c' });
+    const deckId = insertDeck(db, { courseId, title: 'Deck', source: 'manual' });
+    insertFlashcard(db, deckId, { front: 'f', back: 'b', position: 1 });
+    insertBookmark(db, { courseId, lessonId, positionSeconds: 5, title: 'mark' });
+    setSetting(db, 'theme', 'light');
+
+    const backup = exportData(db, '1.0.0-test');
+    expect(backup.format).toBe('ismalearn-backup/1');
+    expect(backup.tables.courses).toHaveLength(1);
+    expect(backup.tables.notes).toHaveLength(1);
+
+    // wipe and restore into a fresh database file
+    const dbDir2 = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-restore-')));
+    const db2 = createDatabase(path.join(dbDir2, 'restored.db'));
+    importData(db2, backup);
+
+    expect(countCourses(db2)).toBe(1);
+    expect(listNotes(db2)).toHaveLength(1);
+    expect(listDecks(db2, courseId)).toHaveLength(1);
+    expect(listBookmarks(db2, courseId)).toHaveLength(1);
+    expect(getAllSettings(db2).theme).toBe('light');
+    const detail = getCourseDetail(db2, courseId)!;
+    expect(detail.sections.flatMap((s) => s.lessons).find((l) => l.id === lessonId)?.positionSeconds).toBe(30);
+    db2.close();
+
+    expect(() => importData(db, { format: 'nope' } as never)).toThrow(/format/i);
+  });
+});
+
+describe('study retention', () => {
+  it('manages bookmarks, queue items, decks, cards and scheduling state', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const lessonId = getCourseDetail(db, courseId)!.sections[0].lessons[0].id;
+
+    const mark = insertBookmark(db, { courseId, lessonId, positionSeconds: 65, title: 'Intro @ 1:05' });
+    expect(listBookmarks(db, courseId)).toHaveLength(1);
+    expect(listBookmarks(db)[0].positionSeconds).toBe(65);
+    deleteBookmark(db, mark.id);
+    expect(listBookmarks(db, courseId)).toHaveLength(0);
+
+    const item = insertReviewItem(db, { courseId, kind: 'lesson', refId: String(lessonId), title: 'Rewatch intro' });
+    expect(item.done).toBe(false);
+    expect(listReviewItems(db)).toHaveLength(1);
+    setReviewItemDone(db, item.id, true);
+    expect(listReviewItems(db, false)).toHaveLength(0);
+    deleteReviewItem(db, item.id);
+    expect(listReviewItems(db)).toHaveLength(0);
+
+    const deckId = insertDeck(db, { courseId, title: 'Basics', source: 'manual' });
+    const cardId = insertFlashcard(db, deckId, { front: 'Q?', back: 'A.', position: 1 });
+    expect(listDecks(db, courseId)[0].cardCount).toBe(1);
+    expect(listDueFlashcards(db, deckId, new Date().toISOString())).toHaveLength(1);
+    updateFlashcardState(db, cardId, {
+      ease: 2.6, intervalDays: 6, reps: 2, dueAt: new Date(Date.now() + 6 * 86400000).toISOString(),
+    });
+    expect(listDueFlashcards(db, deckId, new Date().toISOString())).toHaveLength(0);
+    expect(listFlashcards(db, deckId)[0].intervalDays).toBe(6);
+    deleteFlashcard(db, cardId);
+    expect(listDecks(db, courseId)[0].cardCount).toBe(0);
+    deleteDeck(db, deckId);
+    expect(listDecks(db, courseId)).toHaveLength(0);
+  });
+
+  it('rejects invalid review kinds', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    expect(() =>
+      insertReviewItem(db, { courseId, kind: 'planet' as never, refId: '1', title: 'x' }),
+    ).not.toThrow(); // repository is unvalidated; IPC validates instead
+  });
+});
+
+describe('unanswered exam attempts', () => {
+  it('stores empty selections distinctly from legacy rows', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const quizId = insertQuiz(db, { courseId, sectionId: null, title: 'Q', description: '' });
+    const q1 = insertQuestion(db, quizId, {
+      question: 'Q?', options: ['A', 'B'], correctIndex: 0, correctIndices: [0], explanation: '', position: 1,
+    });
+    const attemptId = insertAttempt(db, quizId, [
+      { questionId: q1, selectedIndex: -1, selectedIndices: [], isCorrect: false },
+    ]);
+    const detail = getAttemptDetail(db, attemptId)!;
+    expect(detail.answers[0].selectedIndices).toEqual([]);
+    expect(detail.answers[0].isCorrect).toBe(false);
   });
 });

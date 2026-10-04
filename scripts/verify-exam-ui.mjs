@@ -66,7 +66,11 @@ function cdpEvaluate(wsUrl, expression, timeoutMs = 120000) {
       clearTimeout(timer);
       try { ws.close(); } catch { /* noop */ }
       if (msg.error) reject(new Error(`CDP error: ${JSON.stringify(msg.error)}`));
-      else if (msg.result?.exceptionDetails) reject(new Error('page exception'));
+      else if (msg.result?.exceptionDetails) {
+        const ex = msg.result.exceptionDetails;
+        const text = ex.exception ? JSON.stringify(ex.exception).slice(0, 500) : ex.text;
+        reject(new Error(`page exception: ${text} @${JSON.stringify(ex.stackTrace)}`.slice(0, 800)));
+      }
       else resolve(msg.result?.result?.value);
     });
     ws.addEventListener('error', (e) => {
@@ -113,12 +117,20 @@ try {
       // register the real SAA folder (dialog-free IPC)
       var source = await api.practice.addFolderPath(${saaDirJson});
       if (!source || !source.id) return { ok: false, stage: 'no-source' };
-      // sidebar -> grouped library
+      // sidebar -> grouped library: certifications first, no test rows yet
       if (!await navTo('Practice Exams')) return { ok: false, stage: 'no-practice-nav' };
       var lib = bodyText();
       if (lib.indexOf('Solutions Architect') === -1) return { ok: false, stage: 'no-group', snippet: lib.slice(0, 300) };
-      if (lib.indexOf('Practice Test #1') === -1) return { ok: false, stage: 'no-row' };
-      if (lib.indexOf('65 questions') === -1) return { ok: false, stage: 'no-counts' };
+      if (lib.indexOf('Practice Test #1') !== -1) return { ok: false, stage: 'tests-not-grouped' };
+      // pick the certification -> its tests appear
+      var certBtns = Array.prototype.slice.call(document.querySelectorAll('button'));
+      var cert = certBtns.find(function(b) { return (b.textContent || '').indexOf('Solutions Architect') !== -1; });
+      if (!cert) return { ok: false, stage: 'no-cert-card' };
+      cert.click();
+      await sleep(1500);
+      var detail = bodyText();
+      if (detail.indexOf('Practice Test #1') === -1) return { ok: false, stage: 'no-row', snippet: detail.slice(0, 300) };
+      if (detail.indexOf('65 questions') === -1) return { ok: false, stage: 'no-counts' };
       // start the first exam -> mode picker
       var startBtns = Array.prototype.slice.call(document.querySelectorAll('button'));
       var card = null;
@@ -134,10 +146,16 @@ try {
       });
       if (!start) return { ok: false, stage: 'no-start-btn' };
       start.click();
-      await sleep(2500);
+      var seen = [];
+      for (var t = 0; t < 8; t++) {
+        await sleep(1000);
+        var bt = document.body.innerText || '';
+        seen.push(bt.slice(0, 80).replace(/\\n/g, ' | '));
+        if (bt.indexOf('Practice mode') !== -1 && bt.indexOf('Exam mode') !== -1) break;
+      }
       var picker = bodyText();
       if (picker.indexOf('Practice mode') === -1 || picker.indexOf('Exam mode') === -1) {
-        return { ok: false, stage: 'no-mode-picker', snippet: picker.slice(0, 300) };
+        return { ok: false, stage: 'no-mode-picker', seen: seen, snippet: picker.slice(0, 300) };
       }
       // exam mode: 65 questions x 2 min = 2:10:00 countdown + navigator
       var modeBtns = Array.prototype.slice.call(document.querySelectorAll('button'));

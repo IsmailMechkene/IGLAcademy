@@ -1,7 +1,7 @@
 import { ipcMain, dialog, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { getDb } from '../database/connection';
-import { getMediaUrl, checkFileExists, resolveLessonFile } from '../services/fileService';
+import { getMediaUrl, checkFileExists, listSubtitleTracks, resolveLessonFile } from '../services/fileService';
 import { updateLessonFilePath, getLesson } from '../database/repositories/courses';
 import { requireId } from '../services/validate';
 
@@ -14,6 +14,10 @@ export function registerMediaIpc(): void {
 
   ipcMain.handle('media:checkFile', (_e, lessonId: unknown) => {
     return checkFileExists(db, requireId(lessonId, 'lessonId'));
+  });
+
+  ipcMain.handle('media:subtitles', (_e, lessonId: unknown) => {
+    return listSubtitleTracks(db, requireId(lessonId, 'lessonId'));
   });
 
   // Opens a lesson file (e.g. an HTML practice test) in the system browser

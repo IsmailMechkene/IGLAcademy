@@ -12,6 +12,8 @@
     "start": "electron .",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/ensure-abi.mjs node && vitest run",
+    "test:e2e": "node scripts/test-e2e.mjs",
+    "smoke": "node scripts/smoke-package.mjs",
     "rebuild:electron": "npx electron-rebuild -f -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3",
     "dist": "npm run build && electron-builder --win nsis",

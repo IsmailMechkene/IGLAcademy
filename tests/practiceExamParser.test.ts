@@ -93,6 +93,43 @@ describe('parsePracticeExamHtml', () => {
     const parsed = parsePracticeExamHtml(raw);
     expect(parsed!.questions[0].options[0]).toBe('Secrets Manager');
   });
+
+  it('recovers intact questions from truncated files', () => {
+    const full = makeFile({ quiz_title: 'Truncated', questions: [single, multi] });
+    // cut mid-way through the second question's stem text, then append garbage
+    const cutAt = full.indexOf('Select two valid statements');
+    expect(cutAt).toBeGreaterThan(0);
+    const truncated = `${full.slice(0, cutAt)}GARBAGE{{{`;
+    const parsed = parsePracticeExamHtml(truncated);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.title).toBe('Truncated');
+    expect(parsed!.questions).toHaveLength(1);
+    expect(parsed!.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('captures the per-question topic from the section field', () => {
+    const parsed = parsePracticeExamHtml(
+      makeFile({
+        quiz_title: 'T',
+        questions: [
+          { ...single, section: 'Security' },
+          { ...multi, section: '' },
+        ],
+      }),
+    );
+    expect(parsed!.questions[0].topic).toBe('Security');
+    expect(parsed!.questions[1].topic).toBe('');
+  });
+
+  it('skips a garbled question but keeps the rest', () => {
+    const good = makeFile({ quiz_title: 'T', questions: [single, multi] });
+    // corrupt the first question object beyond repair
+    const broken = good.replace('"assessment_type":"multiple-choice"', '"assessment_type":');
+    const parsed = parsePracticeExamHtml(broken);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.questions).toHaveLength(1);
+    expect(parsed!.skipped).toBe(1);
+  });
 });
 
 describe('htmlToText', () => {

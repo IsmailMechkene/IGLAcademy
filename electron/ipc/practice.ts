@@ -59,8 +59,8 @@ export function registerPracticeIpc(): void {
     return loadExamFile(db, requireString(filePath, 'filePath', 4096));
   });
 
-  ipcMain.handle('practice:submit', (_e, filePath: unknown, selections: unknown) => {
-    return submitExamAttempt(db, requireString(filePath, 'filePath', 4096), selections);
+  ipcMain.handle('practice:submit', (_e, filePath: unknown, answers: unknown, flagged?: unknown) => {
+    return submitExamAttempt(db, requireString(filePath, 'filePath', 4096), answers, flagged);
   });
 
   ipcMain.handle('practice:history', (_e, filePath: unknown) => {

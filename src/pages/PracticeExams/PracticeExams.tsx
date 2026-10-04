@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft, FileCheck, FileUp, FolderOpen, FolderPlus, History,
+  ArrowLeft, BarChart3, ChevronRight, Clock3, FileCheck, FileUp, FolderOpen, FolderPlus, History,
   PlayCircle, Trash2, X,
 } from 'lucide-react';
 import type { ExamSource, PracticeExamFile, QuizAttemptDetail, QuizAttemptSummary } from '../../types';
@@ -10,6 +10,7 @@ import { formatDate, formatDateTime } from '../../utils/format';
 import { examGroupInfo } from '../../utils/titles';
 import QuizReview from '../../components/Quiz/QuizReview';
 import LoadError from '../../components/LoadError/LoadError';
+import Modal from '../../components/Modal/Modal';
 import styles from './PracticeExams.module.css';
 
 interface ExamGroup {
@@ -25,6 +26,7 @@ export default function PracticeExams() {
   const [files, setFiles] = useState<PracticeExamFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [historyFile, setHistoryFile] = useState<PracticeExamFile | null>(null);
   const [history, setHistory] = useState<QuizAttemptSummary[]>([]);
   const [review, setReview] = useState<{ attempt: QuizAttemptDetail; title: string } | null>(null);
@@ -56,6 +58,11 @@ export default function PracticeExams() {
     }
     return [...map.values()];
   }, [files]);
+
+  // If the selected certification disappears (source removed), fall back.
+  const selected = selectedKey !== null
+    ? groups.find((g) => g.key === selectedKey) ?? null
+    : null;
 
   const openHistory = async (file: PracticeExamFile) => {
     try {
@@ -98,10 +105,15 @@ export default function PracticeExams() {
   };
 
   const groupStats = (group: ExamGroup) => {
-    const attempted = group.files.filter((f) => f.attemptCount > 0);
     const bests = group.files.map((f) => f.bestPercent).filter((b): b is number => b !== null);
-    const avg = bests.length > 0 ? Math.round(bests.reduce((s, b) => s + b, 0) / bests.length) : null;
-    return { attempted: attempted.length, total: group.files.length, avg };
+    const attempted = group.files.filter((f) => f.attemptCount > 0).length;
+    const questions = group.files.reduce((s, f) => s + f.questionCount, 0);
+    return {
+      total: group.files.length,
+      attempted,
+      questions,
+      avg: bests.length > 0 ? Math.round(bests.reduce((s, b) => s + b, 0) / bests.length) : null,
+    };
   };
 
   return (
@@ -167,173 +179,230 @@ export default function PracticeExams() {
             </button>
           </div>
         </div>
+      ) : selected ? (
+        <section aria-label={selected.name}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedKey(null)} style={{ marginBottom: 12 }}>
+            <ArrowLeft size={14} /> All certifications
+          </button>
+          <div className={styles.groupHeader}>
+            {selected.code && <span className="badge">{selected.code}</span>}
+            <h2>{selected.code ? selected.name.replace(/^AWS Certified /, '') : selected.name}</h2>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {selected.files.length} test{selected.files.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className={styles.examList}>
+            {selected.files.map((file) => (
+              <div key={file.filePath} className={`card ${styles.examRow}`}>
+                <div className={styles.examIcon}>
+                  <FileCheck size={20} />
+                </div>
+                <div className={styles.examInfo}>
+                  <div className={styles.examTitle} title={file.title}>{file.title}</div>
+                  <div className={styles.examMeta}>
+                    <span>{file.questionCount} questions</span>
+                    {file.multiCount > 0 && (
+                      <>
+                        <span>·</span>
+                        <span>{file.multiCount} multi-select</span>
+                      </>
+                    )}
+                    <span>·</span>
+                    {file.error ? (
+                      <span style={{ color: 'var(--danger)' }}>Unsupported file</span>
+                    ) : file.bestPercent !== null ? (
+                      <span
+                        className={styles.bestScore}
+                        style={{ color: file.bestPercent >= 70 ? 'var(--success)' : 'var(--warning)' }}
+                      >
+                        Best {file.bestPercent}%
+                      </span>
+                    ) : (
+                      <span>Not attempted yet</span>
+                    )}
+                    {file.attemptCount > 0 && (
+                      <>
+                        <span>·</span>
+                        <span>
+                          {file.attemptCount} attempt{file.attemptCount === 1 ? '' : 's'}
+                          {file.lastAttemptAt ? ` · last ${formatDate(file.lastAttemptAt)}` : ''}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className={styles.examActions}>
+                  {!file.error && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => navigate({ name: 'examfile', filePath: file.filePath })}
+                    >
+                      <PlayCircle size={14} /> Start
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    title="Review this exam later"
+                    aria-label={`Review ${file.title} later`}
+                    onClick={() => {
+                      void api().review.add({
+                        courseId: null,
+                        kind: 'exam',
+                        refId: file.filePath,
+                        title: file.title,
+                      });
+                    }}
+                  >
+                    <Clock3 size={14} />
+                  </button>
+                  {file.attemptCount > 0 && (
+                    <>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        title="Exam analytics"
+                        aria-label={`Analytics for ${file.title}`}
+                        onClick={() => navigate({ name: 'examstats', filePath: file.filePath })}
+                      >
+                        <BarChart3 size={14} />
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        title="Attempt history"
+                        aria-label={`Attempt history for ${file.title}`}
+                        onClick={() => openHistory(file)}
+                      >
+                        <History size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : (
-        <div className={styles.groupList}>
+        <div className={styles.certGrid}>
           {groups.map((group) => {
             const stats = groupStats(group);
             return (
-              <section key={group.key} aria-label={group.name}>
-                <div className={styles.groupHeader}>
-                  {group.code && <span className="badge">{group.code}</span>}
-                  <h2>{group.code ? group.name.replace(/^AWS Certified /, '') : group.name}</h2>
-                  <span className="muted" style={{ fontSize: 12.5 }}>
-                    {stats.total} test{stats.total === 1 ? '' : 's'}
-                    {stats.avg !== null ? ` · avg best ${stats.avg}%` : ''}
-                  </span>
-                </div>
-                <div className={styles.examList}>
-                  {group.files.map((file) => (
-                    <div key={file.filePath} className={`card ${styles.examRow}`}>
-                      <div className={styles.examIcon}>
-                        <FileCheck size={20} />
-                      </div>
-                      <div className={styles.examInfo}>
-                        <div className={styles.examTitle} title={file.title}>{file.title}</div>
-                        <div className={styles.examMeta}>
-                          <span>{file.questionCount} questions</span>
-                          {file.multiCount > 0 && (
-                            <>
-                              <span>·</span>
-                              <span>{file.multiCount} multi-select</span>
-                            </>
-                          )}
-                          <span>·</span>
-                          {file.error ? (
-                            <span style={{ color: 'var(--danger)' }}>Unsupported file</span>
-                          ) : file.bestPercent !== null ? (
-                            <span
-                              className={styles.bestScore}
-                              style={{ color: file.bestPercent >= 70 ? 'var(--success)' : 'var(--warning)' }}
-                            >
-                              Best {file.bestPercent}%
-                            </span>
-                          ) : (
-                            <span>Not attempted yet</span>
-                          )}
-                          {file.attemptCount > 0 && (
-                            <>
-                              <span>·</span>
-                              <span>
-                                {file.attemptCount} attempt{file.attemptCount === 1 ? '' : 's'}
-                                {file.lastAttemptAt ? ` · last ${formatDate(file.lastAttemptAt)}` : ''}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className={styles.examActions}>
-                        {!file.error && (
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => navigate({ name: 'examfile', filePath: file.filePath })}
-                          >
-                            <PlayCircle size={14} /> Start
-                          </button>
-                        )}
-                        {file.attemptCount > 0 && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            title="Attempt history"
-                            aria-label={`Attempt history for ${file.title}`}
-                            onClick={() => openHistory(file)}
-                          >
-                            <History size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              <button
+                key={group.key}
+                type="button"
+                className={`card ${styles.certCard}`}
+                onClick={() => setSelectedKey(group.key)}
+                aria-label={`${group.name}: ${stats.total} tests. View tests.`}
+              >
+                <span className={styles.certTop}>
+                  {group.code ? (
+                    <span className="badge">{group.code}</span>
+                  ) : (
+                    <span className={styles.certIcon}>
+                      <FileCheck size={18} />
+                    </span>
+                  )}
+                  <ChevronRight size={16} className={styles.certChevron} aria-hidden="true" />
+                </span>
+                <span className={styles.certName}>
+                  {group.code ? group.name.replace(/^AWS Certified /, '') : group.name}
+                </span>
+                <span className={styles.certStats}>
+                  {stats.total} test{stats.total === 1 ? '' : 's'} · {stats.questions} questions
+                </span>
+                <span className={styles.certStats}>
+                  {stats.attempted === 0 ? (
+                    'Not attempted yet'
+                  ) : (
+                    <>
+                      {stats.attempted} of {stats.total} attempted
+                      {stats.avg !== null ? ` · avg best ${stats.avg}%` : ''}
+                    </>
+                  )}
+                </span>
+              </button>
             );
           })}
         </div>
       )}
 
       {removingSource && (
-        <div className={styles.overlay} onClick={() => setRemovingSource(null)}>
-          <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-            <h2>Remove exam source?</h2>
-            <p>
-              <strong>{shortenPath(removingSource.path)}</strong> will no longer be scanned,
-              and its recorded attempts will be deleted. Your files are not touched.
-            </p>
-            <div className={styles.dialogActions}>
-              <button className="btn btn-ghost" onClick={() => setRemovingSource(null)}>Cancel</button>
-              <button
-                className="btn btn-danger"
-                onClick={() => {
-                  void api().practice.removeSource(removingSource.id).then(() => {
-                    setRemovingSource(null);
-                    load();
-                  });
-                }}
-              >
-                <Trash2 size={15} /> Remove
-              </button>
-            </div>
+        <Modal label="Remove exam source" onClose={() => setRemovingSource(null)}>
+          <h2>Remove exam source?</h2>
+          <p>
+            <strong>{shortenPath(removingSource.path)}</strong> will no longer be scanned,
+            and its recorded attempts will be deleted. Your files are not touched.
+          </p>
+          <div className={styles.dialogActions}>
+            <button className="btn btn-ghost" onClick={() => setRemovingSource(null)}>Cancel</button>
+            <button
+              className="btn btn-danger"
+              data-autofocus
+              onClick={() => {
+                void api().practice.removeSource(removingSource.id).then(() => {
+                  setRemovingSource(null);
+                  load();
+                });
+              }}
+            >
+              <Trash2 size={15} /> Remove
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {historyFile && !review && (
-        <div className={styles.overlay} onClick={() => setHistoryFile(null)}>
-          <div className={`card ${styles.dialog} ${styles.resultDialog}`} onClick={(e) => e.stopPropagation()}>
-            <h2>Attempt history</h2>
-            <p className="muted" style={{ margin: 0 }}>{historyFile.title}</p>
-            <div className={styles.resultList}>
-              {history.length === 0 && <p className="muted">No attempts recorded.</p>}
-              {history.map((a) => (
-                <div key={a.id} className={styles.historyRow}>
-                  <span
-                    className={styles.bestScore}
-                    style={{ color: a.percent >= 70 ? 'var(--success)' : 'var(--danger)' }}
-                  >
-                    {a.percent}%
-                  </span>
-                  <span className="secondary" style={{ fontSize: 13 }}>
-                    {a.score}/{a.total} correct
-                  </span>
-                  <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>
-                    {formatDateTime(a.createdAt)}
-                  </span>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => openReview(historyFile, a.id)}
-                  >
-                    Review
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className={styles.dialogActions}>
-              <button className="btn btn-ghost" onClick={() => setHistoryFile(null)}>
-                <ArrowLeft size={14} /> Back
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setHistoryFile(null);
-                  navigate({ name: 'examfile', filePath: historyFile.filePath });
-                }}
-              >
-                <PlayCircle size={14} /> New attempt
-              </button>
-            </div>
+        <Modal label={`Attempt history for ${historyFile.title}`} onClose={() => setHistoryFile(null)} wide>
+          <h2>Attempt history</h2>
+          <p className="muted" style={{ margin: 0 }}>{historyFile.title}</p>
+          <div className={styles.resultList}>
+            {history.length === 0 && <p className="muted">No attempts recorded.</p>}
+            {history.map((a) => (
+              <div key={a.id} className={styles.historyRow}>
+                <span
+                  className={styles.bestScore}
+                  style={{ color: a.percent >= 70 ? 'var(--success)' : 'var(--danger)' }}
+                >
+                  {a.percent}%
+                </span>
+                <span className="secondary" style={{ fontSize: 13 }}>
+                  {a.score}/{a.total} correct
+                </span>
+                <span className="muted" style={{ fontSize: 12, marginLeft: 'auto' }}>
+                  {formatDateTime(a.createdAt)}
+                </span>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => openReview(historyFile, a.id)}
+                >
+                  Review
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
+          <div className={styles.dialogActions}>
+            <button className="btn btn-ghost" onClick={() => setHistoryFile(null)}>
+              <ArrowLeft size={14} /> Back
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setHistoryFile(null);
+                navigate({ name: 'examfile', filePath: historyFile.filePath });
+              }}
+            >
+              <PlayCircle size={14} /> New attempt
+            </button>
+          </div>
+        </Modal>
       )}
 
       {review && (
-        <div className={styles.overlay} onClick={() => setReview(null)}>
-          <div className={`card ${styles.reviewDialog}`} onClick={(e) => e.stopPropagation()}>
-            <QuizReview
-              attempt={review.attempt}
-              quizTitle={review.title}
-              onClose={() => setReview(null)}
-            />
-          </div>
-        </div>
+        <Modal label="Attempt review" onClose={() => setReview(null)} wide>
+          <QuizReview
+            attempt={review.attempt}
+            quizTitle={review.title}
+            onClose={() => setReview(null)}
+          />
+        </Modal>
       )}
     </div>
   );

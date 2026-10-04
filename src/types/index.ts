@@ -106,6 +106,103 @@ export interface QuizDetail extends Quiz {
   questions: QuizQuestion[];
 }
 
+/** A learning resource file attached to a course section. */
+export type ResourceKind = 'pdf' | 'image' | 'text' | 'markdown' | 'subtitle' | 'other';
+
+export interface CourseResource {
+  id: number;
+  sectionId: number;
+  sectionTitle: string;
+  title: string;
+  filePath: string;
+  kind: ResourceKind;
+  position: number;
+  sizeBytes: number;
+}
+
+export interface ResourceSearchHit {
+  resourceId: number;
+  title: string;
+  kind: ResourceKind;
+  snippet: string;
+}
+
+/** A timestamped bookmark on a lesson (or a whole course). */
+export interface Bookmark {
+  id: number;
+  courseId: number;
+  courseTitle: string;
+  lessonId: number | null;
+  lessonTitle: string | null;
+  positionSeconds: number;
+  title: string;
+  note: string;
+  createdAt: string;
+}
+
+/** A "review later" queue entry. refId holds a lesson/note/quiz id or a file path. */
+export interface ReviewItem {
+  id: number;
+  courseId: number | null;
+  courseTitle: string;
+  kind: 'lesson' | 'note' | 'quiz' | 'exam';
+  refId: string;
+  title: string;
+  dueAt: string;
+  done: boolean;
+  createdAt: string;
+}
+
+export interface FlashcardDeck {
+  id: number;
+  courseId: number;
+  courseTitle: string;
+  title: string;
+  source: string;
+  cardCount: number;
+  dueCount: number;
+  createdAt: string;
+}
+
+export interface Flashcard {
+  id: number;
+  deckId: number;
+  front: string;
+  back: string;
+  position: number;
+  ease: number;
+  intervalDays: number;
+  reps: number;
+  dueAt: string;
+}
+
+export type FlashGrade = 'again' | 'hard' | 'good' | 'easy';
+
+export interface MissingLesson {
+  lessonId: number;
+  title: string;
+  filePath: string;
+}
+
+export interface CourseHealth {
+  courseId: number;
+  totalLessons: number;
+  missingLessons: MissingLesson[];
+}
+
+export interface RelocateResult {
+  status: 'ok' | 'error';
+  relocated: number;
+  stillMissing: number;
+  error?: string;
+}
+
+export interface BackupInfo {
+  fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 /** A folder or file registered as a practice-exam source (parsed live, never imported). */
 export interface ExamSource {
   id: number;
@@ -140,6 +237,8 @@ export interface PracticeExamQuestion {
   options: string[];
   correctIndices: number[];
   explanation: string;
+  /** Source domain, e.g. "Security" (empty when unknown). */
+  topic: string;
 }
 
 export interface QuizAttemptSummary {
@@ -162,10 +261,14 @@ export interface QuizAttemptAnswer {
   selectedIndices: number[];
   isCorrect: boolean;
   explanation: string;
+  /** Seconds spent on this question (file-based exams only). */
+  seconds?: number;
 }
 
 export interface QuizAttemptDetail extends QuizAttemptSummary {
   answers: QuizAttemptAnswer[];
+  /** Flagged question ids (file-based exams only). */
+  flagged?: number[];
 }
 
 export interface LearningStats {
@@ -189,6 +292,12 @@ export interface AppSettings {
   defaultPlaybackSpeed: number;
   resumePlayback: 'ask' | 'always' | 'never';
   duplicateImportBehavior: 'ask' | 'skip' | 'rescan';
+  autoBackup: boolean;
+  backupKeep: number;
+  rescanOnStartup: boolean;
+  examPassPercent: number;
+  examSecondsPerQuestion: number;
+  checkForUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -196,6 +305,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultPlaybackSpeed: 1,
   resumePlayback: 'ask',
   duplicateImportBehavior: 'ask',
+  autoBackup: true,
+  backupKeep: 7,
+  rescanOnStartup: false,
+  examPassPercent: 70,
+  examSecondsPerQuestion: 120,
+  checkForUpdates: true,
 };
 
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;

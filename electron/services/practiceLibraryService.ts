@@ -161,26 +161,40 @@ export function loadExamFile(db: Database.Database, filePath: string): PracticeE
       options: q.options,
       correctIndices: q.correctIndices,
       explanation: q.explanation,
+      topic: q.topic,
     })),
   };
+}
+
+export interface PracticeAnswerInput {
+  selected: unknown;
+  seconds?: unknown;
 }
 
 export function submitExamAttempt(
   db: Database.Database,
   filePath: string,
-  selections: unknown,
+  answers: unknown,
+  flagged?: unknown,
 ): QuizAttemptDetail {
   const exam = loadExamFile(db, filePath);
-  if (!Array.isArray(selections) || selections.length !== exam.questions.length) {
+  if (!Array.isArray(answers) || answers.length !== exam.questions.length) {
     throw new ValidationError('Answer count does not match the exam.');
   }
-  const perQuestion = (selections as unknown[]).map((sel, i) => {
+  const perQuestion = (answers as PracticeAnswerInput[]).map((answer, i) => {
     const options = exam.questions[i].options;
-    const set = Array.isArray(sel)
-      ? [...new Set(sel.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < options.length))].sort((a, b) => a - b)
+    const raw = Array.isArray(answer) ? answer : answer?.selected;
+    const set = Array.isArray(raw)
+      ? [...new Set(raw.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < options.length))].sort((a, b) => a - b)
       : [];
-    return { selected: set, isCorrect: setsEqual(set, exam.questions[i].correctIndices) };
+    const seconds = typeof answer === 'object' && answer !== null && Number.isFinite((answer as { seconds?: unknown }).seconds)
+      ? Math.max(0, Number((answer as { seconds?: unknown }).seconds))
+      : 0;
+    return { selected: set, seconds, isCorrect: setsEqual(set, exam.questions[i].correctIndices) };
   });
+  const flagList = Array.isArray(flagged)
+    ? [...new Set(flagged.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < exam.questions.length))].sort((a, b) => a - b)
+    : [];
   const score = perQuestion.filter((a) => a.isCorrect).length;
   const resolved = path.resolve(filePath);
   const attemptId = insertPracticeAttempt(db, {
@@ -188,6 +202,8 @@ export function submitExamAttempt(
     score,
     total: exam.questions.length,
     selections: perQuestion.map((a) => a.selected),
+    durations: perQuestion.map((a) => Math.round(a.seconds * 10) / 10),
+    flags: flagList,
   });
   const detail = buildDetail(db, attemptId);
   if (!detail) throw new ValidationError('Failed to load the submitted attempt.');
@@ -225,6 +241,7 @@ function buildDetail(db: Database.Database, attemptId: number): QuizAttemptDetai
       selectedIndices: valid,
       isCorrect: setsEqual(valid, q.correctIndices),
       explanation: q.explanation,
+      seconds: row.durations[i] ?? 0,
     };
   });
   return {
@@ -234,6 +251,7 @@ function buildDetail(db: Database.Database, attemptId: number): QuizAttemptDetai
     total: row.total,
     percent: row.total > 0 ? Math.round((row.score / row.total) * 100) : 0,
     createdAt: row.createdAt,
+    flagged: row.flags,
     answers,
   };
 }

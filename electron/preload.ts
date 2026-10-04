@@ -3,7 +3,8 @@ import type {
   CourseDetail, CourseWithProgress, Note, NoteInput,
   Quiz, QuizDetail, QuizAttemptSummary, QuizAttemptDetail, QuizInput,
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
-  ExamSource, PracticeExamFile, PracticeExamContent,
+  ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
+  Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -27,6 +28,12 @@ const api = {
       ipcRenderer.invoke('courses:renameLesson', lessonId, title),
     thumbnailUrl: (courseId: number): Promise<string | null> =>
       ipcRenderer.invoke('courses:thumbnailUrl', courseId),
+    health: (courseId: number): Promise<CourseHealth> =>
+      ipcRenderer.invoke('courses:health', courseId),
+    relocate: (courseId: number): Promise<RelocateResult | { status: 'cancelled'; relocated: number; stillMissing: number }> =>
+      ipcRenderer.invoke('courses:relocate', courseId),
+    rescanAll: (): Promise<{ courses: number; addedLessons: number; addedSections: number; removedLessons: number; errors: number }> =>
+      ipcRenderer.invoke('courses:rescanAll'),
   },
   progress: {
     savePosition: (lessonId: number, seconds: number): Promise<void> =>
@@ -73,12 +80,50 @@ const api = {
     scan: (): Promise<PracticeExamFile[]> => ipcRenderer.invoke('practice:scan'),
     load: (filePath: string): Promise<PracticeExamContent> =>
       ipcRenderer.invoke('practice:load', filePath),
-    submit: (filePath: string, selections: number[][]): Promise<QuizAttemptDetail> =>
-      ipcRenderer.invoke('practice:submit', filePath, selections),
+    submit: (filePath: string, answers: Array<{ selected: number[]; seconds: number }>, flagged?: number[]): Promise<QuizAttemptDetail> =>
+      ipcRenderer.invoke('practice:submit', filePath, answers, flagged),
     history: (filePath: string): Promise<QuizAttemptSummary[]> =>
       ipcRenderer.invoke('practice:history', filePath),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
       ipcRenderer.invoke('practice:attemptDetail', attemptId),
+  },
+  bookmarks: {
+    list: (courseId?: number): Promise<Bookmark[]> => ipcRenderer.invoke('bookmarks:list', courseId),
+    create: (input: { courseId: number; lessonId?: number | null; positionSeconds?: number; title: string; note?: string }): Promise<Bookmark> =>
+      ipcRenderer.invoke('bookmarks:create', input),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke('bookmarks:remove', id),
+  },
+  review: {
+    list: (): Promise<ReviewItem[]> => ipcRenderer.invoke('review:list'),
+    add: (input: { courseId: number | null; kind: ReviewItem['kind']; refId: string; title: string; dueAt?: string }): Promise<ReviewItem> =>
+      ipcRenderer.invoke('review:add', input),
+    setDone: (id: number, done: boolean): Promise<void> => ipcRenderer.invoke('review:setDone', id, done),
+    remove: (id: number): Promise<void> => ipcRenderer.invoke('review:remove', id),
+    dueCounts: (): Promise<{ itemsDue: number; cardsDue: number }> => ipcRenderer.invoke('review:dueCounts'),
+  },
+  flashcards: {
+    decks: (courseId?: number): Promise<FlashcardDeck[]> => ipcRenderer.invoke('flashcards:decks', courseId),
+    createDeck: (input: { courseId: number; title: string; source?: string }): Promise<number> =>
+      ipcRenderer.invoke('flashcards:createDeck', input),
+    removeDeck: (id: number): Promise<void> => ipcRenderer.invoke('flashcards:removeDeck', id),
+    cards: (deckId: number): Promise<Flashcard[]> => ipcRenderer.invoke('flashcards:cards', deckId),
+    due: (deckId: number): Promise<Flashcard[]> => ipcRenderer.invoke('flashcards:due', deckId),
+    addCard: (input: { deckId: number; front: string; back: string }): Promise<number> =>
+      ipcRenderer.invoke('flashcards:addCard', input),
+    removeCard: (id: number): Promise<void> => ipcRenderer.invoke('flashcards:removeCard', id),
+    grade: (input: { cardId: number; ease: number; intervalDays: number; reps: number; dueAt: string }): Promise<void> =>
+      ipcRenderer.invoke('flashcards:grade', input),
+    fromQuiz: (input: { courseId: number; quizId: number }): Promise<number> =>
+      ipcRenderer.invoke('flashcards:fromQuiz', input),
+    fromNotes: (courseId: number): Promise<number> => ipcRenderer.invoke('flashcards:fromNotes', courseId),
+  },
+  backup: {
+    exportData: (): Promise<string | null> => ipcRenderer.invoke('backup:export'),
+    importData: (): Promise<{ status: 'ok' | 'cancelled' | 'error'; error?: string }> =>
+      ipcRenderer.invoke('backup:import'),
+    now: (): Promise<string | null> => ipcRenderer.invoke('backup:now'),
+    list: (): Promise<BackupInfo[]> => ipcRenderer.invoke('backup:list'),
+    openFolder: (): Promise<void> => ipcRenderer.invoke('backup:openFolder'),
   },
   settings: {
     getAll: (): Promise<AppSettings> => ipcRenderer.invoke('settings:getAll'),
@@ -91,6 +136,20 @@ const api = {
     checkFile: (lessonId: number): Promise<boolean> => ipcRenderer.invoke('media:checkFile', lessonId),
     locateFile: (lessonId: number): Promise<string | null> => ipcRenderer.invoke('media:locateFile', lessonId),
     openExternal: (lessonId: number): Promise<void> => ipcRenderer.invoke('media:openExternal', lessonId),
+    subtitles: (lessonId: number): Promise<Array<{ index: number; label: string; url: string }>> =>
+      ipcRenderer.invoke('media:subtitles', lessonId),
+  },
+  resources: {
+    listForCourse: (courseId: number): Promise<CourseResource[]> =>
+      ipcRenderer.invoke('resources:listForCourse', courseId),
+    previewUrl: (resourceId: number): Promise<string> =>
+      ipcRenderer.invoke('resources:previewUrl', resourceId),
+    search: (courseId: number, query: string): Promise<ResourceSearchHit[]> =>
+      ipcRenderer.invoke('resources:search', courseId, query),
+    open: (resourceId: number): Promise<void> => ipcRenderer.invoke('resources:open', resourceId),
+    reveal: (resourceId: number): Promise<void> => ipcRenderer.invoke('resources:reveal', resourceId),
+    download: (resourceId: number): Promise<string | null> =>
+      ipcRenderer.invoke('resources:download', resourceId),
   },
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
@@ -98,6 +157,14 @@ const api = {
     getLibraryInfo: (): Promise<{ courseCount: number; dbSizeBytes: number; dbPath: string }> =>
       ipcRenderer.invoke('app:getLibraryInfo'),
     showError: (title: string, message: string): Promise<void> => ipcRenderer.invoke('app:showError', title, message),
+    openUrl: (url: string): Promise<void> => ipcRenderer.invoke('app:openUrl', url),
+    openLogs: (): Promise<void> => ipcRenderer.invoke('app:openLogs'),
+    checkForUpdates: (): Promise<
+      | { status: 'disabled' }
+      | { status: 'up-to-date'; version: string }
+      | { status: 'update-available'; version: string; current: string; url: string }
+      | { status: 'offline' | 'error'; message: string }
+    > => ipcRenderer.invoke('app:checkForUpdates'),
   },
 };
 

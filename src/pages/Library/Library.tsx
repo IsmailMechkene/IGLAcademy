@@ -7,12 +7,21 @@ import { api } from '../../services/api';
 import { useApp } from '../../App';
 import CourseCard from '../../components/CourseCard/CourseCard';
 import LoadError from '../../components/LoadError/LoadError';
+import Modal from '../../components/Modal/Modal';
 import styles from './Library.module.css';
 
 type Filter = 'all' | 'in-progress' | 'completed';
 
 interface Props {
   filter?: Filter;
+}
+
+export interface RescanAllResult {
+  courses: number;
+  addedLessons: number;
+  addedSections: number;
+  removedLessons: number;
+  errors: number;
 }
 
 export default function Library({ filter = 'all' }: Props) {
@@ -24,6 +33,7 @@ export default function Library({ filter = 'all' }: Props) {
     | { kind: 'importing' }
     | { kind: 'result'; result: ImportResult }
     | { kind: 'rescan'; courseId: number; result: RescanResult | null }
+    | { kind: 'rescanAll'; result: RescanAllResult | null; error?: string }
     | { kind: 'rename'; course: CourseWithProgress }
     | { kind: 'delete'; course: CourseWithProgress }
     | null
@@ -77,6 +87,20 @@ export default function Library({ filter = 'all' }: Props) {
     }
   };
 
+  const handleRescanAll = async () => {
+    setDialog({ kind: 'rescanAll', result: null });
+    try {
+      const result = await api().courses.rescanAll();
+      setDialog({ kind: 'rescanAll', result });
+      refreshAll();
+    } catch (err) {
+      setDialog({
+        kind: 'rescanAll',
+        result: null,
+        error: err instanceof Error ? err.message : 'Rescan failed',
+      });
+    }
+  };
   const handleRescan = async (courseId: number) => {
     setDialog({ kind: 'rescan', courseId, result: null });
     try {
@@ -117,6 +141,11 @@ export default function Library({ filter = 'all' }: Props) {
           <h1>{titles[filter].title}</h1>
           <p>{titles[filter].subtitle}</p>
         </div>
+        {filter === 'all' && courses.length > 0 && (
+          <button className="btn btn-ghost btn-sm" onClick={handleRescanAll} title="Rescan every course folder for new files">
+            <RefreshCw size={14} /> Rescan all
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -190,19 +219,16 @@ export default function Library({ filter = 'all' }: Props) {
       )}
 
       {dialog?.kind === 'importing' && (
-        <div className={styles.overlay}>
-          <div className={`card ${styles.dialog}`}>
-            <h2>Importing course</h2>
-            <div className={styles.spinner} />
-            <p>Scanning the selected folder for videos and resources...</p>
-          </div>
-        </div>
+        <Modal label="Importing course" onClose={() => undefined}>
+          <h2>Importing course</h2>
+          <div className={styles.spinner} role="status" aria-label="Importing" />
+          <p>Scanning the selected folder for videos and resources...</p>
+        </Modal>
       )}
 
       {dialog?.kind === 'result' && (
-        <div className={styles.overlay} onClick={() => setDialog(null)}>
-          <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-            {dialog.result.status === 'imported' && (
+        <Modal label="Import result" onClose={() => setDialog(null)}>
+          {dialog.result.status === 'imported' && (
               <>
                 <h2>Course imported</h2>
                 <div className={`${styles.resultRow} ${styles.success}`}>
@@ -273,14 +299,12 @@ export default function Library({ filter = 'all' }: Props) {
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
 
       {dialog?.kind === 'rescan' && (
-        <div className={styles.overlay} onClick={() => setDialog(null)}>
-          <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-            <h2>Rescan course</h2>
+        <Modal label="Rescan course" onClose={() => setDialog(null)}>
+          <h2>Rescan course</h2>
             {!dialog.result ? (
               <>
                 <div className={styles.spinner} />
@@ -310,8 +334,44 @@ export default function Library({ filter = 'all' }: Props) {
                 </div>
               </>
             )}
-          </div>
-        </div>
+        </Modal>
+      )}
+
+      {dialog?.kind === 'rescanAll' && (
+        <Modal label="Rescan library" onClose={() => setDialog(null)}>
+          <h2>Rescan library</h2>
+          {!dialog.result && !dialog.error ? (
+            <>
+              <div className={styles.spinner} role="status" aria-label="Rescanning" />
+              <p>Scanning every course folder for new files...</p>
+            </>
+          ) : dialog.error || !dialog.result ? (
+            <>
+              <div className={`${styles.resultRow} ${styles.error}`}>
+                <X size={17} />
+                <span>{dialog.error ?? 'Rescan failed.'}</span>
+              </div>
+              <div className={styles.dialogActions}>
+                <button className="btn btn-ghost" onClick={() => setDialog(null)}>Close</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`${styles.resultRow} ${styles.success}`}>
+                <CheckCircle2 size={17} />
+                <span>
+                  Rescanned {dialog.result.courses} course{dialog.result.courses === 1 ? '' : 's'}: {dialog.result.addedSections} new sections,{' '}
+                  {dialog.result.addedLessons} new lessons
+                  {dialog.result.removedLessons > 0 ? `, ${dialog.result.removedLessons} removed` : ''}
+                  {dialog.result.errors > 0 ? `, ${dialog.result.errors} failed` : ''}.
+                </span>
+              </div>
+              <div className={styles.dialogActions}>
+                <button className="btn btn-primary" onClick={() => setDialog(null)}>Done</button>
+              </div>
+            </>
+          )}
+        </Modal>
       )}
 
       {dialog?.kind === 'rename' && (
@@ -323,21 +383,19 @@ export default function Library({ filter = 'all' }: Props) {
       )}
 
       {dialog?.kind === 'delete' && (
-        <div className={styles.overlay} onClick={() => setDialog(null)}>
-          <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-            <h2>Remove course?</h2>
-            <p>
-              <strong>{dialog.course.title}</strong> will be removed from your library along with its
-              progress, notes and quizzes. Your original course files will <strong>not</strong> be deleted.
-            </p>
-            <div className={styles.dialogActions}>
-              <button className="btn btn-ghost" onClick={() => setDialog(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => handleDelete(dialog.course)}>
-                <Trash2 size={15} /> Remove
-              </button>
-            </div>
+        <Modal label="Remove course" onClose={() => setDialog(null)}>
+          <h2>Remove course?</h2>
+          <p>
+            <strong>{dialog.course.title}</strong> will be removed from your library along with its
+            progress, notes and quizzes. Your original course files will <strong>not</strong> be deleted.
+          </p>
+          <div className={styles.dialogActions}>
+            <button className="btn btn-ghost" onClick={() => setDialog(null)}>Cancel</button>
+            <button className="btn btn-danger" data-autofocus onClick={() => handleDelete(dialog.course)}>
+              <Trash2 size={15} /> Remove
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -436,35 +494,34 @@ function RenameDialog({
   const [saving, setSaving] = useState(false);
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-        <h2>Rename course</h2>
-        <input
-          className="input"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          autoFocus
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && title.trim()) {
-              setSaving(true);
-              onSave(course, title.trim()).finally(() => setSaving(false));
-            }
+    <Modal label="Rename course" onClose={onClose}>
+      <h2>Rename course</h2>
+      <input
+        className="input"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        data-autofocus
+        aria-label="Course title"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && title.trim()) {
+            setSaving(true);
+            onSave(course, title.trim()).finally(() => setSaving(false));
+          }
+        }}
+      />
+      <div className={styles.dialogActions}>
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button
+          className="btn btn-primary"
+          disabled={!title.trim() || saving}
+          onClick={() => {
+            setSaving(true);
+            onSave(course, title.trim()).finally(() => setSaving(false));
           }}
-        />
-        <div className={styles.dialogActions}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-primary"
-            disabled={!title.trim() || saving}
-            onClick={() => {
-              setSaving(true);
-              onSave(course, title.trim()).finally(() => setSaving(false));
-            }}
-          >
-            Save
-          </button>
-        </div>
+        >
+          Save
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -78,7 +78,9 @@ export function examGroupInfo(title: string): ExamGroup {
   const certMatch = /aws certified ([a-z0-9][a-z0-9&+.'\- ]*?)(?:\s*[-–—:|]\s*|\s*\(|\s*$)/i.exec(title ?? '');
   if (certMatch) {
     const words = certMatch[1].trim().split(/\s+/).filter(Boolean);
-    const name = `AWS Certified ${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`;
+    const name = `AWS Certified ${words
+      .map((w) => (/^[A-Z0-9]+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+      .join(' ')}`;
     return { code: null, name };
   }
   return { code: null, name: 'Other practice exams' };

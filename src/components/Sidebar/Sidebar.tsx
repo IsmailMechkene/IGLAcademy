@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  GraduationCap, Home, BookOpen, PlayCircle, CheckCircle2, FileCheck, StickyNote, Settings as SettingsIcon,
+  GraduationCap, Home, BookOpen, PlayCircle, CheckCircle2, FileCheck, Brain, StickyNote, Settings as SettingsIcon,
 } from 'lucide-react';
 import { useApp } from '../../App';
 import type { Route } from '../../App';
@@ -17,9 +17,10 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', icon: Home, route: { name: 'dashboard' }, match: (r) => r.name === 'dashboard' },
   { label: 'My Courses', icon: BookOpen, route: { name: 'library' }, match: (r) => r.name === 'library' || r.name === 'course' || r.name === 'player' },
-  { label: 'Practice Exams', icon: FileCheck, route: { name: 'practice' }, match: (r) => r.name === 'practice' || r.name === 'examfile' },
+  { label: 'Practice Exams', icon: FileCheck, route: { name: 'practice' }, match: (r) => r.name === 'practice' || r.name === 'examfile' || r.name === 'examstats' },
   { label: 'In Progress', icon: PlayCircle, route: { name: 'in-progress' }, match: (r) => r.name === 'in-progress' },
   { label: 'Completed', icon: CheckCircle2, route: { name: 'completed' }, match: (r) => r.name === 'completed' },
+  { label: 'Review', icon: Brain, route: { name: 'review' }, match: (r) => r.name === 'review' },
   { label: 'Notes', icon: StickyNote, route: { name: 'notes' }, match: (r) => r.name === 'notes' },
   { label: 'Settings', icon: SettingsIcon, route: { name: 'settings' }, match: (r) => r.name === 'settings' },
 ];

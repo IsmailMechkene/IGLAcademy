@@ -60,6 +60,19 @@ export function isImageFile(filePath: string): boolean {
   return (IMAGE_EXTENSIONS as readonly string[]).includes(extOf(filePath));
 }
 
+const RESOURCE_KIND_BY_EXT: Record<string, 'pdf' | 'image' | 'text' | 'markdown' | 'subtitle'> = {
+  '.pdf': 'pdf',
+  '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image', '.svg': 'image',
+  '.txt': 'text',
+  '.md': 'markdown',
+  '.vtt': 'subtitle', '.srt': 'subtitle',
+};
+
+/** Database resource kind for a file name. */
+export function resourceKindFor(fileName: string): 'pdf' | 'image' | 'text' | 'markdown' | 'subtitle' | 'other' {
+  return RESOURCE_KIND_BY_EXT[extOf(fileName)] ?? 'other';
+}
+
 /** Cleans a filename stem into a display title. */
 export function titleFromFileName(fileName: string): string {
   const stem = path.basename(fileName, path.extname(fileName));

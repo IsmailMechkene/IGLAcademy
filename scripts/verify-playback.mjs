@@ -265,8 +265,8 @@ try {
           if (exam.questions[1].correctIndices.join(',') !== '1,2') {
             return { ok: false, stage: 'exam-multi', q: exam.questions[1] };
           }
-          var selections = exam.questions.map(function(q) { return q.correctIndices; });
-          var attempt = await api.practice.submit(${htmlPathJson}, selections);
+          var selections = exam.questions.map(function(q) { return { selected: q.correctIndices, seconds: 5 }; });
+          var attempt = await api.practice.submit(${htmlPathJson}, selections, [0]);
           var history = await api.practice.history(${htmlPathJson});
           return { ok: attempt.percent === 100 && history.length === 1, percent: attempt.percent,
             history: history.length };

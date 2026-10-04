@@ -4,7 +4,7 @@ import {
   listCourses, getCourseDetail, updateCourse, markCourseOpened, deleteCourse,
   renameSection, renameLesson,
 } from '../database/repositories/courses';
-import { importCourse, rescanCourse } from '../services/courseImportService';
+import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
 import { requireId, requireString, optionalString, ValidationError } from '../services/validate';
 
@@ -64,6 +64,45 @@ export function registerCourseIpc(): void {
 
   ipcMain.handle('courses:thumbnailUrl', (_e, courseId: unknown) => {
     return getCourseThumbnailUrl(db, requireId(courseId, 'courseId'));
+  });
+
+  ipcMain.handle('courses:health', (_e, courseId: unknown) => {
+    return getCourseHealth(db, requireId(courseId, 'courseId'));
+  });
+
+  // Bulk relink: pick the course's new folder, re-point every matching file.
+  ipcMain.handle('courses:relocate', async (_e, courseId: unknown) => {
+    const id = requireId(courseId, 'courseId');
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select the new location of this course folder',
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { status: 'cancelled' as const, relocated: 0, stillMissing: 0 };
+    }
+    return relocateCourseRoot(db, id, result.filePaths[0]);
+  });
+
+  // Rescans every course (used by the library button and startup setting).
+  ipcMain.handle('courses:rescanAll', () => {
+    const summary = { courses: 0, addedLessons: 0, addedSections: 0, removedLessons: 0, errors: 0 };
+    const ids = (db.prepare('SELECT id FROM courses').all() as Array<{ id: number }>).map((r) => r.id);
+    for (const courseId of ids) {
+      try {
+        const r = rescanCourse(db, courseId);
+        summary.courses += 1;
+        if (r.status === 'ok') {
+          summary.addedLessons += r.addedLessons;
+          summary.addedSections += r.addedSections;
+          summary.removedLessons += r.removedLessons;
+        } else {
+          summary.errors += 1;
+        }
+      } catch {
+        summary.errors += 1;
+      }
+    }
+    return summary;
   });
 }
 

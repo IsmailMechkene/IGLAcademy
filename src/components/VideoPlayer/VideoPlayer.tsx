@@ -1,10 +1,18 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, AlertTriangle,
+  Captions, PictureInPicture2, Repeat,
 } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../../types';
 import { formatTime } from '../../utils/format';
+import { api } from '../../services/api';
 import styles from './VideoPlayer.module.css';
+
+export interface SubtitleTrack {
+  index: number;
+  label: string;
+  url: string;
+}
 
 export interface VideoPlayerHandle {
   getCurrentTime: () => number;
@@ -12,12 +20,21 @@ export interface VideoPlayerHandle {
   play: () => void;
   pause: () => void;
   seek: (seconds: number) => void;
+  togglePlay: () => void;
+  seekBy: (deltaSeconds: number) => void;
+  volumeBy: (delta: number) => void;
+  toggleMute: () => void;
+  toggleFullscreen: () => void;
+  cycleSpeed: (direction: 1 | -1) => void;
+  togglePip: () => void;
 }
 
 interface Props {
   src?: string;
+  lessonId?: number;
   onEnded?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
+  onLoadedMetadata?: (duration: number) => void;
   onPrev?: () => void;
   onNext?: () => void;
   hasPrev: boolean;
@@ -32,7 +49,7 @@ interface Props {
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
-  { src, onEnded, onTimeUpdate, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing, loadError, mediaKind = 'video' },
+  { src, lessonId, onEnded, onTimeUpdate, onLoadedMetadata, onPrev, onNext, hasPrev, hasNext, defaultSpeed, onMissingFile, onError, missing, loadError, mediaKind = 'video' },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -46,7 +63,20 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [tracks, setTracks] = useState<SubtitleTrack[]>([]);
+  const [activeTrack, setActiveTrack] = useState<number | 'off'>('off');
+  const [ccMenuOpen, setCcMenuOpen] = useState(false);
+  const [isPip, setIsPip] = useState(false);
+  const [loopA, setLoopA] = useState<number | null>(null);
+  const [loopB, setLoopB] = useState<number | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loopRef = useRef<{ a: number | null; b: number | null }>({ a: null, b: null });
+  loopRef.current = { a: loopA, b: loopB };
+  const togglePlayRef = useRef<() => void>(() => undefined);
+  const pokeControlsRef = useRef<() => void>(() => undefined);
+  const toggleMuteRef = useRef<() => void>(() => undefined);
+  const toggleFullscreenRef = useRef<() => void>(() => undefined);
+  const togglePipRef = useRef<() => void>(() => undefined);
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => videoRef.current?.currentTime ?? 0,
@@ -56,7 +86,50 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
     seek: (seconds: number) => {
       if (videoRef.current) videoRef.current.currentTime = seconds;
     },
+    togglePlay: () => togglePlayRef.current(),
+    seekBy: (deltaSeconds: number) => {
+      const v = videoRef.current;
+      if (!v || !Number.isFinite(v.duration)) return;
+      v.currentTime = Math.min(Math.max(0, v.currentTime + deltaSeconds), v.duration || 0);
+      pokeControlsRef.current();
+    },
+    volumeBy: (delta: number) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const next = Math.min(1, Math.max(0, v.volume + delta));
+      v.volume = next;
+      v.muted = next === 0 ? true : v.muted;
+      setVolume(next);
+      if (next > 0) setMuted(false);
+    },
+    toggleMute: () => toggleMuteRef.current(),
+    toggleFullscreen: () => toggleFullscreenRef.current(),
+    cycleSpeed: (direction: 1 | -1) => {
+      setSpeed((prev) => {
+        const idx = PLAYBACK_SPEEDS.indexOf(prev as (typeof PLAYBACK_SPEEDS)[number]);
+        const next = idx < 0 ? 2 : (idx + direction + PLAYBACK_SPEEDS.length) % PLAYBACK_SPEEDS.length;
+        return PLAYBACK_SPEEDS[next];
+      });
+    },
+    togglePip: () => void togglePipRef.current(),
   }));
+
+  // Load subtitle tracks for video lessons
+  useEffect(() => {
+    setTracks([]);
+    setActiveTrack('off');
+    if (lessonId === undefined) return;
+    let cancelled = false;
+    api()
+      .media.subtitles(lessonId)
+      .then((t) => {
+        if (!cancelled) setTracks(t);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonId, src]);
 
   // Apply default speed when it changes (settings)
   useEffect(() => {
@@ -67,12 +140,38 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
     if (videoRef.current) videoRef.current.playbackRate = speed;
   }, [speed]);
 
-  // Track fullscreen changes
+  // Track fullscreen + PiP changes (PiP events fire on the video element)
   useEffect(() => {
-    const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener('fullscreenchange', handler);
-    return () => document.removeEventListener('fullscreenchange', handler);
+    const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // Escape closes open control menus
+  useEffect(() => {
+    if (!speedMenuOpen && !ccMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSpeedMenuOpen(false);
+        setCcMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [speedMenuOpen, ccMenuOpen]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPipEnter = () => setIsPip(true);
+    const onPipLeave = () => setIsPip(false);
+    v.addEventListener('enterpictureinpicture', onPipEnter);
+    v.addEventListener('leavepictureinpicture', onPipLeave);
+    return () => {
+      v.removeEventListener('enterpictureinpicture', onPipEnter);
+      v.removeEventListener('leavepictureinpicture', onPipLeave);
+    };
+  }, [src]);
 
   // Auto-hide controls while playing
   const pokeControls = () => {
@@ -123,6 +222,42 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
     if (document.fullscreenElement) void document.exitFullscreen();
     else void containerRef.current.requestFullscreen();
   };
+
+  const togglePip = async () => {
+    const v = videoRef.current;
+    if (!v || !document.pictureInPictureEnabled || v.disablePictureInPicture) return;
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await v.requestPictureInPicture();
+    } catch {
+      // PiP unavailable for this video — stay inline
+    }
+  };
+
+  // A–B loop: press once to set A, again to set B (loop on), again to clear.
+  const cycleLoop = () => {
+    const t = videoRef.current?.currentTime ?? 0;
+    if (loopA === null) {
+      setLoopA(t);
+      setLoopB(null);
+    } else if (loopB === null) {
+      if (t > loopA + 0.5) setLoopB(t);
+      else {
+        setLoopA(null);
+        setLoopB(null);
+      }
+    } else {
+      setLoopA(null);
+      setLoopB(null);
+    }
+    pokeControls();
+  };
+
+  togglePlayRef.current = togglePlay;
+  pokeControlsRef.current = pokeControls;
+  toggleMuteRef.current = toggleMute;
+  toggleFullscreenRef.current = toggleFullscreen;
+  togglePipRef.current = () => void togglePip();
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -180,10 +315,19 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
         }}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
+          // A–B loop enforcement
+          const { a, b } = loopRef.current;
+          if (a !== null && b !== null && b > a && (v.currentTime < a || v.currentTime >= b)) {
+            v.currentTime = a;
+            return;
+          }
           setCurrentTime(v.currentTime);
           onTimeUpdate?.(v.currentTime, v.duration);
         }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration);
+          onLoadedMetadata?.(e.currentTarget.duration);
+        }}
         onError={() => onError?.()}
         onEnded={() => {
           setPlaying(false);
@@ -194,7 +338,13 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
           setVolume(e.currentTarget.volume);
           setMuted(e.currentTarget.muted);
         }}
-      />
+      >
+        {tracks
+          .filter((t) => activeTrack === t.index)
+          .map((t) => (
+            <track key={t.url} kind="subtitles" src={t.url} label={t.label} default />
+          ))}
+      </video>
 
       {!playing && (
         <button className={styles.centerPlay} onClick={togglePlay} aria-label="Play">
@@ -245,6 +395,71 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
             />
           </div>
           <div className={styles.spacer} />
+          {loopA !== null && (
+            <span className={styles.loopLabel} title="A–B loop range">
+              A {formatTime(loopA)}{loopB !== null ? ` – B ${formatTime(loopB)}` : ' …'}
+            </span>
+          )}
+          <button
+            className={styles.controlBtn}
+            onClick={cycleLoop}
+            title={loopA === null ? 'Loop: set point A' : loopB === null ? 'Loop: set point B' : 'Loop: clear'}
+            aria-label={loopA === null ? 'Set loop point A' : loopB === null ? 'Set loop point B' : 'Clear loop'}
+            aria-pressed={loopB !== null}
+            style={loopB !== null ? { color: 'var(--accent)' } : undefined}
+          >
+            <Repeat size={17} />
+          </button>
+          {tracks.length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className={styles.controlBtn}
+                onClick={() => setCcMenuOpen((o) => !o)}
+                title="Subtitles"
+                aria-label="Subtitles"
+                aria-expanded={ccMenuOpen}
+                style={activeTrack !== 'off' ? { color: 'var(--accent)' } : undefined}
+              >
+                <Captions size={18} />
+              </button>
+              {ccMenuOpen && (
+                <div className={styles.speedMenu} role="menu" aria-label="Subtitle tracks">
+                  <button
+                    className={`${styles.speedOption} ${activeTrack === 'off' ? styles.active : ''}`}
+                    onClick={() => {
+                      setActiveTrack('off');
+                      setCcMenuOpen(false);
+                    }}
+                  >
+                    Off
+                  </button>
+                  {tracks.map((t) => (
+                    <button
+                      key={t.index}
+                      className={`${styles.speedOption} ${activeTrack === t.index ? styles.active : ''}`}
+                      onClick={() => {
+                        setActiveTrack(t.index);
+                        setCcMenuOpen(false);
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {typeof document !== 'undefined' && 'pictureInPictureEnabled' in document && (
+            <button
+              className={styles.controlBtn}
+              onClick={() => void togglePip()}
+              title={isPip ? 'Exit picture-in-picture' : 'Picture-in-picture'}
+              aria-label={isPip ? 'Exit picture-in-picture' : 'Picture-in-picture'}
+              aria-pressed={isPip}
+            >
+              <PictureInPicture2 size={18} />
+            </button>
+          )}
           <div style={{ position: 'relative' }}>
             <button
               className={styles.controlBtn}

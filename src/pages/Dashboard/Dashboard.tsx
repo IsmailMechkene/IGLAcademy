@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  BookOpen, Clock, CheckCircle2, Target, PlayCircle, FolderOpen, GraduationCap, ArrowRight,
+  BookOpen, Clock, CheckCircle2, Target, PlayCircle, FolderOpen, GraduationCap, ArrowRight, Brain,
 } from 'lucide-react';
 import type { CourseWithProgress, LearningStats, LessonActivity } from '../../types';
 import { api } from '../../services/api';
@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [activity, setActivity] = useState<LessonActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [due, setDue] = useState<{ itemsDue: number; cardsDue: number }>({ itemsDue: 0, cardsDue: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -54,13 +55,15 @@ export default function Dashboard() {
       api().courses.list(),
       api().progress.mostRecentCourseId(),
       api().progress.recentCourseIds(6),
+      api().review.dueCounts().catch(() => ({ itemsDue: 0, cardsDue: 0 })),
     ])
-      .then(async ([s, c, recentId, recent]) => {
+      .then(async ([s, c, recentId, recent, dueCounts]) => {
         if (cancelled) return;
         setStats(s);
         setCourses(c);
         setContinueCourseId(recentId);
         setRecentIds(recent);
+        setDue(dueCounts);
         if (recentId !== null) {
           try {
             const a = await api().progress.lastActivity(recentId);
@@ -202,6 +205,30 @@ export default function Dashboard() {
         <p>Pick up where you left off — your progress is saved on this device.</p>
       </div>
 
+      {(due.itemsDue > 0 || due.cardsDue > 0) && (
+        <div
+          className={`card ${styles.dueBanner}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate({ name: 'review' })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') navigate({ name: 'review' });
+          }}
+          aria-label={`Up for review: ${due.cardsDue} flashcards and ${due.itemsDue} queued items due. Open Review.`}
+        >
+          <Brain size={20} color="var(--accent)" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 650, fontSize: 14.5 }}>Up for review</div>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              {due.cardsDue > 0 && `${due.cardsDue} flashcard${due.cardsDue === 1 ? '' : 's'} due`}
+              {due.cardsDue > 0 && due.itemsDue > 0 && ' · '}
+              {due.itemsDue > 0 && `${due.itemsDue} queued item${due.itemsDue === 1 ? '' : 's'} due`}
+            </div>
+          </div>
+          <ArrowRight size={16} className="muted" />
+        </div>
+      )}
+
       <div className={styles.statsGrid}>
         {statItems.map((s) => {
           const Icon = s.icon;
@@ -233,7 +260,10 @@ export default function Dashboard() {
             aria-label={`Continue learning: ${cleanTitle(continueCourse.title)}`}
             onClick={() => navigate({ name: 'course', courseId: continueCourse.id })}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') navigate({ name: 'course', courseId: continueCourse.id });
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                navigate({ name: 'course', courseId: continueCourse.id });
+              }
             }}
           >
             <div className={styles.continueThumb}>

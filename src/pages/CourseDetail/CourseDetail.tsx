@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft, BookOpen, CheckCircle2, ChevronDown, FileText, ListChecks, Pencil, PlayCircle,
+  ArrowLeft, BookOpen, CheckCircle2, ChevronDown, FileText, FileWarning, FolderInput, ListChecks, Pencil, PlayCircle,
   RefreshCw,
 } from 'lucide-react';
-import type { CourseDetail as CourseDetailType } from '../../types';
+import type { CourseDetail as CourseDetailType, CourseHealth } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatTime } from '../../utils/format';
@@ -11,7 +11,9 @@ import { cleanTitle } from '../../utils/titles';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
 import LoadError from '../../components/LoadError/LoadError';
+import Modal from '../../components/Modal/Modal';
 import QuizManager from '../../components/Quiz/QuizManager';
+import ResourceSection from '../../components/Resources/ResourceSection';
 import styles from './CourseDetail.module.css';
 
 interface Props {
@@ -26,6 +28,9 @@ export default function CourseDetail({ courseId }: Props) {
   const [openSections, setOpenSections] = useState<Set<number>>(new Set());
   const [renaming, setRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [health, setHealth] = useState<CourseHealth | null>(null);
+  const [showHealth, setShowHealth] = useState(false);
+  const [relocating, setRelocating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,10 +56,37 @@ export default function CourseDetail({ courseId }: Props) {
     };
   }, [courseId, refreshKey]);
 
-  // Mark course as opened (for "recently opened")
+  // Mark course as opened (for "recently opened") + check file health
   useEffect(() => {
     api().courses.markOpened(courseId).catch(() => undefined);
-  }, [courseId]);
+    api()
+      .courses.health(courseId)
+      .then(setHealth)
+      .catch(() => undefined);
+  }, [courseId, refreshKey]);
+
+  const handleRelocate = async () => {
+    setRelocating(true);
+    try {
+      const result = await api().courses.relocate(courseId);
+      if (result.status === 'cancelled') return;
+      if (result.status === 'error') {
+        await api().app.showError('Relocation failed', result.error ?? 'Unknown error');
+        return;
+      }
+      const healthNow = await api().courses.health(courseId).catch(() => null);
+      if (healthNow) setHealth(healthNow);
+      refreshAll();
+      if (result.stillMissing > 0) {
+        await api().app.showError(
+          'Partially relinked',
+          `${result.relocated} file${result.relocated === 1 ? '' : 's'} relinked, ${result.stillMissing} still missing.`,
+        );
+      }
+    } finally {
+      setRelocating(false);
+    }
+  };
 
   if (loading) {
     return <div className="muted" style={{ padding: 48 }}>Loading course...</div>;
@@ -190,6 +222,26 @@ export default function CourseDetail({ courseId }: Props) {
         </div>
       </div>
 
+      {health && health.missingLessons.length > 0 && (
+        <div className={`card ${styles.healthBanner}`} role="alert">
+          <FileWarning size={20} color="var(--warning)" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 650, fontSize: 14 }}>
+              {health.missingLessons.length} of {health.totalLessons} files missing
+            </div>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              These lessons were moved or deleted. Relocate the whole folder at once, or fix files individually.
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowHealth(true)}>
+            Fix files
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={handleRelocate} disabled={relocating}>
+            <FolderInput size={14} /> {relocating ? 'Relocating...' : 'Relocate folder'}
+          </button>
+        </div>
+      )}
+
       <section className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{ fontSize: 16, fontWeight: 650, margin: 0 }}>Course content</h2>
       </section>
@@ -243,6 +295,52 @@ export default function CourseDetail({ courseId }: Props) {
         </div>
         <QuizManager courseId={course.id} />
       </section>
+
+      <ResourceSection courseId={course.id} />
+
+      {showHealth && health && (
+        <Modal label="Fix missing files" onClose={() => setShowHealth(false)} wide>
+          <h2>Missing files ({health.missingLessons.length})</h2>
+          <p>Locate each file individually, or relocate the whole course folder at once.</p>
+          <div className={styles.healthList}>
+            {health.missingLessons.map((m) => (
+              <div key={m.lessonId} className={styles.healthRow}>
+                <span title={m.filePath}>{m.title}</span>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={async () => {
+                    const url = await api().media.locateFile(m.lessonId);
+                    if (url) {
+                      const next = await api().courses.health(course.id).catch(() => null);
+                      if (next) setHealth(next);
+                      refreshAll();
+                    }
+                  }}
+                >
+                  Locate
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-ghost" onClick={() => setShowHealth(false)}>Close</button>
+            <button
+              className="btn btn-primary"
+              disabled={relocating}
+              onClick={async () => {
+                await handleRelocate();
+                const next = await api().courses.health(course.id).catch(() => null);
+                if (next) {
+                  setHealth(next);
+                  if (next.missingLessons.length === 0) setShowHealth(false);
+                }
+              }}
+            >
+              <FolderInput size={15} /> {relocating ? 'Relocating...' : 'Relocate folder'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

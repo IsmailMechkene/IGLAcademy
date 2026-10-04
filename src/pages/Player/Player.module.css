@@ -49,6 +49,37 @@
   white-space: nowrap;
 }
 
+.endActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shortcutList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcutRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.kbd {
+  min-width: 76px;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-strong);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .notesToggle {
   flex-shrink: 0;
 }

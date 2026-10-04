@@ -79,6 +79,11 @@ describe('examGroupInfo', () => {
       code: null,
       name: 'AWS Certified Solutions Architect Associate',
     });
+    // all-caps words (AI, AWS) keep their casing
+    expect(examGroupInfo('Practice Test #1 - Full-Exam - AWS Certified AI Practitioner')).toEqual({
+      code: null,
+      name: 'AWS Certified AI Practitioner',
+    });
   });
 
   it('groups unrecognized titles under Other', () => {

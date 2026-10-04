@@ -71,21 +71,30 @@ export function insertCourse(
 export function updateCourse(
   db: Database.Database,
   id: number,
-  data: { title?: string; description?: string; thumbnailPath?: string | null },
+  data: { title?: string; description?: string; thumbnailPath?: string | null; sourcePath?: string },
 ): Course {
-    db.prepare(
-      `UPDATE courses SET
-         title = COALESCE(?, title),
-         description = COALESCE(?, description),
-         thumbnail_path = ?,
-         updated_at = datetime('now')
-       WHERE id = ?`,
-    ).run(
-      data.title ?? null,
-      data.description ?? null,
-      data.thumbnailPath !== undefined ? data.thumbnailPath : null,
-      id,
-    );
+  const sets: string[] = [];
+  const args: unknown[] = [];
+  if (data.title !== undefined) {
+    sets.push('title = ?');
+    args.push(data.title);
+  }
+  if (data.description !== undefined) {
+    sets.push('description = ?');
+    args.push(data.description);
+  }
+  if (data.thumbnailPath !== undefined) {
+    sets.push('thumbnail_path = ?');
+    args.push(data.thumbnailPath);
+  }
+  if (data.sourcePath !== undefined) {
+    sets.push('source_path = ?');
+    args.push(data.sourcePath);
+  }
+  if (sets.length > 0) {
+    sets.push("updated_at = datetime('now')");
+    db.prepare(`UPDATE courses SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
+  }
   return getCourse(db, id)!;
 }
 

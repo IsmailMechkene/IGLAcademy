@@ -15,17 +15,34 @@ tracking, notes with video timestamps, and self-made quizzes.
 - **Local course importer** — pick any folder; subfolders become sections,
   videos become lessons (natural numeric sorting). PDF/TXT/MD/subtitle/image
   resources attach to their section. Original files are never moved or modified.
+- **Resources, first-class** — PDFs, Markdown, text, subtitles, and images are
+  stored per section, previewed in-app (PDF/image/text viewers), searched by
+  content, and can be opened, revealed, or downloaded as copies.
 - **Video player** — custom controls, 0.5x–2x speeds, fullscreen, prev/next
   lesson, per-lesson resume positions, 90%-watched auto-complete, missing-file
-  recovery with a "locate file" dialog.
+  recovery with a "locate file" dialog. Keyboard shortcuts (press `?`),
+  subtitle tracks with a CC menu, picture-in-picture, A–B looping, timestamp
+  bookmarks, and an end-of-lesson complete/next prompt.
+- **Retention hub (Review)** — timestamped bookmarks, a review-later queue,
+  and SM-2 spaced-repetition flashcards (manual, from notes, or from quiz
+  questions), with due reminders on the dashboard.
+- **Practice exams** — HTML exams parsed live into native Practice/Exam modes
+  (timed, navigator, flagging, shuffle, instant feedback), grouped by
+  certification, with score trends, weak-topic analysis, timing stats, retake
+  comparison, and filtered review.
+- **File resilience** — per-course health checks, missing-file recovery, bulk
+  folder relocation, library-wide rescan, and optional startup rescan.
+- **Backup & safety** — one-click JSON export/import (with safety backup),
+  automatic timestamped database backups with pruning, diagnostic logs, and
+  an update checker.
 - **Progress tracking** — dashboard stats, continue-learning, recently opened,
   per-course progress bars, all persisted in SQLite.
 - **Notes** — per-course/per-lesson notes with autosave, Markdown preview,
   clickable video timestamps, and global search.
 - **Quizzes** — create multiple-choice quizzes per course, take them, review
   answers with explanations, and keep a full attempt history.
-- **Settings** — dark/light theme, default playback speed, resume preference,
-  duplicate-import behavior, and storage info.
+- **Settings** — dark/light/system theme, default playback speed, resume preference,
+  duplicate-import behavior, exam pass mark and pace, backup controls, and storage info.
 
 ## Tech stack
 
@@ -35,7 +52,7 @@ tracking, notes with video timestamps, and self-made quizzes.
 | UI       | React 18 + TypeScript (strict) + Vite 5 + CSS Modules + Lucide icons    |
 | Database | SQLite via better-sqlite3, WAL mode, migrations in `schema_migrations` |
 | Media    | HTML5 video served through a `media://` custom protocol (no raw paths)  |
-| Tests    | Vitest (34 tests: scanner, sorting, DB, progress, quizzes, notes)      |
+| Tests    | Vitest (unit/integration) + CDP end-to-end (`npm run test:e2e`)      |
 
 ## Getting started
 
@@ -52,9 +69,11 @@ Useful commands:
 
 ```bash
 npm run typecheck   # strict TypeScript check (tsc --noEmit)
-npm test            # run the Vitest suite
+npm test            # run the Vitest suite (auto-selects the Node ABI)
+npm run test:e2e    # Electron end-to-end checks via DevTools protocol
 npm run build       # production build → dist/ + dist-electron/
 npm run dist        # package a Windows NSIS installer → release/
+npm run smoke       # verify packaged artifacts + boot the installed exe
 npm run icon        # regenerate assets/icon.png, build/icon.ico, assets/icon.svg
 ```
 
@@ -112,7 +131,13 @@ Supported video: MP4, WebM, MKV (where Chromium can decode it).
 Supported practice tests: HTML/HTM (e.g. downloaded Udemy practice exams).
 Register a folder (or single file) under **Practice Exams** in the sidebar —
 tests are parsed live straight from your files (nothing is imported, moved, or
-copied) and grouped by certification (SAA-C03, DVA-C02, …).
+copied) and grouped by certification (SAA-C03, DVA-C02, …). One parent folder
+covers nested per-certification folders. Sources can also be registered from
+the command line while the app is closed:
+
+```bash
+node scripts/register-exam-source.mjs --db "<path-to-ismalearn.db>" --dir "<exams-folder>"
+```
 
 **Two exam modes.** Every exam offers a mode picker: **Practice mode** checks
 each answer instantly with explanations (untimed), while **Exam mode** runs

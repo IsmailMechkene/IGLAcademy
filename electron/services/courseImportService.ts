@@ -1,12 +1,17 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import type { ImportResult, RescanResult } from '../../src/types';
+import type { CourseHealth, ImportResult, RelocateResult, RescanResult } from '../../src/types';
 import { scanCourseDirectory } from './courseScanner';
 import {
   insertCourse, getCourseBySourcePath, getCourse, insertSection, insertLesson,
   findLessonByPath, deleteLesson, deleteSection, updateLessonFilePath,
-  getCourseDetail,
+  getCourseDetail, updateCourse,
 } from '../database/repositories/courses';
+import {
+  insertResource, deleteResource,
+} from '../database/repositories/resources';
+import { titleFromFileName, resourceKindFor } from './courseScanner';
 
 /**
  * Imports a scanned course into the database. Original files are never moved,
@@ -44,6 +49,14 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
           position: lesson.position,
         });
       }
+      section.resources.forEach((resource, i) => {
+        insertResource(db, sectionId, {
+          title: titleFromFileName(resource.fileName),
+          filePath: resource.filePath,
+          kind: resourceKindFor(resource.fileName),
+          position: i + 1,
+        });
+      });
     }
     return course;
   });
@@ -103,6 +116,21 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       if (row.course_id !== courseId) claimedByOther.add(path.resolve(row.file_path));
     }
 
+    // Index existing resources by file path for merging.
+    const existingResourcesByPath = new Map<string, { id: number; title: string }>();
+    {
+      const rows = db
+        .prepare(
+          `SELECT r.id, r.title, r.file_path FROM resources r
+           JOIN sections s ON s.id = r.section_id
+           WHERE s.course_id = ?`,
+        )
+        .all(courseId) as Array<{ id: number; title: string; file_path: string }>;
+      for (const row of rows) {
+        existingResourcesByPath.set(path.resolve(row.file_path), { id: row.id, title: row.title });
+      }
+    }
+
     for (const scannedSection of scanned.sections) {
       // Partition first so sections are only created when something is new.
       const newLessons: typeof scannedSection.lessons = [];
@@ -121,7 +149,10 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         if (claimedByOther.has(resolved)) continue;
         newLessons.push(scannedLesson);
       }
-      if (newLessons.length === 0) continue;
+      const newResources = scannedSection.resources.filter(
+        (r) => !existingResourcesByPath.has(path.resolve(r.filePath)),
+      );
+      if (newLessons.length === 0 && newResources.length === 0) continue;
 
       // Match an existing section by title (case-insensitive)
       const existingSection = detail.sections.find(
@@ -142,6 +173,15 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         });
         addedLessons++;
       }
+      newResources.forEach((resource, i) => {
+        const id = insertResource(db, sectionId, {
+          title: titleFromFileName(resource.fileName),
+          filePath: resource.filePath,
+          kind: resourceKindFor(resource.fileName),
+          position: i + 1,
+        });
+        existingResourcesByPath.set(path.resolve(resource.filePath), { id, title: resource.fileName });
+      });
     }
 
     // Remove lessons whose files no longer exist on disk
@@ -161,11 +201,28 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       }
     }
 
+    // Remove resources whose files no longer exist on disk (no progress at stake)
+    const scannedResourcePaths = new Set(
+      scanned.sections.flatMap((s) => s.resources.map((r) => path.resolve(r.filePath))),
+    );
+    for (const [resolved, entry] of existingResourcesByPath) {
+      if (scannedResourcePaths.has(resolved)) continue;
+      const current = db.prepare('SELECT file_path FROM resources WHERE id = ?').get(entry.id) as
+        | { file_path: string }
+        | undefined;
+      if (current && path.resolve(current.file_path) === resolved) {
+        deleteResource(db, entry.id);
+      }
+    }
+
     // Remove empty sections (no lessons left)
     const finalDetail = getCourseDetail(db, courseId);
     if (finalDetail) {
       for (const section of finalDetail.sections) {
-        if (section.lessons.length === 0 && existingSectionIds.has(section.id)) {
+        const resourceCount = (
+          db.prepare('SELECT COUNT(*) AS n FROM resources WHERE section_id = ?').get(section.id) as { n: number }
+        ).n;
+        if (section.lessons.length === 0 && resourceCount === 0 && existingSectionIds.has(section.id)) {
           deleteSection(db, section.id);
         }
       }
@@ -185,4 +242,91 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
   }
 
   return { status: 'ok', addedLessons, addedSections, removedLessons };
+}
+
+/**
+ * Checks every lesson file of a course without touching anything.
+ */
+export function getCourseHealth(db: Database.Database, courseId: number): CourseHealth {
+  const detail = getCourseDetail(db, courseId);
+  if (!detail) throw new Error('Course not found');
+  const missingLessons = detail.sections
+    .flatMap((s) => s.lessons)
+    .filter((l) => {
+      try {
+        return !fs.existsSync(l.filePath);
+      } catch {
+        return true;
+      }
+    })
+    .map((l) => ({ lessonId: l.id, title: l.title, filePath: l.filePath }));
+  return { courseId, totalLessons: detail.lessonCount, missingLessons };
+}
+
+/**
+ * Re-points a whole course at a new folder: every lesson whose relative path
+ * exists under the new root is re-linked (progress preserved); the course
+ * root only moves when at least one file matched.
+ */
+export function relocateCourseRoot(
+  db: Database.Database,
+  courseId: number,
+  newRootPath: string,
+): RelocateResult {
+  const course = getCourse(db, courseId);
+  if (!course) return { status: 'error', relocated: 0, stillMissing: 0, error: 'Course not found' };
+  const newRoot = path.resolve(newRootPath);
+  try {
+    if (!fs.statSync(newRoot).isDirectory()) throw new Error('not a directory');
+  } catch {
+    return { status: 'error', relocated: 0, stillMissing: 0, error: 'Selected folder is not accessible.' };
+  }
+
+  const oldRoot = path.resolve(course.sourcePath);
+  const detail = getCourseDetail(db, courseId);
+  if (!detail) return { status: 'error', relocated: 0, stillMissing: 0, error: 'Course not found' };
+
+  let relocated = 0;
+  const stillMissing: string[] = [];
+  const tx = db.transaction(() => {
+    for (const lesson of detail.sections.flatMap((s) => s.lessons)) {
+      if (fs.existsSync(lesson.filePath)) continue;
+      const rel = path.relative(oldRoot, path.resolve(lesson.filePath));
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        stillMissing.push(lesson.title);
+        continue;
+      }
+      const candidate = path.join(newRoot, rel);
+      if (fs.existsSync(candidate)) {
+        updateLessonFilePath(db, lesson.id, candidate);
+        relocated++;
+      } else {
+        stillMissing.push(lesson.title);
+      }
+    }
+    if (relocated > 0) {
+      updateCourse(db, courseId, { sourcePath: newRoot });
+      if (course.thumbnailPath) {
+        const thumbRel = path.relative(oldRoot, path.resolve(course.thumbnailPath));
+        if (!thumbRel.startsWith('..') && !path.isAbsolute(thumbRel)) {
+          const thumbCandidate = path.join(newRoot, thumbRel);
+          if (fs.existsSync(thumbCandidate)) {
+            updateCourse(db, courseId, { thumbnailPath: thumbCandidate });
+          }
+        }
+      }
+    }
+  });
+
+  try {
+    tx();
+  } catch (err) {
+    return {
+      status: 'error',
+      relocated: 0,
+      stillMissing: stillMissing.length,
+      error: err instanceof Error ? err.message : 'Relocation failed',
+    };
+  }
+  return { status: 'ok', relocated, stillMissing: stillMissing.length };
 }

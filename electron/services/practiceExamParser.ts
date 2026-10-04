@@ -7,6 +7,8 @@ export interface ParsedPracticeQuestion {
   options: string[];
   correctIndices: number[];
   explanation: string;
+  /** Source domain from the file (e.g. "Security"), empty when unknown. */
+  topic: string;
 }
 
 export interface ParsedPracticeExam {
@@ -39,6 +41,7 @@ interface RawQuestion {
   prompt?: { question?: unknown; answers?: unknown; explanation?: unknown };
   correct_response?: unknown;
   question_plain?: unknown;
+  section?: unknown;
 }
 
 function letterToIndex(letter: unknown, optionCount: number): number | null {
@@ -49,65 +52,145 @@ function letterToIndex(letter: unknown, optionCount: number): number | null {
 }
 
 /** Extracts the quizData JSON blob via brace matching (string-aware). */
-function extractQuizData(content: string): unknown | null {
+/**
+ * Extracts raw question-object strings from the questions array, one at a
+ * time, plus the exam title. Files truncated mid-download (or with a garbled
+ * question) still yield every intact question instead of failing the file.
+ */
+function extractQuestionBlobs(content: string): { title: string; blobs: string[]; truncatedTail: boolean } {
+  const noData = { title: '', blobs: [] as string[], truncatedTail: false };
+  if (typeof content !== 'string' || content.length === 0) return noData;
   const marker = 'const quizData =';
   const markerIdx = content.indexOf(marker);
-  if (markerIdx < 0) return null;
-  const start = content.indexOf('{', markerIdx + marker.length);
-  if (start < 0) return null;
+  if (markerIdx < 0) return noData;
 
-  let depth = 0;
-  let end = -1;
+  const head = content.slice(markerIdx, markerIdx + 50000);
+  const titleMatch = /"quiz_title"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(head);
+  const title = titleMatch ? titleMatch[1] : '';
+
+  const arrIdx = content.indexOf('"questions"', markerIdx);
+  if (arrIdx < 0) return { title, blobs: [], truncatedTail: false };
+  const arrStart = content.indexOf('[', arrIdx);
+  if (arrStart < 0) return { title, blobs: [], truncatedTail: false };
+
+  // Never scan past the script end — anything beyond is not data.
+  const scriptEnd = content.indexOf('</script>', arrStart);
+  const limit = scriptEnd > 0 ? scriptEnd : content.length;
+
+  // Match one balanced {...} element starting at `from` (which must be '{').
+  // Returns the end offset (exclusive), or -1 when truncated.
+  const matchElement = (from: number): number => {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = from; i < limit; i++) {
+      const ch = content[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return i + 1;
+      }
+    }
+    return -1;
+  };
+
+  const blobs: string[] = [];
+  let closedNormally = false;
+  let i = arrStart + 1;
   let inString = false;
   let escaped = false;
-  for (let i = start; i < content.length; i++) {
+  // Walk the array's top level: '{' starts an element, ']' ends the array.
+  // Nested arrays (unexpected) are skipped wholesale.
+  while (i < limit) {
     const c = content[i];
     if (inString) {
       if (escaped) escaped = false;
       else if (c === '\\') escaped = true;
       else if (c === '"') inString = false;
+      i++;
       continue;
     }
-    if (c === '"') inString = true;
-    else if (c === '{') depth++;
-    else if (c === '}') {
-      depth--;
-      if (depth === 0) {
-        end = i + 1;
-        break;
-      }
+    if (c === '"') {
+      inString = true;
+      i++;
+      continue;
     }
+    if (c === '[') {
+      let depth = 1;
+      i++;
+      while (i < limit && depth > 0) {
+        const d = content[i];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (d === '\\') escaped = true;
+          else if (d === '"') inString = false;
+        } else if (d === '"') {
+          inString = true;
+        } else if (d === '[') {
+          depth++;
+        } else if (d === ']') {
+          depth--;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (c === ']') {
+      closedNormally = true;
+      break;
+    }
+    if (c === '{') {
+      const end = matchElement(i);
+      if (end < 0) break; // truncated tail — stop, keep what we have
+      blobs.push(content.slice(i, end));
+      i = end;
+      continue;
+    }
+    i++;
   }
-  if (end < 0) return null;
+  let truncatedTail = false;
+  if (!closedNormally) {
+    truncatedTail = content.slice(i, limit).includes('{');
+  }
+  return { title, blobs, truncatedTail };
+}
 
+/**
+ * Parses one raw question blob. Returns null when the blob is not usable
+ * JSON (garbled or truncated question).
+ */
+function parseQuestionBlob(blob: string): RawQuestion | null {
   // JSON forbids raw control characters, but they are legal inside JS string
   // literals and appear in these dumps (e.g. inside <pre> blocks). They can
   // only occur inside strings here, never as structural syntax, so blanking
   // them is safe.
-  const raw = content.slice(start, end).replace(/[\x00-\x1F]/g, ' ');
+  const raw = blob.replace(/[\x00-\x1F]/g, ' ');
   try {
-    return JSON.parse(raw) as unknown;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as RawQuestion;
   } catch {
     return null;
   }
 }
 
 export function parsePracticeExamHtml(content: string): ParsedPracticeExam | null {
-  if (typeof content !== 'string' || content.length === 0) return null;
-  const data = extractQuizData(content) as {
-    quiz_title?: unknown;
-    questions?: unknown;
-  } | null;
-  if (!data || typeof data !== 'object' || !Array.isArray(data.questions)) return null;
+  const { title, blobs, truncatedTail } = extractQuestionBlobs(content);
+  if (blobs.length === 0) return null;
 
-  const title = typeof data.quiz_title === 'string' && data.quiz_title.trim()
-    ? data.quiz_title.trim()
-    : '';
   const questions: ParsedPracticeQuestion[] = [];
-  let skipped = 0;
+  let skipped = truncatedTail ? 1 : 0;
 
-  for (const raw of data.questions as RawQuestion[]) {
-    if (!raw || typeof raw !== 'object') {
+  for (const blob of blobs) {
+    const raw = parseQuestionBlob(blob);
+    if (!raw) {
       skipped++;
       continue;
     }
@@ -157,8 +240,9 @@ export function parsePracticeExamHtml(content: string): ParsedPracticeExam | nul
       options,
       correctIndices,
       explanation: typeof prompt.explanation === 'string' ? htmlToText(prompt.explanation) : '',
+      topic: typeof raw.section === 'string' ? raw.section.trim() : '',
     });
   }
 
-  return { title, questions, skipped };
+  return { title: title.trim(), questions, skipped };
 }

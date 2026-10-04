@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { QuizDetail, QuizQuestionInput } from '../../types';
 import { api } from '../../services/api';
+import Modal from '../Modal/Modal';
 import styles from './Quiz.module.css';
 
 interface Props {
@@ -143,10 +144,9 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
   };
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={`card ${styles.dialog}`} onClick={(e) => e.stopPropagation()}>
-        <h2>{quiz ? 'Edit quiz' : 'Create a quiz'}</h2>
-        <div className={styles.editorScroll}>
+    <Modal label={quiz ? 'Edit quiz' : 'Create a quiz'} onClose={onClose} wide>
+      <h2>{quiz ? 'Edit quiz' : 'Create a quiz'}</h2>
+      <div className={styles.editorScroll}>
           <div className={styles.field}>
             <label>Quiz title</label>
             <input
@@ -154,7 +154,7 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
               value={title}
               placeholder="e.g. Module 1 Checkpoint"
               onChange={(e) => setTitle(e.target.value)}
-              autoFocus
+              data-autofocus
             />
           </div>
           <div className={styles.field}>
@@ -258,7 +258,6 @@ export default function QuizEditor({ courseId, quiz, onClose }: Props) {
             {saving ? 'Saving...' : quiz ? 'Save changes' : 'Create quiz'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

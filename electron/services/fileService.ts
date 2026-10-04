@@ -3,6 +3,8 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import type Database from 'better-sqlite3';
 import { getCourse, getLesson } from '../database/repositories/courses';
+import { getResource } from '../database/repositories/resources';
+import { findSubtitleFiles, srtToVtt } from './subtitles';
 
 /**
  * Media access control: the renderer never receives raw filesystem paths.
@@ -44,6 +46,69 @@ export function resolveThumbnailFile(db: Database.Database, courseId: number): s
   return path.resolve(course.thumbnailPath);
 }
 
+/** Resolves a resource file, enforcing the same course containment as lessons. */
+export function resolveResourceFile(db: Database.Database, resourceId: number): string {
+  const resource = getResource(db, resourceId);
+  if (!resource) throw new Error('Resource not found');
+  const row = db
+    .prepare('SELECT s.course_id FROM resources r JOIN sections s ON s.id = r.section_id WHERE r.id = ?')
+    .get(resourceId) as { course_id: number } | undefined;
+  if (!row) throw new Error('Resource not found');
+  const course = getCourse(db, row.course_id);
+  if (!course) throw new Error('Course not found');
+
+  const resolved = path.resolve(resource.filePath);
+  const courseRoot = path.resolve(course.sourcePath);
+  if (resolved !== courseRoot && !resolved.startsWith(courseRoot + path.sep)) {
+    throw new Error('Access denied: file is outside the course directory');
+  }
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`File not found: ${path.basename(resolved)}`);
+  }
+  return resolved;
+}
+
+export interface ResolvedSubtitle {
+  label: string;
+  content: string;
+}
+
+/** Resolves a lesson's subtitle sidecar (converting SRT to VTT on the fly). */
+export function resolveSubtitleFile(
+  db: Database.Database,
+  lessonId: number,
+  index: number,
+): ResolvedSubtitle {
+  const mediaPath = resolveLessonFile(db, lessonId);
+  const tracks = findSubtitleFiles(mediaPath);
+  const track = tracks[index];
+  if (!track) throw new Error('Subtitle track not found');
+  let content: string;
+  try {
+    content = fs.readFileSync(track.filePath, 'utf8');
+  } catch {
+    throw new Error('Could not read subtitle file.');
+  }
+  if (path.extname(track.filePath).toLowerCase() === '.srt') {
+    content = srtToVtt(content);
+  }
+  return { label: track.label, content };
+}
+
+/** Lists a lesson's subtitle tracks as opaque protocol URLs (no raw paths). */
+export function listSubtitleTracks(
+  db: Database.Database,
+  lessonId: number,
+): Array<{ index: number; label: string; url: string }> {
+  // Throws when the lesson itself is unavailable/missing.
+  const mediaPath = resolveLessonFile(db, lessonId);
+  return findSubtitleFiles(mediaPath).map((track, index) => ({
+    index,
+    label: track.label,
+    url: `media://sub/${lessonId}/${index}`,
+  }));
+}
+
 /** Validates availability and returns an opaque protocol URL for the lesson. */
 export function getMediaUrl(db: Database.Database, lessonId: number): string {
   resolveLessonFile(db, lessonId); // throws when unavailable
@@ -77,6 +142,7 @@ const MIME_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.vtt': 'text/vtt',
+  '.pdf': 'application/pdf',
   '.html': 'text/html',
   '.htm': 'text/html',
 };

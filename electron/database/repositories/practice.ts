@@ -96,11 +96,20 @@ export function getPracticeStats(db: Database.Database, filePath: string): Pract
 
 export function insertPracticeAttempt(
   db: Database.Database,
-  data: { sourcePath: string; score: number; total: number; selections: number[][] },
+  data: { sourcePath: string; score: number; total: number; selections: number[][]; durations?: number[]; flags?: number[] },
 ): number {
   const info = db
-    .prepare('INSERT INTO practice_attempts (source_path, score, total, selections) VALUES (?, ?, ?, ?)')
-    .run(data.sourcePath, data.score, data.total, JSON.stringify(data.selections));
+    .prepare(
+      'INSERT INTO practice_attempts (source_path, score, total, selections, durations, flags) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      data.sourcePath,
+      data.score,
+      data.total,
+      JSON.stringify(data.selections),
+      JSON.stringify(data.durations ?? []),
+      JSON.stringify(data.flags ?? []),
+    );
   return Number(info.lastInsertRowid);
 }
 
@@ -122,11 +131,20 @@ export function listPracticeAttempts(db: Database.Database, filePath: string): Q
 export function getPracticeAttempt(
   db: Database.Database,
   attemptId: number,
-): { id: number; sourcePath: string; score: number; total: number; selections: number[][]; createdAt: string } | null {
+): { id: number; sourcePath: string; score: number; total: number; selections: number[][]; durations: number[]; flags: number[]; createdAt: string } | null {
   const row = db.prepare('SELECT * FROM practice_attempts WHERE id = ?').get(attemptId) as
-    | { id: number; source_path: string; score: number; total: number; selections: string; created_at: string }
+    | { id: number; source_path: string; score: number; total: number; selections: string; durations: string | null; flags: string | null; created_at: string }
     | undefined;
   if (!row) return null;
+  const parseNumArray = (raw: string | null): number[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)) : [];
+    } catch {
+      return [];
+    }
+  };
   let selections: number[][] = [];
   try {
     const parsed = JSON.parse(row.selections) as unknown;
@@ -142,6 +160,8 @@ export function getPracticeAttempt(
     score: row.score,
     total: row.total,
     selections,
+    durations: parseNumArray(row.durations),
+    flags: parseNumArray(row.flags).filter((n) => Number.isInteger(n)),
     createdAt: row.created_at,
   };
 }

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, FileText, FolderOpen, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
+import { Check, Clock3, FileText, FolderOpen, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
 import type { Note } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatDateTime } from '../../utils/format';
 import { renderMarkdown } from '../../utils/markdown';
 import LoadError from '../../components/LoadError/LoadError';
+import Modal from '../../components/Modal/Modal';
 import styles from './NotesPage.module.css';
 
 export default function NotesPage() {
@@ -164,6 +165,22 @@ export default function NotesPage() {
                 >
                   Edit
                 </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title="Review this note later"
+                  aria-label="Review this note later"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void api().review.add({
+                      courseId: note.courseId,
+                      kind: 'note',
+                      refId: String(note.id),
+                      title: note.title || 'Untitled note',
+                    });
+                  }}
+                >
+                  <Clock3 size={13} /> Later
+                </button>
               </div>
               {note.content.trim() && (
                 <div className={styles.noteContent}>
@@ -197,48 +214,49 @@ export default function NotesPage() {
       )}
 
       {editing && (
-        <div className={styles.editorOverlay} onClick={() => setEditing(null)}>
-          <div className={`card ${styles.editorDialog}`} onClick={(e) => e.stopPropagation()}>
-            <h2>Edit note</h2>
-            <input
-              className={`input ${styles.editorTitle}`}
-              value={editTitle}
-              placeholder="Note title"
-              onChange={(e) => {
-                setEditTitle(e.target.value);
-                saveEdit(editing.id, e.target.value, editContent);
-              }}
-            />
-            <textarea
-              className={styles.editorTextarea}
-              value={editContent}
-              placeholder="Write your notes... Markdown supported."
-              onChange={(e) => {
-                setEditContent(e.target.value);
-                saveEdit(editing.id, editTitle, e.target.value);
-              }}
-            />
-            <div className={styles.editorFooter}>
-              <div className={styles.left}>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteNote(editing.id)}>
-                  <Trash2 size={13} /> Delete
-                </button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className={styles.saveStatus}>
-                  {saving ? 'Saving...' : savedFlash ? (
-                    <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Check size={12} /> Saved
-                    </span>
-                  ) : (
-                    `Edited ${formatDateTime(editing.updatedAt)}`
-                  )}
-                </span>
-                <button className="btn btn-primary" onClick={() => setEditing(null)}>Done</button>
-              </div>
+        <Modal label="Edit note" onClose={() => setEditing(null)} wide>
+          <h2>Edit note</h2>
+          <input
+            className={`input ${styles.editorTitle}`}
+            value={editTitle}
+            placeholder="Note title"
+            aria-label="Note title"
+            data-autofocus
+            onChange={(e) => {
+              setEditTitle(e.target.value);
+              saveEdit(editing.id, e.target.value, editContent);
+            }}
+          />
+          <textarea
+            className={styles.editorTextarea}
+            value={editContent}
+            placeholder="Write your notes... Markdown supported."
+            aria-label="Note content"
+            onChange={(e) => {
+              setEditContent(e.target.value);
+              saveEdit(editing.id, editTitle, e.target.value);
+            }}
+          />
+          <div className={styles.editorFooter}>
+            <div className={styles.left}>
+              <button className="btn btn-danger btn-sm" onClick={() => deleteNote(editing.id)}>
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className={styles.saveStatus}>
+                {saving ? 'Saving...' : savedFlash ? (
+                  <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Check size={12} /> Saved
+                  </span>
+                ) : (
+                  `Edited ${formatDateTime(editing.updatedAt)}`
+                )}
+              </span>
+              <button className="btn btn-primary" onClick={() => setEditing(null)}>Done</button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

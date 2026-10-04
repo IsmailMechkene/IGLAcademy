@@ -352,4 +352,8 @@ select.select option {
   .fade-in {
     animation: none;
   }
+
+  .skeleton::after {
+    animation: none;
+  }
 }
