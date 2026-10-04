@@ -8,6 +8,7 @@ import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlaye
 import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
 import NotesPanel from '../../components/NotesPanel/NotesPanel';
+import LoadError from '../../components/LoadError/LoadError';
 import styles from './Player.module.css';
 
 interface Props {
@@ -34,6 +35,8 @@ export default function Player({ courseId, lessonId }: Props) {
   const [lessonTitle, setLessonTitle] = useState('');
   const [sectionTitle, setSectionTitle] = useState('');
   const [lessonKind, setLessonKind] = useState<'video' | 'practice'>('video');
+  const [courseError, setCourseError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   const playerRef = useRef<VideoPlayerHandle>(null);
   const lastSaveRef = useRef(0);
@@ -54,72 +57,75 @@ export default function Player({ courseId, lessonId }: Props) {
     };
   }, [courseId]);
 
-  const findLesson = useCallback(
-    (id: number) => {
-      if (!course) return null;
-      for (const section of course.sections) {
-        const lesson = section.lessons.find((l) => l.id === id);
-        if (lesson) return { lesson, section };
-      }
-      return null;
-    },
-    [course],
-  );
-
   const allLessons = useCallback(
     () => (course ? course.sections.flatMap((s) => s.lessons) : []),
     [course],
   );
 
-  // Load media URL + progress for the current lesson
+  // Load lesson metadata + media URL for the current lesson.
+  // Metadata (title, type, completion) loads even when the media file is
+  // missing, so the player never shows the previous lesson's info. Resume
+  // still only applies once media is actually available.
   useEffect(() => {
     let cancelled = false;
     setMediaUrl(null);
     setFileMissing(false);
     setLoadError(null);
+    setCourseError(false);
 
     api()
-      .media.getUrl(currentLessonId)
-      .then((url) => {
+      .courses.get(courseId)
+      .then((c) => {
         if (cancelled) return;
-        setMediaUrl(url);
-        // Check saved position for resume prompt
-        api()
-          .courses.get(courseId)
-          .then((c) => {
-            if (cancelled || !c) return;
-            const found = findLesson(currentLessonId);
-            if (!found) return;
-            setCompleted(found.lesson.completed);
-            completedRef.current = found.lesson.completed;
-            setLessonTitle(found.lesson.title);
-            setSectionTitle(found.section.title);
-            setLessonKind(found.lesson.fileType === 'practice' ? 'practice' : 'video');
+        if (!c) {
+          setCourseError(true);
+          return;
+        }
+        for (const section of c.sections) {
+          const lesson = section.lessons.find((l) => l.id === currentLessonId);
+          if (!lesson) continue;
+          setCompleted(lesson.completed);
+          completedRef.current = lesson.completed;
+          setLessonTitle(lesson.title);
+          setSectionTitle(section.title);
+          const kind = lesson.fileType === 'practice' ? 'practice' : 'video';
+          setLessonKind(kind);
 
-            const pos = found.lesson.positionSeconds;
-            const dur = found.lesson.duration ?? 0;
-            if (pos > 10 && (dur === 0 || pos < dur * COMPLETION_THRESHOLD)) {
-              if (settings.resumePlayback === 'always') {
-                setTimeout(() => playerRef.current?.seek(pos), 300);
-              } else if (settings.resumePlayback === 'ask') {
-                setResumePosition(pos);
-                setShowResumePrompt(true);
+          api()
+            .media.getUrl(currentLessonId)
+            .then((url) => {
+              if (cancelled) return;
+              setMediaUrl(url);
+              // Check saved position for resume prompt (videos only)
+              if (kind !== 'video') return;
+              const pos = lesson.positionSeconds;
+              const dur = lesson.duration ?? 0;
+              if (pos > 10 && (dur === 0 || pos < dur * COMPLETION_THRESHOLD)) {
+                if (settings.resumePlayback === 'always') {
+                  setTimeout(() => playerRef.current?.seek(pos), 300);
+                } else if (settings.resumePlayback === 'ask') {
+                  setResumePosition(pos);
+                  setShowResumePrompt(true);
+                }
               }
-            }
-          })
-          .catch(() => undefined);
+            })
+            .catch(async () => {
+              if (cancelled) return;
+              setFileMissing(true);
+              const stillMissing = await api().media.checkFile(currentLessonId).catch(() => false);
+              if (!stillMissing) setFileMissing(true);
+            });
+          break;
+        }
       })
-      .catch(async () => {
-        if (cancelled) return;
-        setFileMissing(true);
-        const stillMissing = await api().media.checkFile(currentLessonId).catch(() => false);
-        if (!stillMissing) setFileMissing(true);
+      .catch(() => {
+        if (!cancelled) setCourseError(true);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [currentLessonId, courseId, findLesson, settings.resumePlayback]);
+  }, [currentLessonId, courseId, settings.resumePlayback, retryKey]);
 
   // Save position periodically and on pause/unload
   const savePosition = useCallback(() => {
@@ -271,7 +277,15 @@ export default function Player({ courseId, lessonId }: Props) {
   }, [handleResizeMouseMove, handleResizeMouseUp]);
 
   if (!course) {
-    return <div className="muted" style={{ padding: 48 }}>Loading player...</div>;
+    return (
+      <div style={{ padding: 48, maxWidth: 560 }}>
+        {courseError ? (
+          <LoadError message="Could not load this course." onRetry={() => setRetryKey((k) => k + 1)} />
+        ) : (
+          <div className="muted">Loading player...</div>
+        )}
+      </div>
+    );
   }
 
   const lessons = allLessons();

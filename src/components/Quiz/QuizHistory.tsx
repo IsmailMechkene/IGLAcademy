@@ -3,6 +3,7 @@ import { ArrowLeft, History } from 'lucide-react';
 import type { Quiz, QuizAttemptSummary } from '../../types';
 import { api } from '../../services/api';
 import { formatDateTime } from '../../utils/format';
+import LoadError from '../LoadError/LoadError';
 import styles from './Quiz.module.css';
 
 interface Props {
@@ -12,13 +13,17 @@ interface Props {
 
 export default function QuizHistory({ quiz, onClose }: Props) {
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([]);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
+  const loadAttempts = () => {
+    setLoadError(false);
     api()
       .quizzes.attempts(quiz.id)
       .then(setAttempts)
-      .catch(() => undefined);
-  }, [quiz.id]);
+      .catch(() => setLoadError(true));
+  };
+
+  useEffect(loadAttempts, [quiz.id]);
 
   const best = attempts.length > 0 ? Math.max(...attempts.map((a) => a.percent)) : 0;
 
@@ -52,7 +57,9 @@ export default function QuizHistory({ quiz, onClose }: Props) {
         </div>
       )}
 
-      {attempts.length === 0 ? (
+      {loadError ? (
+        <LoadError message="Could not load attempt history." onRetry={loadAttempts} />
+      ) : attempts.length === 0 ? (
         <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
           No attempts yet. Take the quiz to see your history here.
         </div>

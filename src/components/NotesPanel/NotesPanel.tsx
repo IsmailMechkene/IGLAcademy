@@ -23,15 +23,17 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [listError, setListError] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentRef = useRef(content);
   contentRef.current = content;
 
   const loadNotes = () => {
+    setListError(false);
     api()
       .notes.list(courseId)
       .then(setNotes)
-      .catch(() => undefined);
+      .catch(() => setListError(true));
   };
 
   useEffect(loadNotes, [courseId, refreshKey]);
@@ -114,7 +116,14 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
 
       {view === 'list' && (
         <div className={styles.list}>
-          {notes.length === 0 ? (
+          {listError ? (
+            <div className={styles.emptyNotes}>
+              <div>Couldn't load notes.</div>
+              <button className="btn btn-ghost btn-sm" onClick={loadNotes} style={{ marginTop: 8 }}>
+                Try again
+              </button>
+            </div>
+          ) : notes.length === 0 ? (
             <div className={styles.emptyNotes}>
               <FileText size={22} style={{ marginBottom: 6, opacity: 0.5 }} />
               <div>No notes yet.</div>

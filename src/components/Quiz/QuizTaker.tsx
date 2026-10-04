@@ -23,6 +23,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   const [secondsLeft, setSecondsLeft] = useState(timeLimitSeconds ?? 0);
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -50,6 +51,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
+    setSubmitError(false);
     try {
       const payload = quiz.questions.map((q) => {
         const sel = answers.get(q.id) ?? [];
@@ -63,6 +65,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       setResult(detail);
     } catch {
       setSubmitting(false);
+      setSubmitError(true);
     }
   };
 
@@ -231,6 +234,11 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       {!allAnswered && isLast && (
         <p className="muted" style={{ fontSize: 12.5, textAlign: 'center', margin: 0 }}>
           Answer all questions to submit.
+        </p>
+      )}
+      {submitError && (
+        <p role="alert" style={{ fontSize: 12.5, textAlign: 'center', margin: 0, color: 'var(--danger)' }}>
+          Couldn't save your attempt. Check the database and try submitting again.
         </p>
       )}
     </div>

@@ -10,7 +10,22 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
-const DEBUG_PORT = 9333;
+const DEBUG_PORT = await pickPort(9333);
+
+async function pickPort(from) {
+  // Orphaned runs can linger on the default port; never attach to a stale instance.
+  for (let port = from; port < from + 20; port++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (res.ok) continue; // taken
+    } catch {
+      return port; // connection refused: free
+    }
+  }
+  throw new Error('no free debug port');
+}
 
 const SAMPLE_URLS = [
   'https://www.w3schools.com/html/mov_bbb.mp4',

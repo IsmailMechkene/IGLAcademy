@@ -5,12 +5,14 @@ import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatDateTime } from '../../utils/format';
 import { renderMarkdown } from '../../utils/markdown';
+import LoadError from '../../components/LoadError/LoadError';
 import styles from './NotesPage.module.css';
 
 export default function NotesPage() {
   const { navigate, refreshKey } = useApp();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Note | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -21,9 +23,10 @@ export default function NotesPage() {
 
   const load = (query?: string) => {
     setLoading(true);
+    setLoadError(false);
     const p = query ? api().notes.search(query) : api().notes.list();
     p.then(setNotes)
-      .catch(() => undefined)
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   };
 
@@ -119,6 +122,8 @@ export default function NotesPage() {
 
       {loading ? (
         <div className="muted">Loading notes...</div>
+      ) : loadError ? (
+        <LoadError message="Could not load your notes." onRetry={() => load(search.trim() || undefined)} />
       ) : notes.length === 0 ? (
         <div className={`card ${styles.empty}`}>
           <StickyNote size={32} style={{ opacity: 0.4, marginBottom: 4 }} />

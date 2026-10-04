@@ -6,6 +6,7 @@ import { useApp } from '../../App';
 import QuizEditor from './QuizEditor';
 import QuizTaker from './QuizTaker';
 import QuizHistory from './QuizHistory';
+import LoadError from '../LoadError/LoadError';
 import styles from './Quiz.module.css';
 
 interface Props {
@@ -21,19 +22,24 @@ export default function QuizManager({ courseId }: Props) {
   const [editingQuiz, setEditingQuiz] = useState<QuizDetail | null>(null);
   const [takingQuiz, setTakingQuiz] = useState<QuizDetail | null>(null);
   const [historyQuiz, setHistoryQuiz] = useState<Quiz | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
+  const loadQuizzes = () => {
+    setLoadError(false);
     api()
       .quizzes.listForCourse(courseId)
-      .then(setQuizzes)
-      .catch(() => undefined);
-  }, [courseId, refreshKey]);
+      .then((q) => setQuizzes(q))
+      .catch(() => setLoadError(true));
+  };
+
+  useEffect(loadQuizzes, [courseId, refreshKey]);
 
   const refresh = () => {
+    setLoadError(false);
     api()
       .quizzes.listForCourse(courseId)
-      .then(setQuizzes)
-      .catch(() => undefined);
+      .then((q) => setQuizzes(q))
+      .catch(() => setLoadError(true));
   };
 
   const openEditor = async (quiz: Quiz | null) => {
@@ -98,7 +104,9 @@ export default function QuizManager({ courseId }: Props) {
 
   return (
     <div className={styles.quizList}>
-      {quizzes.length === 0 ? (
+      {loadError ? (
+        <LoadError message="Could not load quizzes." onRetry={loadQuizzes} />
+      ) : quizzes.length === 0 ? (
         <div className={styles.emptyQuizzes}>
           <ListChecks size={22} style={{ opacity: 0.4, marginBottom: 4 }} />
           <div>No quizzes for this course yet.</div>

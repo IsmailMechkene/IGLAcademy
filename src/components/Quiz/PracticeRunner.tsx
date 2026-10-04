@@ -29,6 +29,7 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -77,6 +78,7 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
 
   const submit = async () => {
     setSubmitting(true);
+    setSubmitError(false);
     try {
       const payload = quiz.questions.map((q) => {
         const sel = answers.get(q.id) ?? [];
@@ -90,6 +92,7 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
       setResult(detail);
     } catch {
       setSubmitting(false);
+      setSubmitError(true);
     }
   };
 
@@ -200,6 +203,11 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers }: Props) 
           </div>
         )}
       </div>
+      {submitError && (
+        <p role="alert" style={{ fontSize: 12.5, textAlign: 'center', margin: 0, color: 'var(--danger)' }}>
+          Couldn't save your attempt. Check the database and try submitting again.
+        </p>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import type { CourseWithProgress, ImportResult, RescanResult } from '../../types
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import CourseCard from '../../components/CourseCard/CourseCard';
+import LoadError from '../../components/LoadError/LoadError';
 import styles from './Library.module.css';
 
 type Filter = 'all' | 'in-progress' | 'completed';
@@ -18,6 +19,7 @@ export default function Library({ filter = 'all' }: Props) {
   const { navigate, refreshAll, refreshKey, searchQuery } = useApp();
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [dialog, setDialog] = useState<
     | { kind: 'importing' }
     | { kind: 'result'; result: ImportResult }
@@ -30,12 +32,15 @@ export default function Library({ filter = 'all' }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     api()
       .courses.list()
       .then((c) => {
         if (!cancelled) setCourses(c);
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -126,6 +131,8 @@ export default function Library({ filter = 'all' }: Props) {
             </div>
           ))}
         </div>
+      ) : loadError ? (
+        <LoadError message="Could not load your courses." onRetry={refreshAll} />
       ) : filtered.length === 0 ? (
         <div className={`card ${styles.emptyState}`}>
           {filter === 'all' ? (

@@ -5,6 +5,7 @@ import { useApp } from '../../App';
 import QuizTaker from './QuizTaker';
 import PracticeRunner from './PracticeRunner';
 import ModePicker, { type ExamMode } from './ModePicker';
+import LoadError from '../LoadError/LoadError';
 
 /** AWS-style pacing: 2 minutes per question (65 questions = 130 minutes). */
 export const EXAM_SECONDS_PER_QUESTION = 120;
@@ -19,6 +20,7 @@ export default function FileExamPage({ filePath }: Props) {
   const [content, setContent] = useState<PracticeExamContent | null>(null);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<ExamMode | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +38,7 @@ export default function FileExamPage({ filePath }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [filePath]);
+  }, [filePath, retryKey]);
 
   const backToLibrary = () => navigate({ name: 'practice' });
 
@@ -76,9 +78,8 @@ export default function FileExamPage({ filePath }: Props) {
 
   if (error) {
     return (
-      <div style={{ padding: 48, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Could not load this exam</h1>
-        <p className="secondary" style={{ margin: 0 }}>{error}</p>
+      <div style={{ padding: 48, maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+        <LoadError message={`Could not load this exam. ${error}`} onRetry={() => setRetryKey((k) => k + 1)} />
         <button className="btn btn-ghost" onClick={backToLibrary}>
           Back to Practice Exams
         </button>

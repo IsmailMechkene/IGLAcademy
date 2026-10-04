@@ -10,6 +10,7 @@ import { formatTime } from '../../utils/format';
 import { cleanTitle } from '../../utils/titles';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
+import LoadError from '../../components/LoadError/LoadError';
 import QuizManager from '../../components/Quiz/QuizManager';
 import styles from './CourseDetail.module.css';
 
@@ -21,6 +22,7 @@ export default function CourseDetail({ courseId }: Props) {
   const { navigate, refreshAll, refreshKey } = useApp();
   const [course, setCourse] = useState<CourseDetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [openSections, setOpenSections] = useState<Set<number>>(new Set());
   const [renaming, setRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -28,6 +30,7 @@ export default function CourseDetail({ courseId }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     api()
       .courses.get(courseId)
       .then((c) => {
@@ -37,7 +40,9 @@ export default function CourseDetail({ courseId }: Props) {
           setOpenSections(new Set([c.sections[0].id]));
         }
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -53,6 +58,17 @@ export default function CourseDetail({ courseId }: Props) {
 
   if (loading) {
     return <div className="muted" style={{ padding: 48 }}>Loading course...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.page}>
+        <button className={`btn btn-ghost ${styles.backButton}`} onClick={() => navigate({ name: 'library' })}>
+          <ArrowLeft size={15} /> Back to library
+        </button>
+        <LoadError message="Could not load this course." onRetry={refreshAll} />
+      </div>
+    );
   }
 
   if (!course) {

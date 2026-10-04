@@ -58,13 +58,13 @@ npm run dist        # package a Windows NSIS installer → release/
 npm run icon        # regenerate assets/icon.png, build/icon.ico, assets/icon.svg
 ```
 
-> **Native module note:** `better-sqlite3` must be compiled for Electron's ABI
-> to run/package the app, but for plain Node's ABI to run Vitest. Switch with:
->
-> ```bash
-> npx electron-rebuild -f -w better-sqlite3  # for Electron (run/package)
-> npm rebuild better-sqlite3                # for Node (tests)
-> ```
+> **Native module note:** `better-sqlite3` needs Electron's ABI to run the app
+> but plain Node's ABI for Vitest. You never have to think about this: `npm test`
+> rebuilds for Node when needed, and `npm run dev` / `npm run build` / `npm run
+> dist` rebuild for Electron when needed (`scripts/ensure-abi.mjs` tracks a
+> stamp file and skips redundant rebuilds). Manual overrides:
+> `npm run rebuild:node`, `npm run rebuild:electron`. Close the app first —
+> Windows locks the binary while Electron runs.
 
 ## How it works
 

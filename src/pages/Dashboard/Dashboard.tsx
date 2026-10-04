@@ -10,6 +10,7 @@ import { cleanTitle } from '../../utils/titles';
 import CourseCard from '../../components/CourseCard/CourseCard';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
+import LoadError from '../../components/LoadError/LoadError';
 import styles from './Dashboard.module.css';
 
 function ProgressRing({ percent }: { percent: number }) {
@@ -35,17 +36,19 @@ function ProgressRing({ percent }: { percent: number }) {
 }
 
 export default function Dashboard() {
-  const { navigate, refreshKey } = useApp();
+  const { navigate, refreshKey, refreshAll } = useApp();
   const [stats, setStats] = useState<LearningStats | null>(null);
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [continueCourseId, setContinueCourseId] = useState<number | null>(null);
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [activity, setActivity] = useState<LessonActivity | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     Promise.all([
       api().progress.stats(),
       api().courses.list(),
@@ -69,7 +72,9 @@ export default function Dashboard() {
           setActivity(null);
         }
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -77,6 +82,18 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [refreshKey]);
+
+  if (loadError) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.welcome}>
+          <h1>Welcome back</h1>
+          <p>Pick up where you left off — your progress is saved on this device.</p>
+        </div>
+        <LoadError message="Could not load your learning space." onRetry={refreshAll} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

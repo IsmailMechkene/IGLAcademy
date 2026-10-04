@@ -9,6 +9,7 @@ import { useApp } from '../../App';
 import { formatDate, formatDateTime } from '../../utils/format';
 import { examGroupInfo } from '../../utils/titles';
 import QuizReview from '../../components/Quiz/QuizReview';
+import LoadError from '../../components/LoadError/LoadError';
 import styles from './PracticeExams.module.css';
 
 interface ExamGroup {
@@ -28,15 +29,17 @@ export default function PracticeExams() {
   const [history, setHistory] = useState<QuizAttemptSummary[]>([]);
   const [review, setReview] = useState<{ attempt: QuizAttemptDetail; title: string } | null>(null);
   const [removingSource, setRemovingSource] = useState<ExamSource | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = () => {
     setLoading(true);
+    setLoadError(false);
     Promise.all([api().practice.listSources(), api().practice.scan()])
       .then(([s, f]) => {
         setSources(s);
         setFiles(f);
       })
-      .catch(() => undefined)
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   };
 
@@ -141,6 +144,8 @@ export default function PracticeExams() {
 
       {loading ? (
         <div className="muted">Scanning exam files...</div>
+      ) : loadError ? (
+        <LoadError message="Could not load your practice exams." onRetry={load} />
       ) : files.length === 0 ? (
         <div className={`card ${styles.emptyState}`}>
           <div className={styles.emptyIcon}>
