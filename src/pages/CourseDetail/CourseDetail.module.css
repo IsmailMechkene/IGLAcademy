@@ -145,6 +145,11 @@
   background: var(--bg-hover);
 }
 
+.sectionHeader:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .sectionTitle {
   flex: 1;
   min-width: 0;
@@ -195,6 +200,11 @@
 
 .lessonRow:hover {
   background: var(--bg-hover);
+}
+
+.lessonRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .lessonRow.active {
