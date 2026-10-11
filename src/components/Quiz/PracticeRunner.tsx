@@ -4,6 +4,7 @@ import type { QuizDetail, QuizAttemptDetail, AnswerInput } from '../../types';
 import { api } from '../../services/api';
 import QuizReview from './QuizReview';
 import ExplanationBlock from './ExplanationBlock';
+import type { RunSnapshot } from '../../utils/examSession';
 import styles from './Quiz.module.css';
 
 interface Props {
@@ -17,6 +18,10 @@ interface Props {
   ) => Promise<QuizAttemptDetail | null>;
   /** Pass mark percent shown in review (default 70). */
   passPercent?: number;
+  /** Resume an interrupted run (practice-exam sessions). */
+  initial?: RunSnapshot;
+  /** Reports answers, flags and position as they change, for saving. */
+  onProgress?: (snapshot: RunSnapshot) => void;
 }
 
 function setsEqual(a: number[], b: number[]): boolean {
@@ -30,15 +35,17 @@ function setsEqual(a: number[], b: number[]): boolean {
  * Practice mode: every answer is checked immediately with the explanation
  * shown, then the whole run is submitted for review + history at the end.
  */
-export default function PracticeRunner({ quiz, onClose, submitAnswers, passPercent = 70 }: Props) {
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Map<number, number[]>>(new Map());
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+export default function PracticeRunner({ quiz, onClose, submitAnswers, passPercent = 70, initial, onProgress }: Props) {
+  const [current, setCurrent] = useState(() => Math.min(initial?.current ?? 0, quiz.questions.length - 1));
+  const [answers, setAnswers] = useState<Map<number, number[]>>(() => new Map(initial?.answers ?? []));
+  const [revealed, setRevealed] = useState<Set<number>>(() => new Set(initial?.revealed ?? []));
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
-  const timingsRef = useRef(new Map<number, number>());
+  const timingsRef = useRef(new Map<number, number>(initial?.timings ?? []));
   const activeRef = useRef<{ id: number; start: number } | null>(null);
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -97,6 +104,19 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
     flushTiming();
     activeRef.current = { id: question.id, start: Date.now() };
   }, [question.id]);
+
+  // Report progress so the run can be resumed after the app closes.
+  useEffect(() => {
+    if (!onProgressRef.current || result) return;
+    flushTiming();
+    onProgressRef.current({
+      current,
+      answers: [...answers],
+      flagged: [],
+      revealed: [...revealed],
+      timings: [...timingsRef.current],
+    });
+  }, [current, answers, revealed, result]);
 
   const submit = async () => {
     setSubmitting(true);

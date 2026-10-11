@@ -339,6 +339,21 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_flashcards_deck ON flashcards(deck_id, position);
     `,
   },
+  {
+    version: 11,
+    name: 'exam_sessions',
+    sql: `
+      -- An in-progress practice exam (answers, flags, position, deadline), so
+      -- closing the app mid-exam no longer throws the run away. One per file;
+      -- the state is an opaque JSON document owned by the renderer. Cleared
+      -- on submit and when the exam's source is removed.
+      CREATE TABLE exam_sessions (
+        source_path TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

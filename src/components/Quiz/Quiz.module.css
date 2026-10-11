@@ -805,3 +805,83 @@
   border-color: var(--danger) !important;
   background: var(--danger-soft) !important;
 }
+
+/* ---------- resume an interrupted run ---------- */
+
+.resumeCard {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  border-color: var(--accent-border);
+  background: linear-gradient(90deg, var(--accent-soft), var(--bg-card) 70%);
+}
+
+.resumeExpired {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: linear-gradient(90deg, var(--warning-soft), var(--bg-card) 70%);
+}
+
+.resumeIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.resumeExpired .resumeIcon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.resumeBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resumeTitle {
+  font-size: 15.5px;
+  font-weight: 660;
+  letter-spacing: -0.01em;
+}
+
+.resumeMeta {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.resumeMeta strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.resumeBar {
+  height: 4px;
+  margin-top: 6px;
+  max-width: 360px;
+  border-radius: 999px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.resumeBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent-hover));
+}
+
+.resumeActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}

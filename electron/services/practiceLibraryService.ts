@@ -22,6 +22,9 @@ import {
   getPracticeAttempt,
   saveExamSnapshot,
   getExamSnapshot,
+  getExamSession as readExamSession,
+  saveExamSession as writeExamSession,
+  deleteExamSession,
 } from '../database/repositories/practice';
 import { isPracticeFile, titleFromFileName } from './courseScanner';
 import { naturalSort } from './naturalSort';
@@ -301,7 +304,7 @@ export function submitExamAttempt(
   const score = perQuestion.filter((a) => a.isCorrect).length;
   const attemptId = db.transaction(() => {
     saveExamSnapshot(db, exam.contentHash, exam.questions);
-    return insertPracticeAttempt(db, {
+    const id = insertPracticeAttempt(db, {
       sourcePath: resolved,
       score,
       total: exam.questions.length,
@@ -310,10 +313,43 @@ export function submitExamAttempt(
       flags: flagList,
       contentHash: exam.contentHash,
     });
+    // The run is over: it must not be offered for resuming any more.
+    deleteExamSession(db, resolved);
+    return id;
   })();
   const detail = buildDetail(db, attemptId);
   if (!detail) throw new ValidationError('Failed to load the submitted attempt.');
   return detail;
+}
+
+/** Largest in-progress state accepted (a 65-question run is a few KB). */
+const MAX_SESSION_BYTES = 512 * 1024;
+
+/** The saved in-progress run for an exam file, parsed, or null. */
+export function getExamSession(db: Database.Database, filePath: string): unknown {
+  const resolved = requireRegisteredFile(db, filePath);
+  const row = readExamSession(db, resolved);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.state) as unknown;
+  } catch {
+    deleteExamSession(db, resolved);
+    return null;
+  }
+}
+
+export function saveExamSession(db: Database.Database, filePath: string, state: unknown): void {
+  const resolved = requireRegisteredFile(db, filePath);
+  if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+    throw new ValidationError('Exam session must be an object.');
+  }
+  const json = JSON.stringify(state);
+  if (json.length > MAX_SESSION_BYTES) throw new ValidationError('Exam session is too large.');
+  writeExamSession(db, resolved, json);
+}
+
+export function clearExamSession(db: Database.Database, filePath: string): void {
+  deleteExamSession(db, requireRegisteredFile(db, filePath));
 }
 
 export function listExamAttempts(db: Database.Database, filePath: string): QuizAttemptSummary[] {

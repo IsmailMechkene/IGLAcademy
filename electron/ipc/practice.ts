@@ -7,6 +7,9 @@ import {
   scanLibrary,
   loadExamFile,
   submitExamAttempt,
+  getExamSession,
+  saveExamSession,
+  clearExamSession,
   listExamAttempts,
   getExamAttemptDetail,
 } from '../services/practiceLibraryService';
@@ -69,5 +72,18 @@ export function registerPracticeIpc(): void {
 
   ipcMain.handle('practice:attemptDetail', (_e, attemptId: unknown) => {
     return getExamAttemptDetail(db, requireId(attemptId, 'attemptId'));
+  });
+
+  // In-progress runs, so an exam survives closing the app.
+  ipcMain.handle('practice:sessionGet', (_e, filePath: unknown) => {
+    return getExamSession(db, requirePath(filePath, 'filePath'));
+  });
+
+  ipcMain.handle('practice:sessionSave', (_e, filePath: unknown, state: unknown) => {
+    saveExamSession(db, requirePath(filePath, 'filePath'), state);
+  });
+
+  ipcMain.handle('practice:sessionClear', (_e, filePath: unknown) => {
+    clearExamSession(db, requirePath(filePath, 'filePath'));
   });
 }

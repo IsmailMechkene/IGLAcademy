@@ -13,6 +13,9 @@ export const BACKUP_FORMAT = 'ismalearn-backup/1';
  * User-data tables, children first, so a wipe-and-restore respects foreign
  * keys (insertion walks the list in reverse).
  *
+ * `exam_sessions` is not here either: an in-progress exam is transient and
+ * tied to this machine's files and clock.
+ *
  * `schema_migrations` is deliberately NOT here. It describes the shape of the
  * live database, not the user's data: restoring an older backup's ledger would
  * make the app re-run migrations that have already been applied, which fails

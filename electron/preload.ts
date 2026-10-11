@@ -100,6 +100,11 @@ const api = {
       ipcRenderer.invoke('practice:history', filePath),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
       ipcRenderer.invoke('practice:attemptDetail', attemptId),
+    // In-progress run for an exam file (shape owned by the renderer).
+    sessionGet: (filePath: string): Promise<unknown> => ipcRenderer.invoke('practice:sessionGet', filePath),
+    sessionSave: (filePath: string, state: object): Promise<void> =>
+      ipcRenderer.invoke('practice:sessionSave', filePath, state),
+    sessionClear: (filePath: string): Promise<void> => ipcRenderer.invoke('practice:sessionClear', filePath),
   },
   bookmarks: {
     list: (courseId?: number): Promise<Bookmark[]> => ipcRenderer.invoke('bookmarks:list', courseId),

@@ -68,6 +68,39 @@ export function deleteSource(db: Database.Database, id: number): void {
     }
   }
   pruneExamSnapshots(db);
+  deleteSessionsOutside(db);
+}
+
+/** The in-progress run for an exam file, if any (raw JSON, owned by the renderer). */
+export function getExamSession(db: Database.Database, sourcePath: string): { state: string; updatedAt: string } | null {
+  const row = db.prepare('SELECT state, updated_at FROM exam_sessions WHERE source_path = ?').get(sourcePath) as
+    | { state: string; updated_at: string }
+    | undefined;
+  return row ? { state: row.state, updatedAt: row.updated_at } : null;
+}
+
+export function saveExamSession(db: Database.Database, sourcePath: string, state: string): void {
+  db.prepare(
+    `INSERT INTO exam_sessions (source_path, state, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(source_path) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`,
+  ).run(sourcePath, state, new Date().toISOString());
+}
+
+export function deleteExamSession(db: Database.Database, sourcePath: string): void {
+  db.prepare('DELETE FROM exam_sessions WHERE source_path = ?').run(sourcePath);
+}
+
+/** Drops sessions whose file no longer belongs to any registered source. */
+function deleteSessionsOutside(db: Database.Database): void {
+  const sources = listSources(db);
+  const rows = db.prepare('SELECT source_path FROM exam_sessions').all() as Array<{ source_path: string }>;
+  const stmt = db.prepare('DELETE FROM exam_sessions WHERE source_path = ?');
+  for (const row of rows) {
+    const covered = sources.some((s) =>
+      s.kind === 'file' ? s.path === row.source_path : isInsideDir(s.path, row.source_path),
+    );
+    if (!covered) stmt.run(row.source_path);
+  }
 }
 
 export interface PracticeStats {

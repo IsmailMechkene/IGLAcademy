@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, CheckCircle2, Flag, Timer } from 'lucide-
 import type { QuizDetail, QuizAttemptDetail, AnswerInput } from '../../types';
 import { api } from '../../services/api';
 import { formatCountdown } from '../../utils/format';
+import type { RunSnapshot } from '../../utils/examSession';
 import QuizReview from './QuizReview';
 import styles from './Quiz.module.css';
 
@@ -21,21 +22,31 @@ interface Props {
   enableFlags?: boolean;
   /** Pass mark percent shown in review (default 70). */
   passPercent?: number;
+  /** Resume an interrupted run (practice-exam sessions). */
+  initial?: RunSnapshot;
+  /** Reports answers, flags and position as they change, for saving. */
+  onProgress?: (snapshot: RunSnapshot) => void;
+  /** Timed runs: absolute deadline (epoch ms). Defaults to now + time limit. */
+  deadlineAt?: number;
 }
 
-export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswers, enableFlags, passPercent = 70 }: Props) {
+export default function QuizTaker({
+  quiz, onClose, timeLimitSeconds, submitAnswers, enableFlags, passPercent = 70, initial, onProgress, deadlineAt,
+}: Props) {
   const timed = timeLimitSeconds !== undefined && timeLimitSeconds > 0;
   const flaggable = timed || enableFlags === true;
-  const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Map<number, number[]>>(new Map());
-  const [flagged, setFlagged] = useState<Set<number>>(new Set());
+  const [current, setCurrent] = useState(() => Math.min(initial?.current ?? 0, quiz.questions.length - 1));
+  const [answers, setAnswers] = useState<Map<number, number[]>>(() => new Map(initial?.answers ?? []));
+  const [flagged, setFlagged] = useState<Set<number>>(() => new Set(initial?.flagged ?? []));
   const [secondsLeft, setSecondsLeft] = useState(timeLimitSeconds ?? 0);
   const [result, setResult] = useState<QuizAttemptDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
   // Per-question dwell time (seconds), flushed on navigation and submit.
-  const timingsRef = useRef(new Map<number, number>());
+  const timingsRef = useRef(new Map<number, number>(initial?.timings ?? []));
   const activeRef = useRef<{ id: number; start: number } | null>(null);
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
 
   const question = quiz.questions[current];
   const total = quiz.questions.length;
@@ -106,6 +117,19 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
     }
   };
 
+  // Report progress so the run can be resumed after the app closes.
+  useEffect(() => {
+    if (!onProgressRef.current || result) return;
+    flushTiming();
+    onProgressRef.current({
+      current,
+      answers: [...answers],
+      flagged: [...flagged],
+      revealed: [],
+      timings: [...timingsRef.current],
+    });
+  }, [current, answers, flagged, result]);
+
   const submitRef = useRef<() => Promise<void>>(async () => undefined);
 
   useEffect(() => {
@@ -121,8 +145,10 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   // means the display re-syncs immediately after a throttled period.
   useEffect(() => {
     if (!timed || timeLimitSeconds === undefined) return;
-    const deadline = Date.now() + timeLimitSeconds * 1000;
-    setSecondsLeft(timeLimitSeconds);
+    // A resumed exam keeps its original deadline: the clock ran on while the
+    // app was closed, as it would in a real exam.
+    const deadline = deadlineAt ?? Date.now() + timeLimitSeconds * 1000;
+    setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
     let fired = false;
     const tick = () => {
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -140,7 +166,7 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       clearInterval(id);
       document.removeEventListener('visibilitychange', tick);
     };
-  }, [timed, timeLimitSeconds, quiz.id]);
+  }, [timed, timeLimitSeconds, quiz.id, deadlineAt]);
 
   const toggleFlag = () => {
     setFlagged((prev) => {
@@ -160,7 +186,11 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   return (
     <div className={styles.takerWrap}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={onClose}
+          title={onProgress ? 'Leave for now — your answers are saved and you can resume' : undefined}
+        >
           <ArrowLeft size={14} /> Exit
         </button>
         <div style={{ flex: 1 }}>

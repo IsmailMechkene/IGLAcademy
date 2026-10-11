@@ -1,7 +1,18 @@
-import { ArrowLeft, ArrowRight, Timer, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlarmClockOff, ArrowLeft, ArrowRight, History, Timer, Zap } from 'lucide-react';
+import { formatCountdown, timeAgo } from '../../utils/format';
 import styles from './Quiz.module.css';
 
 export type ExamMode = 'practice' | 'exam';
+
+export interface ResumeInfo {
+  mode: ExamMode;
+  answered: number;
+  total: number;
+  /** Exam mode deadline (epoch ms); the clock kept running while closed. */
+  deadlineAt: number | null;
+  savedAt: number;
+}
 
 interface Props {
   title: string;
@@ -18,6 +29,10 @@ interface Props {
   onBack: () => void;
   /** Pass mark from settings (the label used to claim a hardcoded 70%). */
   passPercent: number;
+  /** An interrupted run of this exam that can be resumed, if any. */
+  resume?: ResumeInfo | null;
+  onResume?: () => void;
+  onDiscard?: () => void;
 }
 
 /** Choose between untimed practice (instant feedback) and a timed exam. */
@@ -33,6 +48,9 @@ export default function ModePicker({
   onPick,
   onBack,
   passPercent,
+  resume,
+  onResume,
+  onDiscard,
 }: Props) {
   return (
     <div className={`fade-in ${styles.modeWrap}`}>
@@ -49,6 +67,8 @@ export default function ModePicker({
           <span className={styles.modeChip}>{timeLimitMinutes} min in exam mode</span>
         </div>
       </div>
+
+      {resume && <ResumeCard info={resume} onResume={onResume} onDiscard={onDiscard} />}
 
       <div className={styles.modeGrid}>
         <button type="button" className={`card ${styles.modeCard}`} onClick={() => onPick('practice')}>
@@ -104,6 +124,48 @@ export default function ModePicker({
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ResumeCard({ info, onResume, onDiscard }: { info: ResumeInfo; onResume?: () => void; onDiscard?: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (info.deadlineAt === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [info.deadlineAt]);
+
+  const secondsLeft = info.deadlineAt === null ? null : Math.max(0, Math.ceil((info.deadlineAt - now) / 1000));
+  const expired = secondsLeft === 0;
+  const percent = info.total > 0 ? Math.round((info.answered / info.total) * 100) : 0;
+
+  return (
+    <div className={`card ${styles.resumeCard} ${expired ? styles.resumeExpired : ''}`} role="region" aria-label="Exam in progress">
+      <span className={styles.resumeIcon}>{expired ? <AlarmClockOff size={22} /> : <History size={22} />}</span>
+      <div className={styles.resumeBody}>
+        <div className={styles.resumeTitle}>
+          {expired
+            ? 'Time ran out while you were away'
+            : info.mode === 'exam'
+              ? 'You have an exam in progress'
+              : 'You have a practice run in progress'}
+        </div>
+        <div className={styles.resumeMeta}>
+          {info.answered} of {info.total} answered
+          {secondsLeft !== null && !expired && <> · <strong>{formatCountdown(secondsLeft)}</strong> left</>}
+          {' · '}saved {timeAgo(new Date(info.savedAt).toISOString())}
+        </div>
+        <div className={styles.resumeBar}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+      </div>
+      <div className={styles.resumeActions}>
+        <button className="btn btn-ghost" onClick={onDiscard}>Discard</button>
+        <button className="btn btn-primary" onClick={onResume} data-autofocus>
+          {expired ? 'Submit answers' : 'Resume'}
+        </button>
       </div>
     </div>
   );
