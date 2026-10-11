@@ -7,7 +7,7 @@ import type { ExamSource, PracticeExamFile, QuizAttemptDetail, QuizAttemptSummar
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatDate, formatDateTime } from '../../utils/format';
-import { examGroupInfo } from '../../utils/titles';
+import { examGroupInfo, shortExamTitle } from '../../utils/titles';
 import QuizReview from '../../components/Quiz/QuizReview';
 import LoadError from '../../components/LoadError/LoadError';
 import Modal from '../../components/Modal/Modal';
@@ -50,7 +50,14 @@ export default function PracticeExams() {
   const groups = useMemo<ExamGroup[]>(() => {
     const map = new Map<string, ExamGroup>();
     for (const file of files) {
-      const info = examGroupInfo(file.title);
+      // The title usually names the certification; when it does not carry a
+      // known exam code, the folder name often does ("… CLF-C02").
+      let info = examGroupInfo(file.title);
+      if (!info.code) {
+        const folder = file.filePath.split(/[\\/]/).slice(-2, -1)[0] ?? '';
+        const fromFolder = examGroupInfo(folder);
+        if (fromFolder.code && fromFolder.name !== fromFolder.code) info = fromFolder;
+      }
       const key = info.code ?? info.name;
       const group = map.get(key) ?? { key, name: info.name, code: info.code, files: [] };
       group.files.push(file);
@@ -122,26 +129,27 @@ export default function PracticeExams() {
   };
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.header}>
+    <div className="page fade-in">
+      <div className="page-header">
         <div>
           <h1>Practice Exams</h1>
-          <p>Parsed live from your HTML practice tests — nothing is imported or copied.</p>
+          <p>Timed and practice runs of your HTML practice tests — read live, never copied.</p>
         </div>
-        <div className={styles.headerActions}>
-          <button className="btn btn-ghost" onClick={handleAddFolder} disabled={working}>
-            <FolderPlus size={16} />
-            Add folder
+        <div className="page-actions">
+          <button className="btn btn-ghost" onClick={handleAddFile} disabled={working}>
+            <FileUp size={15} />
+            Add file
           </button>
-          <button className="btn btn-primary" onClick={handleAddFile} disabled={working}>
-            <FileUp size={16} />
-            {working ? 'Working...' : 'Add file'}
+          <button className="btn btn-primary" onClick={handleAddFolder} disabled={working}>
+            <FolderPlus size={16} />
+            {working ? 'Working…' : 'Add folder'}
           </button>
         </div>
       </div>
 
       {sources.length > 0 && (
         <div className={styles.sourcesBar} aria-label="Registered exam sources">
+          <span className={styles.sourcesLabel}>Sources</span>
           {sources.map((s) => (
             <span key={s.id} className={styles.sourceChip} title={s.path}>
               {s.kind === 'file' ? <FileUp size={13} /> : <FolderOpen size={13} />}
@@ -164,8 +172,8 @@ export default function PracticeExams() {
       ) : loadError ? (
         <LoadError message="Could not load your practice exams." onRetry={load} />
       ) : files.length === 0 ? (
-        <div className={`card ${styles.emptyState}`}>
-          <div className={styles.emptyIcon}>
+        <div className={`card emptyState ${styles.emptyCard}`}>
+          <div className="emptyIcon">
             <FileCheck size={30} strokeWidth={1.8} />
           </div>
           <h2>No practice exams yet</h2>
@@ -186,24 +194,29 @@ export default function PracticeExams() {
         </div>
       ) : selected ? (
         <section aria-label={selected.name}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedKey(null)} style={{ marginBottom: 12 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedKey(null)} style={{ marginBottom: 18 }}>
             <ArrowLeft size={14} /> All certifications
           </button>
           <div className={styles.groupHeader}>
-            {selected.code && <span className="badge">{selected.code}</span>}
-            <h2>{selected.code ? selected.name.replace(/^AWS Certified /, '') : selected.name}</h2>
-            <span className="muted" style={{ fontSize: 12.5 }}>
-              {selected.files.length} test{selected.files.length === 1 ? '' : 's'}
-            </span>
+            <span className={styles.groupIcon}><FileCheck size={22} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2>{selected.name}</h2>
+              <span className={styles.groupMeta}>
+                {selected.code && <span className="badge">{selected.code}</span>}
+                {selected.files.length} test{selected.files.length === 1 ? '' : 's'} ·{' '}
+                {selected.files.reduce((n, f) => n + f.questionCount, 0)} questions
+              </span>
+            </div>
           </div>
           <div className={styles.examList}>
             {selected.files.map((file) => (
               <div key={file.filePath} className={`card ${styles.examRow}`}>
-                <div className={styles.examIcon}>
-                  <FileCheck size={20} />
+                <div className={styles.examScore} data-state={file.bestPercent === null ? 'none' : file.bestPercent >= settings.examPassPercent ? 'pass' : 'fail'}>
+                  {file.bestPercent === null ? '—' : `${file.bestPercent}%`}
+                  <span>best</span>
                 </div>
                 <div className={styles.examInfo}>
-                  <div className={styles.examTitle} title={file.title}>{file.title}</div>
+                  <div className={styles.examTitle} title={file.title}>{shortExamTitle(file.title, selected)}</div>
                   <div className={styles.examMeta}>
                     <span>{file.questionCount} questions</span>
                     {file.multiCount > 0 && (
@@ -239,14 +252,14 @@ export default function PracticeExams() {
                 <div className={styles.examActions}>
                   {!file.error && (
                     <button
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-soft btn-sm"
                       onClick={() => navigate({ name: 'examfile', filePath: file.filePath })}
                     >
-                      <PlayCircle size={14} /> Start
+                      <PlayCircle size={14} /> {file.attemptCount > 0 ? 'Retake' : 'Start'}
                     </button>
                   )}
                   <button
-                    className="btn btn-ghost btn-sm"
+                    className="iconBtn"
                     title="Review this exam later"
                     aria-label={`Review ${file.title} later`}
                     onClick={() => {
@@ -263,7 +276,7 @@ export default function PracticeExams() {
                   {file.attemptCount > 0 && (
                     <>
                       <button
-                        className="btn btn-ghost btn-sm"
+                        className="iconBtn"
                         title="Exam analytics"
                         aria-label={`Analytics for ${file.title}`}
                         onClick={() => navigate({ name: 'examstats', filePath: file.filePath })}
@@ -271,7 +284,7 @@ export default function PracticeExams() {
                         <BarChart3 size={14} />
                       </button>
                       <button
-                        className="btn btn-ghost btn-sm"
+                        className="iconBtn"
                         title="Attempt history"
                         aria-label={`Attempt history for ${file.title}`}
                         onClick={() => openHistory(file)}
@@ -298,30 +311,26 @@ export default function PracticeExams() {
                 aria-label={`${group.name}: ${stats.total} tests. View tests.`}
               >
                 <span className={styles.certTop}>
-                  {group.code ? (
-                    <span className="badge">{group.code}</span>
-                  ) : (
-                    <span className={styles.certIcon}>
-                      <FileCheck size={18} />
-                    </span>
-                  )}
+                  <span className={styles.certIcon}>
+                    <FileCheck size={20} />
+                  </span>
+                  {group.code && <span className="badge">{group.code}</span>}
                   <ChevronRight size={16} className={styles.certChevron} aria-hidden="true" />
                 </span>
-                <span className={styles.certName}>
-                  {group.code ? group.name.replace(/^AWS Certified /, '') : group.name}
-                </span>
+                <span className={styles.certName}>{group.name}</span>
                 <span className={styles.certStats}>
                   {stats.total} test{stats.total === 1 ? '' : 's'} · {stats.questions} questions
                 </span>
-                <span className={styles.certStats}>
-                  {stats.attempted === 0 ? (
-                    'Not attempted yet'
-                  ) : (
-                    <>
-                      {stats.attempted} of {stats.total} attempted
-                      {stats.avg !== null ? ` · avg best ${stats.avg}%` : ''}
-                    </>
-                  )}
+                <span className={styles.certProgress}>
+                  <span className={styles.certProgressRow}>
+                    <span>
+                      {stats.attempted === 0 ? 'Not attempted yet' : `${stats.attempted} of ${stats.total} attempted`}
+                    </span>
+                    {stats.avg !== null && <strong>avg best {stats.avg}%</strong>}
+                  </span>
+                  <span className={styles.certBar}>
+                    <span style={{ width: `${stats.total ? (stats.attempted / stats.total) * 100 : 0}%` }} />
+                  </span>
                 </span>
               </button>
             );

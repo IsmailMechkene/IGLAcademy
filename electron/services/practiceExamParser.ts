@@ -36,6 +36,48 @@ export function htmlToText(html: string): string {
     .join('\n');
 }
 
+/**
+ * Like htmlToText, but keeps the structure explanations rely on as small,
+ * inert markers the renderer understands: **bold** (option names), `code`,
+ * [text](https://link) and ![diagram](https://image). Lists become "• " lines.
+ * Nothing is ever rendered as HTML; anything else is stripped to text.
+ */
+export function htmlToRichText(html: string): string {
+  const safeUrl = (url: string) => (/^https?:\/\/[^\s()]+$/i.test(url) ? url : null);
+  return (html ?? '')
+    .replace(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, (_m, src: string) => {
+      const url = safeUrl(src.trim());
+      return url ? `\n![diagram](${url})\n` : '';
+    })
+    .replace(/<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, inner: string) => {
+      const url = safeUrl(href.trim());
+      const text = inner.replace(/<[^>]+>/g, '').replace(/[[\]]/g, '').trim() || href;
+      return url ? `[${text}](${url})` : text;
+    })
+    .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_m, _t, inner: string) => {
+      const text = inner.replace(/<[^>]+>/g, '').trim();
+      return text ? `**${text}**` : '';
+    })
+    .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_m, inner: string) => {
+      const text = inner.replace(/<[^>]+>/g, '').replace(/`/g, "'");
+      return text ? `\`${text}\`` : '';
+    })
+    .replace(/<li\b[^>]*>/gi, '\n• ')
+    .replace(/<(br|p|tr|h[1-6]|pre|div|ul|ol)[^>]*>/gi, '\n')
+    .replace(/<\/(p|li|tr|h[1-6]|pre|div|ul|ol)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter((line) => line.length > 0 && line !== '•')
+    .join('\n');
+}
+
 interface RawQuestion {
   assessment_type?: unknown;
   prompt?: { question?: unknown; answers?: unknown; explanation?: unknown };
@@ -240,7 +282,7 @@ export function parsePracticeExamHtml(content: string): ParsedPracticeExam | nul
       question,
       options,
       correctIndices,
-      explanation: typeof prompt.explanation === 'string' ? htmlToText(prompt.explanation) : '',
+      explanation: typeof prompt.explanation === 'string' ? htmlToRichText(prompt.explanation) : '',
       topic: typeof raw.section === 'string' ? raw.section.trim() : '',
     });
   }

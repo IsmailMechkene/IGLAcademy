@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePracticeExamHtml, htmlToText } from '../electron/services/practiceExamParser';
+import { parsePracticeExamHtml, htmlToText, htmlToRichText } from '../electron/services/practiceExamParser';
 
 function makeFile(payload: object, prefix = '<!doctype html><html><body>'): string {
   return `${prefix}<script>const quizData = ${JSON.stringify(payload)};</script></body></html>`;
@@ -138,5 +138,26 @@ describe('htmlToText', () => {
       'Use MessageRetentionPeriod & friends',
     );
     expect(htmlToText('<p>Line one</p><p>Line two</p>')).toBe('Line one\nLine two');
+  });
+});
+
+describe('htmlToRichText', () => {
+  it('keeps option names, code, links and diagrams as inert markers', () => {
+    const html =
+      '<p>Correct option:</p><p><strong>Use DAX</strong> - caches <code>GetItem</code> reads.</p>' +
+      '<p>Overview:<img src="https://example.com/d.png">via - <a href="https://aws.amazon.com/dax/">https://aws.amazon.com/dax/</a></p>';
+    expect(htmlToRichText(html)).toBe(
+      'Correct option:\n**Use DAX** - caches `GetItem` reads.\nOverview:\n![diagram](https://example.com/d.png)\nvia - [https://aws.amazon.com/dax/](https://aws.amazon.com/dax/)',
+    );
+  });
+
+  it('drops unsafe links and images, never passing HTML through', () => {
+    const out = htmlToRichText('<p><a href="javascript:alert(1)">click</a><img src="file:///c:/x.png"><script>x</script></p>');
+    expect(out).toBe('clickx');
+    expect(out).not.toMatch(/[<>]/);
+  });
+
+  it('turns list items into bullet lines', () => {
+    expect(htmlToRichText('<ul><li>One</li><li>Two</li></ul>')).toBe('• One\n• Two');
   });
 });

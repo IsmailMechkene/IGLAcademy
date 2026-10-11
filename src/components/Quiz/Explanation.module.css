@@ -1,0 +1,256 @@
+/* Answer explanations: structured, roomy, colour-coded by meaning. */
+
+.explanation {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 6px;
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* ---------- text ---------- */
+
+.para {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.para + .para {
+  margin-top: 10px;
+}
+
+.para strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.bullet {
+  position: relative;
+  padding-left: 18px;
+}
+
+.bullet::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.72em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.para.bullet + .para.bullet {
+  margin-top: 4px;
+}
+
+.source {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 560;
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-border);
+  word-break: break-word;
+}
+
+.link:hover {
+  border-bottom-color: var(--accent);
+}
+
+.diagram {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  margin: 2px 0;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.diagram:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ---------- sections ---------- */
+
+.general {
+  display: flex;
+  flex-direction: column;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.correct {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  background: linear-gradient(180deg, var(--success-soft), var(--bg-card) 70%);
+}
+
+.correct .sectionTitle {
+  color: var(--success);
+}
+
+.incorrect .sectionTitle {
+  color: var(--danger);
+}
+
+.alert {
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  background: linear-gradient(180deg, var(--warning-soft), var(--bg-card) 70%);
+}
+
+.alert .sectionTitle {
+  color: var(--warning);
+}
+
+.references .sectionTitle {
+  color: var(--text-secondary);
+}
+
+/* ---------- one option ---------- */
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option + .option {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.optionName {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.optionMark {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.correct .optionMark {
+  background: var(--success);
+  color: #06140e;
+}
+
+.correct .optionName {
+  color: var(--success);
+}
+
+[data-theme='light'] .correct .optionName {
+  color: #0b7a53;
+}
+
+.incorrect .optionMark {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.optionBody {
+  padding-left: 30px;
+}
+
+/* ---------- references ---------- */
+
+.refList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.refLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 560;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.refLink:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}

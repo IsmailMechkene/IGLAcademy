@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, MinusCircle, XCircle } from 'lucide-react';
 import type { QuizDetail, QuizAttemptDetail, AnswerInput } from '../../types';
 import { api } from '../../services/api';
 import QuizReview from './QuizReview';
@@ -132,6 +132,14 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
 
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
   const showCheckButton = multi && !isRevealed;
+  const answerLetters = question.correctIndices.map((i) => letters[i] ?? '?').join(', ');
+  const verdict: 'correct' | 'wrong' | 'skipped' | null = !isRevealed
+    ? null
+    : selected.length === 0
+      ? 'skipped'
+      : setsEqual(selected, question.correctIndices)
+        ? 'correct'
+        : 'wrong';
 
   return (
     <div className={styles.takerWrap}>
@@ -159,6 +167,10 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
       </p>
 
       <div className={`card ${styles.questionCard}`}>
+        <div className={styles.questionMeta}>
+          <span>Question {current + 1} of {total}</span>
+          {multi && <span className="badge">Select all that apply</span>}
+        </div>
         <div className={styles.questionText}>{question.question}</div>
         <div className={styles.options}>
           {question.options.map((opt, oi) => {
@@ -186,6 +198,21 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
             );
           })}
         </div>
+        {verdict && (
+          <div className={`${styles.verdict} ${styles[`verdict_${verdict}`]}`} role="status">
+            {verdict === 'correct' ? <CheckCircle2 size={20} /> : verdict === 'wrong' ? <XCircle size={20} /> : <MinusCircle size={20} />}
+            <div>
+              <div className={styles.verdictTitle}>
+                {verdict === 'correct' ? 'Correct' : verdict === 'wrong' ? 'Not quite' : 'Skipped'}
+              </div>
+              {verdict !== 'correct' && (
+                <div className={styles.verdictText}>
+                  {question.correctIndices.length > 1 ? 'The correct answers are' : 'The correct answer is'} <strong>{answerLetters}</strong>.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {isRevealed && question.explanation && (
           <ExplanationBlock text={question.explanation} />
         )}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AnswerInput, PracticeExamContent, QuizAttemptDetail, QuizDetail } from '../../types';
 import { api } from '../../services/api';
-import { useApp } from '../../App';
+import { useApp, useCrumbs } from '../../App';
 import { mulberry32, normalizeSelected, shuffledIndexes } from '../../utils/examAnalytics';
 import QuizTaker from './QuizTaker';
 import PracticeRunner from './PracticeRunner';
@@ -68,6 +68,7 @@ export default function FileExamPage({ filePath }: Props) {
   }, [filePath, retryKey]);
 
   const backToLibrary = () => navigate({ name: 'practice' });
+  useCrumbs(content ? [{ label: 'Practice Exams', route: { name: 'practice' } }, { label: content.title }] : null);
 
   const shuffled = useMemo(() => {
     if (!content) return null;
