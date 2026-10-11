@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft, BookOpen, CheckCircle2, ChevronDown, FileText, FileWarning, FolderInput, ListChecks, Pencil, PlayCircle,
+  ArrowLeft, BookOpen, Check, ChevronDown, Clock, FileText, FileWarning, FolderInput, Layers, Pencil, Play,
   RefreshCw,
 } from 'lucide-react';
 import type { CourseDetail as CourseDetailType, CourseHealth } from '../../types';
 import { api } from '../../services/api';
-import { useApp } from '../../App';
-import { formatDateTime, formatTime } from '../../utils/format';
-import { cleanTitle } from '../../utils/titles';
+import { useApp, useCrumbs } from '../../App';
+import { formatDateTime, formatLength, formatTime } from '../../utils/format';
+import { cleanTitle, splitOrdinal } from '../../utils/titles';
 import { locateFileMessage } from '../../utils/locateFile';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
@@ -33,6 +33,13 @@ export default function CourseDetail({ courseId }: Props) {
   const [showHealth, setShowHealth] = useState(false);
   const [relocating, setRelocating] = useState(false);
   const [forgetting, setForgetting] = useState<{ lessonId: number; title: string } | null>(null);
+  const [tab, setTab] = useState<'content' | 'quizzes' | 'resources'>('content');
+
+  useCrumbs(
+    course
+      ? [{ label: 'Courses', route: { name: 'library' } }, { label: cleanTitle(course.title) }]
+      : null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -125,13 +132,17 @@ export default function CourseDetail({ courseId }: Props) {
   };
 
   if (loading) {
-    return <div className="muted" style={{ padding: 48 }}>Loading course...</div>;
+    return (
+      <div className="page">
+        <div className={`card skeleton ${styles.heroSkeleton}`} />
+      </div>
+    );
   }
 
   if (loadError) {
     return (
-      <div className={styles.page}>
-        <button className={`btn btn-ghost ${styles.backButton}`} onClick={() => navigate({ name: 'library' })}>
+      <div className="page">
+        <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => navigate({ name: 'library' })}>
           <ArrowLeft size={15} /> Back to library
         </button>
         <LoadError message="Could not load this course." onRetry={refreshAll} />
@@ -141,7 +152,7 @@ export default function CourseDetail({ courseId }: Props) {
 
   if (!course) {
     return (
-      <div className={styles.page}>
+      <div className="page">
         <button className="btn btn-ghost" onClick={() => navigate({ name: 'library' })}>
           <ArrowLeft size={15} /> Back to library
         </button>
@@ -168,24 +179,39 @@ export default function CourseDetail({ courseId }: Props) {
     navigate({ name: 'player', courseId: course.id, lessonId });
   };
 
-  return (
-    <div className={`fade-in ${styles.page}`}>
-      <button className={`btn btn-ghost ${styles.backButton}`} onClick={() => navigate({ name: 'library' })}>
-        <ArrowLeft size={15} /> Back to library
-      </button>
+  const allLessons = course.sections.flatMap((sec) => sec.lessons);
+  // Durations are learned as lessons are played; a total over a few known
+  // lessons would understate the course, so totals only show once complete.
+  const totalSeconds = allLessons.every((l) => l.duration !== null)
+    ? allLessons.reduce((n, l) => n + (l.duration ?? 0), 0)
+    : 0;
+  const remaining = course.lessonCount - course.completedCount;
+  const started = course.completedCount > 0;
+  const continueSection = continueLesson
+    ? course.sections.find((sec) => sec.lessons.some((l) => l.id === continueLesson.id))
+    : undefined;
+  const allOpen = openSections.size === course.sections.length;
+  let lessonNumber = 0;
 
-      <div className={styles.header}>
-        <div className={styles.thumbnail}>
+  return (
+    <div className="page fade-in">
+      <header className={styles.hero}>
+        <div className={styles.heroBackdrop} aria-hidden="true">
           <CourseCover courseId={course.id} title={course.title} />
         </div>
-        <div className={styles.headerInfo}>
+        <div className={styles.heroCover}>
+          <CourseCover courseId={course.id} title={course.title} />
+        </div>
+        <div className={styles.heroInfo}>
+          <span className="eyebrow">Course</span>
           {renaming ? (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className={styles.renameRow}>
               <input
                 className="input"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 autoFocus
+                aria-label="Course title"
                 onKeyDown={async (e) => {
                   if (e.key === 'Enter' && newTitle.trim()) {
                     await api().courses.rename(course.id, newTitle.trim());
@@ -206,61 +232,63 @@ export default function CourseDetail({ courseId }: Props) {
               >
                 Save
               </button>
+              <button className="btn btn-ghost" onClick={() => setRenaming(false)}>Cancel</button>
             </div>
           ) : (
-            <h1 title={course.title}>{cleanTitle(course.title)}</h1>
+            <h1 className={styles.title} title={course.title}>{cleanTitle(course.title)}</h1>
           )}
           {course.description && <p className={styles.description}>{course.description}</p>}
           <div className={styles.metaRow}>
-            <span className={styles.metaItem}>
-              <ListChecks size={14} /> {course.sections.length} sections
-            </span>
-            <span className={styles.metaItem}>
-              <BookOpen size={14} /> {course.lessonCount} lessons
-            </span>
-            <span className={styles.metaItem}>
-              <CheckCircle2 size={14} /> {course.completedCount} completed
-            </span>
+            <span className={styles.metaItem}><Layers size={14} /> {course.sections.length} sections</span>
+            <span className={styles.metaItem}><BookOpen size={14} /> {course.lessonCount} lessons</span>
+            {totalSeconds > 0 && (
+              <span className={styles.metaItem} title="Total length of all lessons">
+                <Clock size={14} /> {formatLength(totalSeconds)}
+              </span>
+            )}
           </div>
-          <div className={styles.progressRow}>
+          <div className={styles.progressBlock}>
+            <div className={styles.progressRow}>
+              <span>{course.completedCount} of {course.lessonCount} lessons completed</span>
+              <strong>{course.progressPercent}%</strong>
+            </div>
             <ProgressBar percent={course.progressPercent} large />
-            <span className={styles.progressPercent}>{course.progressPercent}%</span>
           </div>
           <div className={styles.actions}>
             {continueLesson && (
-              <button className="btn btn-primary" onClick={() => openLesson(continueLesson.id)}>
-                <PlayCircle size={16} />
-                {course.completedCount > 0 && course.completedCount < course.lessonCount
-                  ? 'Continue Learning'
-                  : 'Start Course'}
+              <button className="btn btn-primary btn-lg" onClick={() => openLesson(continueLesson.id)}>
+                <Play size={16} fill="currentColor" />
+                {course.progressPercent === 100 ? 'Watch again' : started ? 'Continue learning' : 'Start course'}
               </button>
             )}
             <button
-              className="btn btn-ghost"
+              className="btn btn-ghost btn-lg"
               onClick={() => {
                 setNewTitle(course.title);
                 setRenaming(true);
               }}
+              title="Rename course"
             >
-              <Pencil size={14} /> Rename
+              <Pencil size={15} /> Rename
             </button>
             <button
-              className="btn btn-ghost"
+              className="btn btn-ghost btn-lg"
+              title="Look for new or moved files in the course folder"
               onClick={async () => {
                 const result = await api().courses.rescan(course.id);
                 if (result.status === 'ok') refreshAll();
                 else await api().app.showError('Rescan failed', result.error ?? 'Unknown error');
               }}
             >
-              <RefreshCw size={14} /> Rescan
+              <RefreshCw size={15} /> Rescan
             </button>
           </div>
         </div>
-      </div>
+      </header>
 
       {health && health.missingLessons.length > 0 && (
         <div className={`card ${styles.healthBanner}`} role="alert">
-          <FileWarning size={20} color="var(--warning)" />
+          <span className={styles.healthIcon}><FileWarning size={18} /></span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 650, fontSize: 14 }}>
               {health.missingLessons.length} of {health.totalLessons} files missing
@@ -278,71 +306,164 @@ export default function CourseDetail({ courseId }: Props) {
         </div>
       )}
 
-      <section className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ fontSize: 16, fontWeight: 650, margin: 0 }}>Course content</h2>
-      </section>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {course.sections.map((section) => {
-          const open = openSections.has(section.id);
-          const completedInSection = section.lessons.filter((l) => l.completed).length;
-          return (
-            <div key={section.id} className={`card ${styles.section}`}>
-              <button className={styles.sectionHeader} onClick={() => toggleSection(section.id)}>
-                <span className={`${styles.chevron} ${open ? styles.open : ''}`}>
-                  <ChevronDown size={17} />
-                </span>
-                <span className={styles.sectionTitle}>{section.title}</span>
-                <span className={styles.sectionMeta}>
-                  <span>
-                    {completedInSection}/{section.lessons.length} completed
-                  </span>
-                </span>
-              </button>
-              {open && (
-                <div className={styles.lessonList}>
-                  {section.lessons.map((lesson) => (
-                    <button key={lesson.id} className={styles.lessonRow} onClick={() => openLesson(lesson.id)}>
-                      <span className={styles.statusIcon}>
-                        {lesson.missingSince !== null ? (
-                          <FileWarning size={17} color="var(--warning)" />
-                        ) : lesson.completed ? (
-                          <CheckCircle2 size={17} color="var(--success)" />
-                        ) : lesson.fileType === 'practice' ? (
-                          <FileText size={17} color="var(--text-muted)" />
-                        ) : (
-                          <PlayCircle size={17} color="var(--text-muted)" />
-                        )}
-                      </span>
-                      <span className={styles.lessonTitle}>{lesson.title}</span>
-                      {lesson.missingSince !== null && (
-                        <span
-                          className={styles.lessonMissing}
-                          title={`File not found since ${formatDateTime(lesson.missingSince)} — progress and notes are kept`}
-                        >
-                          File missing
-                        </span>
-                      )}
-                      {lesson.duration !== null && (
-                        <span className={styles.lessonDuration}>{formatTime(lesson.duration)}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className="tabs" role="tablist" aria-label="Course sections">
+        <button role="tab" className="tab" aria-selected={tab === 'content'} onClick={() => setTab('content')}>
+          Content <span className="count">{course.lessonCount}</span>
+        </button>
+        <button role="tab" className="tab" aria-selected={tab === 'quizzes'} onClick={() => setTab('quizzes')}>
+          Quizzes
+        </button>
+        <button role="tab" className="tab" aria-selected={tab === 'resources'} onClick={() => setTab('resources')}>
+          Resources
+        </button>
       </div>
 
-      <section className={styles.quizSection}>
-        <div className={styles.quizHeader}>
-          <h2>Quizzes</h2>
-        </div>
-        <QuizManager courseId={course.id} />
-      </section>
+      {tab === 'content' && (
+        <div className={styles.contentGrid}>
+          <div className={styles.sections}>
+            <div className={styles.contentToolbar}>
+              <span className="muted" style={{ fontSize: 13 }}>
+                {course.sections.length} sections · {course.lessonCount} lessons
+                {totalSeconds > 0 && ` · ${formatLength(totalSeconds)}`}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  setOpenSections(allOpen ? new Set() : new Set(course.sections.map((sec) => sec.id)))
+                }
+              >
+                {allOpen ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+            {course.sections.map((section, sIdx) => {
+              const open = openSections.has(section.id);
+              const completedInSection = section.lessons.filter((l) => l.completed).length;
+              const sectionSeconds = section.lessons.every((l) => l.duration !== null)
+                ? section.lessons.reduce((n, l) => n + (l.duration ?? 0), 0)
+                : 0;
+              const sectionDone = completedInSection === section.lessons.length && section.lessons.length > 0;
+              const firstNumber = lessonNumber;
+              lessonNumber += section.lessons.length;
+              return (
+                <div key={section.id} className={`card ${styles.section} ${open ? styles.sectionOpen : ''}`}>
+                  <button
+                    className={styles.sectionHeader}
+                    onClick={() => toggleSection(section.id)}
+                    aria-expanded={open}
+                    title={section.title}
+                  >
+                    <span className={`${styles.sectionIndex} ${sectionDone ? styles.sectionIndexDone : ''}`}>
+                      {sectionDone ? <Check size={14} strokeWidth={3} /> : sIdx + 1}
+                    </span>
+                    <span className={styles.sectionText}>
+                      <span className={styles.sectionTitle}>{splitOrdinal(section.title).text}</span>
+                      <span className={styles.sectionMeta}>
+                        {completedInSection}/{section.lessons.length} completed
+                        {sectionSeconds > 0 && ` · ${formatLength(sectionSeconds)}`}
+                      </span>
+                    </span>
+                    <span className={styles.sectionBar} aria-hidden="true">
+                      <span style={{ width: `${section.lessons.length ? (completedInSection / section.lessons.length) * 100 : 0}%` }} />
+                    </span>
+                    <ChevronDown size={18} className={styles.chevron} />
+                  </button>
+                  {open && (
+                    <div className={styles.lessonList}>
+                      {section.lessons.map((lesson, i) => {
+                        const missing = lesson.missingSince !== null;
+                        const isNext = continueLesson?.id === lesson.id && course.progressPercent < 100;
+                        return (
+                          <button
+                            key={lesson.id}
+                            className={`${styles.lessonRow} ${lesson.completed ? styles.lessonDone : ''} ${isNext ? styles.lessonNext : ''}`}
+                            onClick={() => openLesson(lesson.id)}
+                            title={lesson.title}
+                          >
+                            <span className={styles.lessonStatus} aria-hidden="true">
+                              {missing ? (
+                                <FileWarning size={13} />
+                              ) : lesson.completed ? (
+                                <Check size={12} strokeWidth={3} />
+                              ) : lesson.fileType === 'practice' ? (
+                                <FileText size={12} />
+                              ) : (
+                                <span>{firstNumber + i + 1}</span>
+                              )}
+                            </span>
+                            <span className={styles.lessonTitle}>{splitOrdinal(lesson.title).text}</span>
+                            {isNext && <span className="badge">Up next</span>}
+                            {missing && (
+                              <span
+                                className="badge badge-warning"
+                                title={`File not found since ${formatDateTime(lesson.missingSince)} — progress and notes are kept`}
+                              >
+                                File missing
+                              </span>
+                            )}
+                            <span className={styles.lessonType}>
+                              {lesson.fileType === 'practice' ? 'Practice' : lesson.duration !== null ? formatTime(lesson.duration) : 'Video'}
+                            </span>
+                            <span className={styles.lessonPlay} aria-hidden="true">
+                              <Play size={12} fill="currentColor" />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-      <ResourceSection courseId={course.id} />
+          <aside className={styles.aside}>
+            {continueLesson && (
+              <div className={`card ${styles.upNext}`}>
+                <span className="eyebrow">{course.progressPercent === 100 ? 'Course complete' : started ? 'Up next' : 'First lesson'}</span>
+                <div className={styles.upNextTitle}>{splitOrdinal(continueLesson.title).text}</div>
+                {continueSection && (
+                  <div className={styles.upNextMeta}>{splitOrdinal(continueSection.title).text}</div>
+                )}
+                <button className="btn btn-primary" onClick={() => openLesson(continueLesson.id)}>
+                  <Play size={14} fill="currentColor" /> {started ? 'Continue' : 'Start'}
+                </button>
+              </div>
+            )}
+            <div className={`card ${styles.statsCard}`}>
+              <div className={styles.statLine}>
+                <span>Completed</span>
+                <strong>{course.completedCount}</strong>
+              </div>
+              <div className={styles.statLine}>
+                <span>Remaining</span>
+                <strong>{remaining}</strong>
+              </div>
+              {totalSeconds > 0 && (
+                <div className={styles.statLine}>
+                  <span>Total length</span>
+                  <strong>{formatLength(totalSeconds)}</strong>
+                </div>
+              )}
+              <div className={styles.statLine}>
+                <span>Sections</span>
+                <strong>{course.sections.length}</strong>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {tab === 'quizzes' && (
+        <section className={styles.tabPanel}>
+          <QuizManager courseId={course.id} />
+        </section>
+      )}
+
+      {tab === 'resources' && (
+        <section className={styles.tabPanel}>
+          <ResourceSection courseId={course.id} />
+        </section>
+      )}
 
       {showHealth && health && (
         <Modal label="Fix missing files" onClose={() => setShowHealth(false)} wide>

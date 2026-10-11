@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FolderOpen, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X, MoreVertical,
+  FolderOpen, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X, MoreVertical, Plus,
 } from 'lucide-react';
 import type { CourseWithProgress, ImportResult, RescanResult } from '../../types';
 import { api } from '../../services/api';
@@ -129,25 +129,62 @@ export default function Library({ filter = 'all' }: Props) {
     refreshAll();
   };
 
-  const titles: Record<Filter, { title: string; subtitle: string }> = {
-    all: { title: 'My Courses', subtitle: 'All imported courses live here.' },
-    'in-progress': { title: 'In Progress', subtitle: 'Courses you are currently studying.' },
-    completed: { title: 'Completed', subtitle: 'Courses you have finished. Great work!' },
+  const counts = {
+    all: courses.length,
+    'in-progress': courses.filter((c) => c.progressPercent > 0 && c.progressPercent < 100).length,
+    completed: courses.filter((c) => c.progressPercent === 100).length,
   };
+  const tabs: Array<{ id: Filter; label: string; route: Parameters<typeof navigate>[0] }> = [
+    { id: 'all', label: 'All courses', route: { name: 'library' } },
+    { id: 'in-progress', label: 'In progress', route: { name: 'in-progress' } },
+    { id: 'completed', label: 'Completed', route: { name: 'completed' } },
+  ];
+  const totalLessons = courses.reduce((n, c) => n + c.lessonCount, 0);
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.header}>
+    <div className="page fade-in">
+      <div className="page-header">
         <div>
-          <h1>{titles[filter].title}</h1>
-          <p>{titles[filter].subtitle}</p>
+          <h1>Courses</h1>
+          <p>
+            {courses.length === 0
+              ? 'Import a folder of videos to build your library.'
+              : `${courses.length} course${courses.length === 1 ? '' : 's'} · ${totalLessons} lessons, stored on this device`}
+          </p>
         </div>
-        {filter === 'all' && courses.length > 0 && (
-          <button className="btn btn-ghost btn-sm" onClick={handleRescanAll} title="Rescan every course folder for new files">
-            <RefreshCw size={14} /> Rescan all
+        <div className="page-actions">
+          {courses.length > 0 && (
+            <button className="btn btn-ghost" onClick={handleRescanAll} title="Rescan every course folder for new files">
+              <RefreshCw size={15} /> Rescan all
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={handleImport}>
+            <Plus size={16} /> Import course
           </button>
-        )}
+        </div>
       </div>
+
+      {courses.length > 0 && (
+        <div className="tabs" role="tablist" aria-label="Filter courses">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              className="tab"
+              aria-selected={filter === t.id}
+              onClick={() => navigate(t.route)}
+            >
+              {t.label}
+              <span className="count">{counts[t.id]}</span>
+            </button>
+          ))}
+          {searchQuery.trim() && (
+            <span className={styles.filterInfo}>
+              Matching “{searchQuery.trim()}”
+            </span>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className={styles.courseGrid} aria-label="Loading courses">
@@ -164,10 +201,10 @@ export default function Library({ filter = 'all' }: Props) {
       ) : loadError ? (
         <LoadError message="Could not load your courses." onRetry={refreshAll} />
       ) : filtered.length === 0 ? (
-        <div className={`card ${styles.emptyState}`}>
+        <div className={`card emptyState ${styles.emptyCard}`}>
           {filter === 'all' ? (
             <>
-              <div className={styles.emptyIcon}>
+              <div className="emptyIcon">
                 <FolderOpen size={30} strokeWidth={1.8} />
               </div>
               <h2>No courses yet</h2>
@@ -179,26 +216,26 @@ export default function Library({ filter = 'all' }: Props) {
             </>
           ) : filter === 'completed' ? (
             <>
-              <div className={styles.emptyIcon}>
+              <div className="emptyIcon">
                 <CheckCircle2 size={30} strokeWidth={1.8} />
               </div>
               <h2>No completed courses yet</h2>
               <p>Finish all lessons in a course to see it here.</p>
               <button className="btn btn-primary" onClick={() => navigate({ name: 'library' })}>
                 <FolderOpen size={16} />
-                Browse My Courses
+                Browse all courses
               </button>
             </>
           ) : (
             <>
-              <div className={styles.emptyIcon}>
+              <div className="emptyIcon">
                 <PlayCircle size={30} strokeWidth={1.8} />
               </div>
               <h2>No courses in progress</h2>
               <p>Start learning a course to see it here.</p>
               <button className="btn btn-primary" onClick={() => navigate({ name: 'library' })}>
                 <FolderOpen size={16} />
-                Browse My Courses
+                Browse all courses
               </button>
             </>
           )}

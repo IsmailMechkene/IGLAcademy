@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft, BarChart3, Clock, Flag, ListX, TrendingUp,
+  BarChart3, Clock, Flag, ListX, TrendingUp,
 } from 'lucide-react';
 import type { PracticeExamContent, QuizAttemptDetail, QuizAttemptSummary } from '../../types';
 import { api } from '../../services/api';
-import { useApp } from '../../App';
+import { useApp, useCrumbs } from '../../App';
 import { formatDateTime } from '../../utils/format';
 import { compareAttempts, timingSummary, topicScores } from '../../utils/examAnalytics';
 import QuizReview from '../../components/Quiz/QuizReview';
@@ -42,6 +42,11 @@ function TrendChart({ attempts, passPercent }: { attempts: QuizAttemptSummary[];
 export default function ExamStats({ filePath }: Props) {
   const { navigate, settings } = useApp();
   const [content, setContent] = useState<PracticeExamContent | null>(null);
+  useCrumbs(
+    content
+      ? [{ label: 'Practice Exams', route: { name: 'practice' } }, { label: content.title }, { label: 'Analytics' }]
+      : null,
+  );
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([]);
   const [details, setDetails] = useState<Map<number, QuizAttemptDetail>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -130,29 +135,37 @@ export default function ExamStats({ filePath }: Props) {
   };
 
   if (loading) {
-    return <div className="muted" style={{ padding: 48 }}>Loading analytics...</div>;
+    return (
+      <div className="page">
+        <div className="skeleton" style={{ width: 360, height: 30 }} />
+        <div className="skeleton" style={{ height: 220, borderRadius: 16 }} />
+      </div>
+    );
   }
 
   if (loadError || !content) {
     return (
-      <div className={styles.page}>
+      <div className="page">
         <LoadError message="Could not load exam analytics." onRetry={() => navigate({ name: 'practice' })} />
       </div>
     );
   }
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.backRow}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate({ name: 'practice' })}>
-          <ArrowLeft size={14} /> Practice Exams
-        </button>
-      </div>
-      <div className={styles.header}>
-        <h1>{content.title}</h1>
-        <p>
-          {content.questions.length} questions · {attempts.length} attempt{attempts.length === 1 ? '' : 's'}
-        </p>
+    <div className="page fade-in">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow">Exam analytics</div>
+          <h1 style={{ marginTop: 6 }}>{content.title}</h1>
+          <p>
+            {content.questions.length} questions · {attempts.length} attempt{attempts.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => navigate({ name: 'examfile', filePath })}>
+            {attempts.length > 0 ? 'Retake exam' : 'Start exam'}
+          </button>
+        </div>
       </div>
 
       {attempts.length === 0 ? (

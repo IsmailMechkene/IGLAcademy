@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Clock3, FileText, FolderOpen, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
+import { Check, Clock3, FileText, FolderOpen, Pencil, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
 import type { CourseWithProgress, Note } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatDateTime } from '../../utils/format';
+import { cleanTitle, splitOrdinal } from '../../utils/titles';
 import { renderMarkdown } from '../../utils/markdown';
 import LoadError from '../../components/LoadError/LoadError';
 import Modal from '../../components/Modal/Modal';
@@ -119,17 +120,20 @@ export default function NotesPage() {
   };
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.header}>
-        <h1>Notes</h1>
-        <div className={styles.toolbar}>
+    <div className="page fade-in">
+      <div className="page-header">
+        <div>
+          <h1>Notes</h1>
+          <p>Everything you have written while learning, searchable in one place.</p>
+        </div>
+        <div className="page-actions">
           <div className={styles.searchWrap}>
             <span className={styles.searchIcon}>
               <Search size={15} />
             </span>
             <input
               className="input"
-              style={{ paddingLeft: 40 }}
+              style={{ paddingLeft: 38, width: 280 }}
               placeholder="Search notes..."
               aria-label="Search notes"
               value={search}
@@ -147,7 +151,7 @@ export default function NotesPage() {
       ) : loadError ? (
         <LoadError message="Could not load your notes." onRetry={() => load(search.trim() || undefined)} />
       ) : notes.length === 0 ? (
-        <div className={`card ${styles.empty}`}>
+        <div className={`card emptyState ${styles.empty}`}>
           <StickyNote size={32} style={{ opacity: 0.4, marginBottom: 4 }} />
           <h2>{search ? 'No notes match your search' : 'No notes yet'}</h2>
           <p>{search ? 'Try a different search term.' : 'Open a lesson and use the notes panel to write your first note.'}</p>
@@ -163,45 +167,49 @@ export default function NotesPage() {
           {notes.map((note) => (
             <div key={note.id} className={`card ${styles.noteCard}`} onClick={() => jumpToNote(note)}>
               <div className={styles.noteTop}>
-                <div>
+                <div className={styles.noteHeading}>
                   <div className={styles.noteTitle}>{note.title || 'Untitled note'}</div>
                   <div className={styles.noteContext}>
-                    <FileText size={12} />
-                    {note.courseTitle}
+                    <span className={styles.contextChip} title={note.courseTitle}>
+                      <FileText size={12} />
+                      {cleanTitle(note.courseTitle)}
+                    </span>
                     {note.lessonTitle && (
-                      <>
-                        <span>·</span>
+                      <span className={styles.contextChip} title={note.lessonTitle}>
                         <PlayCircle size={12} />
-                        {note.lessonTitle}
-                      </>
+                        {splitOrdinal(note.lessonTitle).text}
+                      </span>
                     )}
                   </div>
                 </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditor(note);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  title="Review this note later"
-                  aria-label="Review this note later"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void api().review.add({
-                      courseId: note.courseId,
-                      kind: 'note',
-                      refId: String(note.id),
-                      title: note.title || 'Untitled note',
-                    });
-                  }}
-                >
-                  <Clock3 size={13} /> Later
-                </button>
+                <div className={styles.noteActions} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="iconBtn"
+                    title="Review this note later"
+                    aria-label="Review this note later"
+                    onClick={() => {
+                      void api().review.add({
+                        courseId: note.courseId,
+                        kind: 'note',
+                        refId: String(note.id),
+                        title: note.title || 'Untitled note',
+                      });
+                    }}
+                  >
+                    <Clock3 size={15} />
+                  </button>
+                  <button className="iconBtn" title="Edit note" aria-label="Edit note" onClick={() => openEditor(note)}>
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    className="iconBtn danger"
+                    title="Delete note"
+                    aria-label="Delete note"
+                    onClick={() => setConfirmDelete(note)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
               {note.content.trim() && (
                 <div className={styles.noteContent}>
@@ -224,16 +232,7 @@ export default function NotesPage() {
               )}
               <div className={styles.noteMeta}>
                 <span>Edited {formatDateTime(note.updatedAt)}</span>
-                <button
-                  className="btn btn-danger btn-sm"
-                  style={{ marginLeft: 'auto' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmDelete(note);
-                  }}
-                >
-                  <Trash2 size={13} /> Delete
-                </button>
+                {note.lessonId && <span className={styles.openLesson}>Open lesson →</span>}
               </div>
             </div>
           ))}

@@ -19,6 +19,8 @@ export default function ReviewPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [due, setDue] = useState<{ itemsDue: number; cardsDue: number }>({ itemsDue: 0, cardsDue: 0 });
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'cards' | 'later' | 'bookmarks'>('cards');
+  const [showNewDeck, setShowNewDeck] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: 'deck'; id: number; title: string; cardCount: number }
     | { kind: 'card'; id: number; deckId: number; title: string }
@@ -90,7 +92,8 @@ export default function ReviewPage() {
 
   const createDeck = async () => {
     const courseId = Number(newDeckCourse);
-    if (!courseId || !newDeckTitle.trim()) return;
+    if (!courseId) return;
+    if (newDeckSource === 'manual' && !newDeckTitle.trim()) return;
     try {
       if (newDeckSource === 'quiz' && newDeckQuiz) {
         await api().flashcards.fromQuiz({ courseId, quizId: Number(newDeckQuiz) });
@@ -100,6 +103,8 @@ export default function ReviewPage() {
         await api().flashcards.createDeck({ courseId, title: newDeckTitle.trim(), source: 'manual' });
       }
       setNewDeckTitle('');
+      setShowNewDeck(false);
+      setTab('cards');
       load();
     } catch (err) {
       await api().app.showError('Could not create deck', err instanceof Error ? err.message : 'Unknown error');
@@ -132,12 +137,23 @@ export default function ReviewPage() {
 
   const pendingItems = items.filter((i) => !i.done);
   const doneItems = items.filter((i) => i.done);
+  const canCreateDeck =
+    Boolean(newDeckCourse) &&
+    !(newDeckSource === 'manual' && !newDeckTitle.trim()) &&
+    !(newDeckSource === 'quiz' && !newDeckQuiz);
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.header}>
-        <h1>Review</h1>
-        <p>Bookmarks, review-later queue, and spaced-repetition flashcards.</p>
+    <div className="page fade-in">
+      <div className="page-header">
+        <div>
+          <h1>Review</h1>
+          <p>Spaced-repetition flashcards, your review-later queue and bookmarked moments.</p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setShowNewDeck(true)} disabled={courses.length === 0}>
+            <Plus size={16} /> New deck
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -148,7 +164,7 @@ export default function ReviewPage() {
         <>
           {(due.itemsDue > 0 || due.cardsDue > 0) && (
             <div className={`card ${styles.dueBanner}`}>
-              <Brain size={22} color="var(--accent)" />
+              <span className={styles.dueIcon}><Brain size={20} /></span>
               <div className={styles.dueInfo}>
                 <div className={styles.dueTitle}>Up for review</div>
                 <div className={styles.dueMeta}>
@@ -160,65 +176,29 @@ export default function ReviewPage() {
             </div>
           )}
 
+          <div className="tabs" role="tablist" aria-label="Review sections">
+            <button role="tab" className="tab" aria-selected={tab === 'cards'} onClick={() => setTab('cards')}>
+              Flashcards <span className="count">{decks.length}</span>
+            </button>
+            <button role="tab" className="tab" aria-selected={tab === 'later'} onClick={() => setTab('later')}>
+              Review later <span className="count">{pendingItems.length}</span>
+            </button>
+            <button role="tab" className="tab" aria-selected={tab === 'bookmarks'} onClick={() => setTab('bookmarks')}>
+              Bookmarks <span className="count">{bookmarks.length}</span>
+            </button>
+          </div>
+
+          {tab === 'cards' && (
           <section className={styles.section} aria-label="Flashcards">
-            <div className={styles.sectionHeader}>
-              <h2>Flashcards</h2>
-            </div>
-            <div className={styles.form}>
-              <select
-                className="input"
-                aria-label="Deck course"
-                value={newDeckCourse}
-                onChange={(e) => setNewDeckCourse(e.target.value)}
-              >
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
-                ))}
-              </select>
-              <input
-                className="input"
-                placeholder="New deck title"
-                aria-label="New deck title"
-                value={newDeckTitle}
-                onChange={(e) => setNewDeckTitle(e.target.value)}
-              />
-              <select
-                className="input"
-                aria-label="Deck source"
-                value={newDeckSource}
-                onChange={(e) => setNewDeckSource(e.target.value as 'manual' | 'quiz' | 'notes')}
-              >
-                <option value="manual">Blank deck</option>
-                <option value="quiz">From a quiz</option>
-                <option value="notes">From course notes</option>
-              </select>
-              {newDeckSource === 'quiz' && (
-                <select
-                  className="input"
-                  aria-label="Source quiz"
-                  value={newDeckQuiz}
-                  onChange={(e) => setNewDeckQuiz(e.target.value)}
-                >
-                  <option value="">Choose a quiz...</option>
-                  {quizzesForCourse.map((q) => (
-                    <option key={q.id} value={q.id}>{q.title}</option>
-                  ))}
-                </select>
-              )}
-              <button
-                className="btn btn-primary btn-sm"
-                disabled={
-                  !newDeckCourse ||
-                  (newDeckSource === 'manual' && !newDeckTitle.trim()) ||
-                  (newDeckSource === 'quiz' && !newDeckQuiz)
-                }
-                onClick={createDeck}
-              >
-                <Plus size={14} /> Create deck
-              </button>
-            </div>
             {decks.length === 0 ? (
-              <div className={styles.empty}>No flashcard decks yet. Create one above.</div>
+              <div className={`card emptyState ${styles.emptyCard}`}>
+                <div className="emptyIcon"><Layers size={24} /></div>
+                <h2>No flashcard decks yet</h2>
+                <p>Build a deck by hand, or generate one from a quiz or from your notes. Cards are scheduled with spaced repetition.</p>
+                <button className="btn btn-primary" onClick={() => setShowNewDeck(true)} disabled={courses.length === 0}>
+                  <Plus size={16} /> New deck
+                </button>
+              </div>
             ) : (
               <div className={styles.list}>
                 {decks.map((deck) => (
@@ -243,7 +223,7 @@ export default function ReviewPage() {
                       </div>
                       <div className={styles.rowActions}>
                         <button
-                          className="btn btn-primary btn-sm"
+                          className={`btn btn-sm ${deck.dueCount > 0 ? 'btn-primary' : 'btn-soft'}`}
                           disabled={deck.cardCount === 0}
                           onClick={() => setSession({ deckId: deck.id, title: deck.title, all: deck.dueCount === 0 })}
                         >
@@ -253,7 +233,8 @@ export default function ReviewPage() {
                           Cards
                         </button>
                         <button
-                          className="btn btn-ghost btn-sm"
+                          className="iconBtn danger"
+                          title="Delete deck"
                           aria-label={`Delete deck ${deck.title}`}
                           onClick={() =>
                             setPendingDelete({ kind: 'deck', id: deck.id, title: deck.title, cardCount: deck.cardCount })
@@ -318,14 +299,16 @@ export default function ReviewPage() {
               </div>
             )}
           </section>
+          )}
 
+          {tab === 'later' && (
           <section className={styles.section} aria-label="Review later queue">
-            <div className={styles.sectionHeader}>
-              <h2>Review later</h2>
-              <span className="muted" style={{ fontSize: 12.5 }}>{pendingItems.length} open</span>
-            </div>
             {pendingItems.length === 0 && doneItems.length === 0 ? (
-              <div className={styles.empty}>Nothing queued. Use "Later" on lessons, notes, or exams to queue them here.</div>
+              <div className={`card emptyState ${styles.emptyCard}`}>
+                <div className="emptyIcon"><Clock size={24} /></div>
+                <h2>Nothing queued</h2>
+                <p>Use the “review later” button on a lesson, note or practice exam to come back to it here.</p>
+              </div>
             ) : (
               <div className={styles.list}>
                 {pendingItems.map((item) => (
@@ -398,14 +381,16 @@ export default function ReviewPage() {
               </div>
             )}
           </section>
+          )}
 
+          {tab === 'bookmarks' && (
           <section className={styles.section} aria-label="Bookmarks">
-            <div className={styles.sectionHeader}>
-              <h2>Bookmarks</h2>
-              <span className="muted" style={{ fontSize: 12.5 }}>{bookmarks.length} saved</span>
-            </div>
             {bookmarks.length === 0 ? (
-              <div className={styles.empty}>No bookmarks yet. Press B while watching to bookmark a moment.</div>
+              <div className={`card emptyState ${styles.emptyCard}`}>
+                <div className="emptyIcon"><Bookmark size={24} /></div>
+                <h2>No bookmarks yet</h2>
+                <p>Press <kbd>B</kbd> while watching to bookmark a moment, then jump straight back to it from here.</p>
+              </div>
             ) : (
               <div className={styles.list}>
                 {bookmarks.map((b) => (
@@ -456,7 +441,76 @@ export default function ReviewPage() {
               </div>
             )}
           </section>
+          )}
         </>
+      )}
+
+      {showNewDeck && (
+        <Modal label="New flashcard deck" onClose={() => setShowNewDeck(false)}>
+          <h2>New flashcard deck</h2>
+          <div className={styles.deckForm}>
+            <label className={styles.field}>
+              <span>Course</span>
+              <select
+                className="input"
+                value={newDeckCourse}
+                onChange={(e) => setNewDeckCourse(e.target.value)}
+              >
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span>Start from</span>
+              <select
+                className="input"
+                value={newDeckSource}
+                onChange={(e) => setNewDeckSource(e.target.value as 'manual' | 'quiz' | 'notes')}
+              >
+                <option value="manual">A blank deck</option>
+                <option value="quiz">A quiz (one card per question)</option>
+                <option value="notes">This course's notes</option>
+              </select>
+            </label>
+            {newDeckSource === 'manual' && (
+              <label className={styles.field}>
+                <span>Deck title</span>
+                <input
+                  className="input"
+                  placeholder="e.g. IAM essentials"
+                  value={newDeckTitle}
+                  data-autofocus
+                  onChange={(e) => setNewDeckTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && canCreateDeck) void createDeck();
+                  }}
+                />
+              </label>
+            )}
+            {newDeckSource === 'quiz' && (
+              <label className={styles.field}>
+                <span>Quiz</span>
+                <select
+                  className="input"
+                  value={newDeckQuiz}
+                  onChange={(e) => setNewDeckQuiz(e.target.value)}
+                >
+                  <option value="">{quizzesForCourse.length === 0 ? 'This course has no quizzes' : 'Choose a quiz…'}</option>
+                  {quizzesForCourse.map((q) => (
+                    <option key={q.id} value={q.id}>{q.title}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-ghost" onClick={() => setShowNewDeck(false)}>Cancel</button>
+            <button className="btn btn-primary" disabled={!canCreateDeck} onClick={() => void createDeck()}>
+              <Plus size={15} /> Create deck
+            </button>
+          </div>
+        </Modal>
       )}
 
       {session && (

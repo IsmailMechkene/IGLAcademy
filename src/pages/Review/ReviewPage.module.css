@@ -1,107 +1,35 @@
-.page {
-  padding: 24px 28px;
-  max-width: 1000px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.header h1 {
-  font-size: var(--font-size-title);
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.02em;
-}
-
-.header p {
-  margin: 2px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
 .section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .sectionHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
 }
 
 .sectionHeader h2 {
-  font-size: var(--font-size-section);
-  font-weight: 650;
   margin: 0;
+  font-size: var(--font-size-section);
+  font-weight: 640;
 }
 
 .dueBanner {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 18px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
   border-color: var(--accent-border);
+  background: linear-gradient(90deg, var(--accent-soft), var(--bg-card) 70%);
 }
 
-.dueInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.dueTitle {
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.dueMeta {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-}
-
-.rowMain {
-  flex: 1;
-  min-width: 0;
-}
-
-.rowTitle {
-  font-size: 13.5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rowMeta {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-
-.rowActions {
-  display: flex;
-  gap: 5px;
-  flex-shrink: 0;
-  align-items: center;
-}
-
-.resourceIconLike {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+.dueIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
   display: flex;
@@ -110,22 +38,96 @@
   flex-shrink: 0;
 }
 
+.dueInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.dueTitle {
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.dueMeta {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
 .list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
-.checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+}
+
+.row:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 14px;
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.rowMeta svg {
+  vertical-align: -1px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
 }
 
+.resourceIconLike {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0 11px;
+}
+
 .done {
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .done .rowTitle {
@@ -134,39 +136,34 @@
 
 .form {
   display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
 }
 
-.form .input,
-.form select.select {
+.form .input {
   flex: 1;
-  min-width: 150px;
 }
 
 .cardList {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 6px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  gap: 6px;
+  margin: 8px 0 4px 54px;
+  padding: 12px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
+  background: var(--bg-inset);
 }
 
 .miniCard {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.miniCard:last-child {
-  border-bottom: none;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 13px;
 }
 
 .miniCard span {
@@ -175,20 +172,51 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.miniCard strong {
+  color: var(--text);
 }
 
 .dueChip {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--warning);
-  background: var(--warning-soft);
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
   border-radius: 999px;
-  padding: 2px 7px;
-  white-space: nowrap;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .empty {
   color: var(--text-muted);
+  font-size: 13px;
+}
+
+.emptyCard {
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(60% 80% at 50% 0%, var(--accent-soft), transparent 70%),
+    var(--bg-card);
+}
+
+.deckForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span {
   font-size: 12.5px;
-  padding: 6px 2px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }

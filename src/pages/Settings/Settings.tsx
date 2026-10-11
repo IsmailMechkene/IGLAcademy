@@ -87,9 +87,12 @@ export default function Settings() {
   };
 
   return (
-    <div className={`fade-in ${styles.page}`}>
-      <div className={styles.header}>
-        <h1>Settings</h1>
+    <div className="page page-narrow fade-in">
+      <div className="page-header">
+        <div>
+          <h1>Settings</h1>
+          <p>Playback, exams, imports and your data. Everything stays on this device.</p>
+        </div>
       </div>
 
       <section className={`card ${styles.section}`}>

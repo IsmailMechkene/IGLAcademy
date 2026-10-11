@@ -6,6 +6,7 @@ import type { CourseResource, ResourceKind, ResourceSearchHit } from '../../type
 import { api } from '../../services/api';
 import { renderMarkdown } from '../../utils/markdown';
 import Modal from '../Modal/Modal';
+import { splitOrdinal } from '../../utils/titles';
 import styles from './ResourceSection.module.css';
 
 interface Props {
@@ -170,13 +171,13 @@ export default function ResourceSection({ courseId }: Props) {
       ) : (
         grouped.map(([sectionTitle, items]) => (
           <div key={sectionTitle}>
-            <div className={styles.groupLabel}>{sectionTitle}</div>
+            <div className={styles.groupLabel} title={sectionTitle}>{splitOrdinal(sectionTitle).text}</div>
             <div className={styles.resourceList}>
               {items.map((resource) => (
                 <div key={resource.id} className={`card ${styles.resourceRow}`}>
                   <span className={styles.resourceIcon}>{kindIcon(resource.kind)}</span>
                   <div className={styles.resourceInfo}>
-                    <div className={styles.resourceTitle} title={resource.title}>{resource.title}</div>
+                    <div className={styles.resourceTitle} title={resource.title}>{splitOrdinal(resource.title).text}</div>
                     <div className={styles.resourceMeta}>
                       <span>{kindLabel(resource.kind)}</span>
                       <span>·</span>
