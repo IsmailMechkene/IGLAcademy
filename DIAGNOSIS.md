@@ -11,7 +11,42 @@ through its real IPC surface and real UI. Nothing in the repo was modified excep
 
 ---
 
-## 0. Status — Phases 0, 1 and 2 applied 2026-10-11
+## 0. Status — Phases 0–4 applied 2026-10-11
+
+### Phases 3 and 4
+
+| ID | Status | What changed | Verified by |
+|---|---|---|---|
+| **M2** | **FIXED** | `formatDate` / `formatDateTime` go through `parseDbTime`, so SQLite `datetime('now')` values are read as UTC. | Unit test (same instant in both formats renders identically). UI probe: a note saved at `19:27:42` UTC shows **"8:27 PM"** local (CET+1), matching the expected value. |
+| **M21** | **FIXED** | Every `due_at` write is ISO-8601: `insertFlashcard` writes it explicitly, IPC `dueAt` is canonicalised by `optionalTimestamp`, and migration 7 rewrites legacy rows. | Unit tests: legacy `2030-01-01 12:00:00` → `2030-01-01T12:00:00.000Z`; the card is no longer due at 11:00, and is due at 13:00. |
+| **M3** | **FIXED** | Course roots are canonicalised (`realpathSync.native`), and paths are compared through `pathKey` (case-insensitive on Windows): duplicate detection, rescan matching and media containment. | Unit tests (upper/lower case, `..\` spellings). Runtime probe: importing the same folder in upper case → `duplicate`. |
+| **M10** | **FIXED** | Sections store `rel_path` (migration 8), and rescan matches on it instead of on title. Legacy rows get backfilled from their lessons. A renamed folder is adopted rather than duplicated (the title follows unless you renamed it yourself). A file moved to another folder moves with its progress. Same-named siblings get "Parent / Leaf" titles. | 7 unit tests: siblings kept apart, folder rename (ids, progress and notes kept, 0 missing), user title preserved, cross-folder move, legacy backfill. |
+| **M6** | **FIXED** | `settingsSchema.ts` is the single whitelist: `settings:set`/`get` reject unknown keys, and `getAllSettings` drops stored rows that are unknown or invalid. It is an exhaustive `switch`, so a new setting without a rule fails to compile. | Unit tests + probe: `settings.set('totallyMadeUpKey', 1)` → rejected. |
+| **M7** | **FIXED** | A shared `ConfirmDialog` (focus starts on Cancel) now guards deleting a note (panel + page), a quiz, a deck and a card. | UI probe: Delete → dialog with focus on **Cancel**; Cancel keeps the note (1); confirming removes it (0). |
+| **M8** | **FIXED** | With several courses, "New note" asks which course the note belongs to, and the editor shows the course/lesson. | UI probe: picker lists both courses; choosing Beta makes a note stored under **Beta Course**. |
+| **M9** | **FIXED** | A `useNoteAutosave` hook owns its own timer and flushes pending edits on close, note switch, unmount and `ismalearn:window-closing`. Search got a separate timer. Also fixed in passing: "insert timestamp" changed the text without ever saving it. | UI probe: text typed and closed **within** the debounce was saved; same for the window-closing event. |
+| **M11** | **FIXED** | Each attempt records a `content_hash`, and each exam version's questions are stored once (migration 9, deduplicated, included in backups, pruned with the source). A submit is scored against the version that was served, even if the file changed mid-exam. An old attempt that can't be matched returns an explanation instead of `null`, and analytics take topics from the attempt itself. | 5 unit tests: review still works after an edit, a mid-exam change scores 100%, an unknown version is refused clearly, a legacy attempt explains itself, snapshots are deduplicated and pruned. |
+| **H5** | **FIXED** | Electron 33.4 → **44.7.0**, better-sqlite3 → 13.0.3, @electron/rebuild → 4.2, electron-builder → 26.15. `media://` no longer has `supportFetchAPI` (the precondition of GHSA-v3j7-r9gq-3gjw), and `connect-src` no longer lists `media:`. Text previews (`resources:readText`) and subtitles (`media:subtitleText` → `blob:` URL) come over IPC instead. | Probe on the Electron 44 build: video 206 + seek, PDF iframe 200, `fetch('media://…')` refused, subtitles via the real CC menu → `blob:` track, **2 cues**. `npm run dist` + `npm run smoke` pass. |
+| M13 | **FIXED** | Logger buffers lines and appends asynchronously, tracks size in memory and flushes synchronously on exit/crash. Renderer console forwarding uses the non-deprecated `details` form and only forwards warnings/errors. | Probe log shows the expected entries. |
+| M18 | **FIXED** | Parsed exams are cached by path + size + mtime (LRU 64). | Unit test: a changed file is re-parsed right away. |
+| M20 | **FIXED** | New `courses:getLesson` (scoped to the course). The player fetches the course tree once instead of again on every lesson switch. | Probe: correct lesson/section, and `null` for the wrong course. |
+| L1 | **FIXED** | ESLint 10 flat config (`npm run lint`, clean) + `.github/workflows/ci.yml` (typecheck, lint, test, build on windows-latest). Note: e2e is not in CI, because it downloads videos and reads a local exam folder. | `eslint .` exits 0. |
+| L2, L3 | **FIXED** | `.seed-bundle.cjs` is always cleaned up and gitignored. `data/practice_exams/` is gitignored. Both were untracked with `git rm --cached` and **the files are still on disk**. | `git status` shows 23 staged deletions (index only). |
+| L4 | **FIXED** | Thumbnails get the same course-folder containment check as lessons and resources. | Unit test. |
+| L5 | **FIXED** | `will-navigate` guard: only the app bundle (or the dev server origin) may load. | Probe: `location.href = 'https://example.com/'` → still on `dist/index.html`, and the attempt is logged. |
+| L6 | **FIXED** (partly moot) | Migration 10 indexes `flashcards(deck_id, position)`. `question_id` was already indexed in v5. The global path lookups were dead code and are gone (L11). | Unit test. |
+| L7 | **covered by H6** | Startup recovery (quarantine + dialog) already handles a bad ledger. Making migration 1 `IF NOT EXISTS` would only move the failure to migration 2. | — |
+| L8 | **FIXED** | Resource rows no longer `statSync` each file; sizes come from `fs.promises.stat` in the IPC layer. | Unit test (size 5 / missing −1). |
+| L9 | **FIXED** | The e2e scripts wait for conditions instead of sleeping, and the runner no longer retries. | 1 of 7 runs failed (both scripts, the first launch right after the native rebuild; its log wasn't captured). The 6 runs after that all passed. |
+| L10 | **FIXED** | `updateSettings` writes outside the state updater, and a rejected write rolls the UI back and shows an error. | Code + typecheck. |
+| L11 | **FIXED** | Removed `findLessonByPath`, `findResourceByPath`, `updateResourceFilePath` and `getQuizByLessonId`. `requirePath` (null-byte check) now guards every path-shaped IPC argument. | Typecheck + lint. |
+| M19 | **FIXED** (adjacent) | `postinstall` moved into `scripts`, so the README's `npm install` claim is true. `engines.node >= 22` added (needed by better-sqlite3 13). | — |
+
+After Phases 3 + 4: `tsc --noEmit` clean, `eslint .` clean, **138/138 unit tests** (was 111), `npm run build`
+clean, `npm run test:e2e` passes, `npm run dist` + `npm run smoke` pass (the smoke test now uses a throwaway
+profile, so it no longer migrates your real database).
+
+### Phases 0–2
 
 Phase 2 was run as **"delete the fakes"**: anything with nothing behind it was removed rather than
 built. Features that were fully implemented and merely *unwired* were connected instead — deleting
