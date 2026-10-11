@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTitle, courseInitials, titleHue, examGroupInfo } from '../src/utils/titles';
+import { cleanTitle, courseInitials, titleHue, examGroupInfo, splitOrdinal, shortExamTitle } from '../src/utils/titles';
 
 describe('cleanTitle', () => {
   it('strips marketplace prefixes and suffixes', () => {
@@ -74,19 +74,58 @@ describe('examGroupInfo', () => {
     expect(examGroupInfo('Practice Test #1 (XYZ-C99)')).toEqual({ code: 'XYZ-C99', name: 'XYZ-C99' });
   });
 
-  it('derives a group from the certification name when no code is present', () => {
+  it('maps a known certification name to its exam, so coded and uncoded titles group together', () => {
     expect(examGroupInfo('Practice Test #1 - AWS Certified Solutions Architect Associate')).toEqual({
-      code: null,
-      name: 'AWS Certified Solutions Architect Associate',
+      code: 'SAA-C03',
+      name: 'AWS Certified Solutions Architect – Associate',
     });
-    // all-caps words (AI, AWS) keep their casing
     expect(examGroupInfo('Practice Test #1 - Full-Exam - AWS Certified AI Practitioner')).toEqual({
-      code: null,
+      code: 'AIF-C01',
       name: 'AWS Certified AI Practitioner',
+    });
+  });
+
+  it('derives a group from an unknown certification name', () => {
+    // all-caps words (AI, AWS) keep their casing
+    expect(examGroupInfo('Practice Test #2 - AWS Certified IoT Specialist')).toEqual({
+      code: null,
+      name: 'AWS Certified IoT Specialist',
     });
   });
 
   it('groups unrecognized titles under Other', () => {
     expect(examGroupInfo('Random Networking Quiz')).toEqual({ code: null, name: 'Other practice exams' });
+  });
+});
+
+describe('splitOrdinal', () => {
+  it('splits a leading number followed by a separator', () => {
+    expect(splitOrdinal('01 - Welcome to the course')).toEqual({ index: 1, text: 'Welcome to the course' });
+    expect(splitOrdinal('12. Security groups')).toEqual({ index: 12, text: 'Security groups' });
+    expect(splitOrdinal('3_Intro')).toEqual({ index: 3, text: 'Intro' });
+    expect(splitOrdinal('1.1 Practice Test #1')).toEqual({ index: 1, text: 'Practice Test #1' });
+  });
+
+  it('leaves titles that merely start with a number alone', () => {
+    expect(splitOrdinal('3 ways to scale')).toEqual({ index: null, text: '3 ways to scale' });
+    expect(splitOrdinal('2024 recap')).toEqual({ index: null, text: '2024 recap' });
+    expect(splitOrdinal('Introduction')).toEqual({ index: null, text: 'Introduction' });
+    expect(splitOrdinal('01 - ')).toEqual({ index: null, text: '01 -' });
+  });
+});
+
+describe('shortExamTitle', () => {
+  it('drops the certification the list is already grouped by', () => {
+    const saa = examGroupInfo('Practice Test #1 - AWS Certified Solutions Architect Associate');
+    expect(shortExamTitle('Practice Test #1 - AWS Certified Solutions Architect Associate', saa)).toBe('Practice Test #1');
+    const dva = examGroupInfo('Practice Test #1 (AWS Certified Developer Associate - DVA-C02)');
+    expect(shortExamTitle('Practice Test #1 (AWS Certified Developer Associate - DVA-C02)', dva)).toBe('Practice Test #1');
+    const aif = examGroupInfo('Practice Test #3 - Full-Exam - AWS Certified AI Practitioner');
+    expect(shortExamTitle('Practice Test #3 - Full-Exam - AWS Certified AI Practitioner', aif)).toBe('Practice Test #3');
+  });
+
+  it('keeps titles that carry other information', () => {
+    const saa = examGroupInfo('SAA-C03');
+    expect(shortExamTitle('Networking deep dive - VPC', saa)).toBe('Networking deep dive - VPC');
   });
 });

@@ -68,6 +68,33 @@ export interface ExamGroup {
   name: string;
 }
 
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * A practice-test title without the certification it belongs to, for lists
+ * already grouped by certification: "Practice Test #1 - AWS Certified Solutions
+ * Architect Associate" -> "Practice Test #1". Falls back to the cleaned title.
+ */
+export function shortExamTitle(title: string, group: ExamGroup): string {
+  const groupKey = normalizeName(group.name.replace(/^AWS Certified /i, ''));
+  const isGroupPart = (part: string) => {
+    const n = normalizeName(part.replace(/^AWS Certified /i, ''));
+    if (!n) return true;
+    if (group.code && n.includes(normalizeName(group.code))) return true;
+    if (/full-?exam/i.test(part)) return true;
+    return groupKey.length > 0 && (n.includes(groupKey) || groupKey.includes(n));
+  };
+  let t = splitOrdinal(title).text;
+  // "(AWS Certified Developer Associate - DVA-C02)"
+  t = t.replace(/\s*\(([^)]*)\)\s*$/, (m, inner: string) => (isGroupPart(inner) ? '' : m));
+  const parts = t.split(/\s+[-–—|]\s+/);
+  const kept = parts.filter((p, i) => i === 0 || !isGroupPart(p));
+  const result = kept.join(' - ').trim();
+  return result || title;
+}
+
 /** Derives the associated certification exam from a practice-exam title. */
 export function examGroupInfo(title: string): ExamGroup {
   const codeMatch = /\b([A-Z]{2,4}-C\d{2})\b/.exec(title ?? '');
@@ -81,7 +108,24 @@ export function examGroupInfo(title: string): ExamGroup {
     const name = `AWS Certified ${words
       .map((w) => (/^[A-Z0-9]+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
       .join(' ')}`;
+    // A name that matches a known certification joins that exam's group, so
+    // files with and without the code in their title are not split apart.
+    const known = Object.entries(EXAM_CODE_NAMES).find(([, n]) => normalizeName(n) === normalizeName(name));
+    if (known) return { code: known[0], name: known[1] };
     return { code: null, name };
   }
   return { code: null, name: 'Other practice exams' };
+}
+
+/**
+ * Splits a leading ordinal off a lesson or section name, so lists can show the
+ * number in its own column: "01 - Welcome" -> { index: 1, text: "Welcome" }.
+ * Only strips when a separator follows the number ("3 ways to scale" stays).
+ */
+export function splitOrdinal(raw: string): { index: number | null; text: string } {
+  const title = (raw ?? '').trim();
+  const m = /^(\d{1,3})(?:\.\d{1,3})?\s*(?:[-–—_:)]|\.(?=\s))\s*(.+)$/.exec(title)
+    ?? /^(\d{1,3})\.\d{1,3}\s+(.+)$/.exec(title);
+  if (!m || !m[2].trim()) return { index: null, text: title };
+  return { index: Number(m[1]), text: m[2].trim() };
 }

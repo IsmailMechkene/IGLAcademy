@@ -6,15 +6,63 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background:
+    radial-gradient(70% 90% at 12% 8%, hsl(var(--h1) 72% 58% / 0.55), transparent 60%),
+    radial-gradient(60% 80% at 92% 100%, hsl(var(--h2) 70% 50% / 0.45), transparent 62%),
+    linear-gradient(160deg, hsl(var(--h1) 30% 14%), hsl(var(--h2) 28% 8%));
+  isolation: isolate;
 }
 
-.initials {
-  font-size: 32px;
-  font-weight: 800;
+.compact {
+  aspect-ratio: 1 / 1;
+  height: 100%;
+}
+
+/* fine grid, faded towards the edges */
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(75% 75% at 50% 50%, #000 20%, transparent 85%);
+  z-index: -1;
+}
+
+.compact .grid {
+  display: none;
+}
+
+.monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 64px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-size: 24px;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
   user-select: none;
+}
+
+.compact .monogram {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  font-size: 12px;
+  border-radius: 0;
 }
 
 .cover img {
@@ -24,7 +72,8 @@
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.25s ease;
+  z-index: 1;
 }
 
 .cover img.visible {

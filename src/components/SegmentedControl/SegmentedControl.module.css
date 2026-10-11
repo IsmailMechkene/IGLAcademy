@@ -3,8 +3,8 @@
   flex-wrap: wrap;
   gap: 3px;
   padding: 3px;
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
+  border-radius: 10px;
+  background: var(--bg-inset);
   border: 1px solid var(--border);
   max-width: 100%;
 }
@@ -16,7 +16,7 @@
   padding: 6px 12px;
   min-height: 30px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 12.5px;
@@ -33,8 +33,13 @@
 }
 
 .segment[aria-checked='true'] {
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
+  background: var(--bg-card);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 620;
+  box-shadow: var(--highlight), var(--shadow-sm);
+}
+
+.segment[aria-checked='true'] svg {
   color: var(--accent);
-  font-weight: 650;
 }

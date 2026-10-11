@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timeAgo, parseDbTime, formatCountdown, formatDateTime, formatDate } from '../src/utils/format';
+import { timeAgo, parseDbTime, formatCountdown, formatDateTime, formatDate, markdownPreview, formatLength } from '../src/utils/format';
 
 const NOW = new Date('2026-10-03T20:00:00Z').getTime();
 
@@ -46,5 +46,26 @@ describe('formatDate / formatDateTime (M2)', () => {
   it('handles missing or invalid input', () => {
     expect(formatDateTime(null)).toBe('—');
     expect(formatDate('garbage')).toBe('—');
+  });
+});
+
+describe('markdownPreview', () => {
+  it('strips markdown syntax into a single line', () => {
+    expect(markdownPreview('## Domains\n- Resilient 26%\n- Fast 24%\n\nSee [0:03](t=3)')).toBe('Domains Resilient 26% Fast 24% See 0:03');
+    expect(markdownPreview('Never use **root**. Enable `MFA`.')).toBe('Never use root. Enable MFA.');
+  });
+
+  it('truncates long text', () => {
+    expect(markdownPreview('a'.repeat(200), 10)).toBe('aaaaaaaaa…');
+  });
+});
+
+describe('formatLength', () => {
+  it('scales units to the length', () => {
+    expect(formatLength(0)).toBe('');
+    expect(formatLength(30)).toBe('30 sec');
+    expect(formatLength(12 * 60)).toBe('12 min');
+    expect(formatLength(120 * 60)).toBe('2 h');
+    expect(formatLength(125 * 60)).toBe('2 h 5 min');
   });
 });

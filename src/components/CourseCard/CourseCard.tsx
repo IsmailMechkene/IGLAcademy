@@ -1,4 +1,4 @@
-import { BookOpen, Play } from 'lucide-react';
+import { BookOpen, Check, Play } from 'lucide-react';
 import type { CourseWithProgress } from '../../types';
 import { useApp } from '../../App';
 import { cleanTitle } from '../../utils/titles';
@@ -33,8 +33,19 @@ export default function CourseCard({ course }: Props) {
     >
       <div className={styles.thumbnail}>
         <CourseCover courseId={course.id} title={course.title} />
+        {course.progressPercent === 100 ? (
+          <span className={`${styles.status} ${styles.statusDone}`}>
+            <Check size={12} strokeWidth={3} /> Completed
+          </span>
+        ) : course.progressPercent > 0 ? (
+          <span className={styles.status}>In progress</span>
+        ) : (
+          <span className={`${styles.status} ${styles.statusNew}`}>New</span>
+        )}
         <span className={styles.playOverlay} aria-hidden="true">
-          <Play size={22} fill="currentColor" />
+          <span className={styles.playButton}>
+            <Play size={18} fill="currentColor" />
+          </span>
         </span>
       </div>
       <div className={styles.body}>
@@ -42,9 +53,11 @@ export default function CourseCard({ course }: Props) {
         <div className={styles.meta}>
           <span className={styles.lessonCount}>
             <BookOpen size={13} aria-hidden="true" />
-            {course.completedCount} of {course.lessonCount} lessons
+            {course.lessonCount} lesson{course.lessonCount === 1 ? '' : 's'}
           </span>
-          <span className={styles.percent}>{course.progressPercent}%</span>
+          <span className={styles.percent}>
+            {course.progressPercent > 0 ? `${course.completedCount}/${course.lessonCount} · ${course.progressPercent}%` : 'Not started'}
+          </span>
         </div>
         <div className={styles.footer}>
           <ProgressBar percent={course.progressPercent} />

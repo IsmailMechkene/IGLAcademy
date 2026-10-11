@@ -77,3 +77,24 @@ export function formatCountdown(totalSeconds: number): string {
   const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
   return `${h > 0 ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}`;
 }
+
+/** One-line plain-text preview of a Markdown note (no #, **, list markers or link syntax). */
+export function markdownPreview(md: string, max = 140): string {
+  const text = (md ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}|[-*+]|\d+[.)]|>)\s+/gm, '')
+    .replace(/(\*\*|__|\*|_|`|~~)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+/** Human length of a stretch of content: "45 sec", "12 min", "2 h 5 min". */
+export function formatLength(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return '';
+  if (totalSeconds < 60) return `${Math.round(totalSeconds)} sec`;
+  const m = Math.round(totalSeconds / 60);
+  if (m < 60) return `${m} min`;
+  return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}

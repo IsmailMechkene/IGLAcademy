@@ -1,40 +1,153 @@
 .topbar {
+  position: relative;
+  z-index: 2;
   height: var(--topbar-height);
   min-height: var(--topbar-height);
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 20px;
+  gap: 16px;
+  padding: 0 20px 0 var(--page-pad-x);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
 }
+
+/* ---------- breadcrumb ---------- */
+
+.crumbs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.crumbItem {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumbSep {
+  color: var(--text-muted);
+  margin: 0 6px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.crumbLink,
+.crumbPlain,
+.crumbCurrent {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumbLink {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 520;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.crumbLink:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.crumbPlain {
+  color: var(--text-muted);
+}
+
+.crumbCurrent {
+  color: var(--text);
+  font-weight: 600;
+  max-width: 520px;
+}
+
+/* ---------- search ---------- */
 
 .searchWrap {
   position: relative;
-  flex: 1;
-  max-width: 440px;
+  width: 320px;
+  flex-shrink: 0;
 }
 
 .searchIcon {
   position: absolute;
-  left: 11px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
   pointer-events: none;
-  display: flex;
 }
 
 .searchInput {
-  /* Higher specificity than .input so the icon padding always wins,
-     regardless of stylesheet order in the bundle. */
-  padding-left: 36px;
+  width: 100%;
+  height: 36px;
+  padding: 0 72px 0 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
-.searchWrap .searchInput {
-  padding-left: 36px;
+.searchInput::placeholder {
+  color: var(--text-muted);
 }
 
-.spacer {
-  flex: 1;
+.searchInput:hover {
+  border-color: var(--border-strong);
+}
+
+.searchInput:focus {
+  border-color: var(--accent-border);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.shortcut {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.clearBtn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.clearBtn:hover {
+  color: var(--text);
+}
+
+@media (max-width: 1100px) {
+  .searchWrap {
+    width: 240px;
+  }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import styles from './Modal.module.css';
 
 interface Props {
@@ -61,7 +62,10 @@ export default function Modal({ label, onClose, children, wide }: Props) {
     };
   }, [onClose]);
 
-  return (
+  // Portalled to <body>: a fixed overlay inside any transformed or filtered
+  // ancestor (page animations, hover lifts) is trapped in that ancestor's box,
+  // which showed up as a blurry rectangle over part of the page.
+  return createPortal(
     <div
       ref={overlayRef}
       className={styles.overlay}
@@ -79,6 +83,7 @@ export default function Modal({ label, onClose, children, wide }: Props) {
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

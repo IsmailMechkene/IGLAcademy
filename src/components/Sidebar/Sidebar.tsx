@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  GraduationCap, Home, BookOpen, PlayCircle, CheckCircle2, FileCheck, Brain, StickyNote, Settings as SettingsIcon,
+  Brain, ChevronsLeft, ChevronsRight, FileCheck2, GraduationCap, Home, LibraryBig, Play, Settings as SettingsIcon,
+  StickyNote,
 } from 'lucide-react';
 import { useApp } from '../../App';
 import type { Route } from '../../App';
+import type { CourseWithProgress } from '../../types';
 import { api } from '../../services/api';
+import { cleanTitle } from '../../utils/titles';
+import CourseCover from '../CourseCover/CourseCover';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
@@ -14,20 +18,50 @@ interface NavItem {
   match: (route: Route) => boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const LEARN: NavItem[] = [
   { label: 'Home', icon: Home, route: { name: 'dashboard' }, match: (r) => r.name === 'dashboard' },
-  { label: 'My Courses', icon: BookOpen, route: { name: 'library' }, match: (r) => r.name === 'library' || r.name === 'course' || r.name === 'player' },
-  { label: 'Practice Exams', icon: FileCheck, route: { name: 'practice' }, match: (r) => r.name === 'practice' || r.name === 'examfile' || r.name === 'examstats' },
-  { label: 'In Progress', icon: PlayCircle, route: { name: 'in-progress' }, match: (r) => r.name === 'in-progress' },
-  { label: 'Completed', icon: CheckCircle2, route: { name: 'completed' }, match: (r) => r.name === 'completed' },
-  { label: 'Review', icon: Brain, route: { name: 'review' }, match: (r) => r.name === 'review' },
-  { label: 'Notes', icon: StickyNote, route: { name: 'notes' }, match: (r) => r.name === 'notes' },
-  { label: 'Settings', icon: SettingsIcon, route: { name: 'settings' }, match: (r) => r.name === 'settings' },
+  {
+    label: 'Courses',
+    icon: LibraryBig,
+    route: { name: 'library' },
+    match: (r) => r.name === 'library' || r.name === 'in-progress' || r.name === 'completed' || r.name === 'course' || r.name === 'player',
+  },
+  {
+    label: 'Practice Exams',
+    icon: FileCheck2,
+    route: { name: 'practice' },
+    match: (r) => r.name === 'practice' || r.name === 'examfile' || r.name === 'examstats',
+  },
 ];
 
+const STUDY: NavItem[] = [
+  { label: 'Review', icon: Brain, route: { name: 'review' }, match: (r) => r.name === 'review' },
+  { label: 'Notes', icon: StickyNote, route: { name: 'notes' }, match: (r) => r.name === 'notes' },
+];
+
+const SETTINGS: NavItem = {
+  label: 'Settings',
+  icon: SettingsIcon,
+  route: { name: 'settings' },
+  match: (r) => r.name === 'settings',
+};
+
+const COLLAPSE_KEY = 'ismalearn.sidebarCollapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default function Sidebar() {
-  const { route, navigate } = useApp();
+  const { route, navigate, refreshKey } = useApp();
   const [version, setVersion] = useState('');
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [current, setCurrent] = useState<{ course: CourseWithProgress; lessonId: number | null } | null>(null);
+  const [dueCount, setDueCount] = useState(0);
 
   useEffect(() => {
     api()
@@ -36,39 +70,124 @@ export default function Sidebar() {
       .catch(() => undefined);
   }, []);
 
+  // "Continue learning" + review badge. Re-read on data refresh and whenever
+  // the user comes back from another page (the player changes progress).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([api().progress.mostRecentCourseId(), api().courses.list()])
+      .then(async ([id, courses]) => {
+        const course = courses.find((c) => c.id === id) ?? null;
+        if (!course) {
+          if (!cancelled) setCurrent(null);
+          return;
+        }
+        const activity = await api().progress.lastActivity(course.id).catch(() => null);
+        if (!cancelled) setCurrent({ course, lessonId: activity?.lessonId ?? null });
+      })
+      .catch(() => undefined);
+    api()
+      .review.dueCounts()
+      .then((d) => {
+        if (!cancelled) setDueCount(d.itemsDue + d.cardsDue);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey, route.name]);
+
+  const toggle = () => {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1');
+      } catch {
+        // per-device convenience only
+      }
+      return !c;
+    });
+  };
+
+  const renderItem = (item: NavItem, badge?: number) => {
+    const active = item.match(route);
+    const Icon = item.icon;
+    return (
+      <button
+        key={item.label}
+        className={`${styles.navItem} ${active ? styles.active : ''}`}
+        onClick={() => navigate(item.route)}
+        aria-current={active ? 'page' : undefined}
+        title={collapsed ? item.label : undefined}
+      >
+        <span className={styles.navIcon}>
+          <Icon size={18} strokeWidth={active ? 2.2 : 1.9} />
+        </span>
+        <span className={styles.navLabel}>{item.label}</span>
+        {badge ? <span className={styles.navBadge}>{badge > 99 ? '99+' : badge}</span> : null}
+      </button>
+    );
+  };
+
   return (
-    <aside className={styles.sidebar}>
-      <div className={styles.logo}>
-        <div className={styles.logoIcon}>
-          <GraduationCap size={20} strokeWidth={2.2} />
+    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
+      <div className={styles.brand}>
+        <div className={styles.logoMark}>
+          <GraduationCap size={18} strokeWidth={2.2} />
         </div>
-        <div className={styles.logoText}>
-          <span className={styles.logoName}>IsmaLearn</span>
-          <span className={styles.logoTag}>Your courses. Your pace.</span>
-        </div>
+        <span className={styles.logoName}>IsmaLearn</span>
+        <button
+          className={styles.collapseBtn}
+          onClick={toggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+        </button>
       </div>
 
-      <nav className={styles.nav}>
-        {NAV_ITEMS.map((item) => {
-          const active = item.match(route);
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              className={`${styles.navItem} ${active ? styles.active : ''}`}
-              onClick={() => navigate(item.route)}
-            >
-              <span className={styles.navIcon}>
-                <Icon size={18} strokeWidth={active ? 2.4 : 2} />
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
+      <nav className={styles.nav} aria-label="Main">
+        <div className={styles.group}>
+          <span className={styles.groupLabel}>Learn</span>
+          {LEARN.map((item) => renderItem(item))}
+        </div>
+        <div className={styles.group}>
+          <span className={styles.groupLabel}>Study</span>
+          {STUDY.map((item) => renderItem(item, item.label === 'Review' ? dueCount : undefined))}
+        </div>
       </nav>
 
-      <div className={styles.sidebarFooter}>
-        {version && <div className={styles.version}>v{version}</div>}
+      <div className={styles.footer}>
+        {current && !collapsed && (
+          <button
+            className={styles.continueCard}
+            onClick={() =>
+              navigate(
+                current.lessonId !== null
+                  ? { name: 'player', courseId: current.course.id, lessonId: current.lessonId }
+                  : { name: 'course', courseId: current.course.id },
+              )
+            }
+            title={`Continue ${cleanTitle(current.course.title)}`}
+          >
+            <span className={styles.continueEyebrow}>Continue learning</span>
+            <span className={styles.continueRow}>
+              <span className={styles.continueThumb}>
+                <CourseCover courseId={current.course.id} title={current.course.title} compact />
+              </span>
+              <span className={styles.continueTitle}>{cleanTitle(current.course.title)}</span>
+              <span className={styles.continuePlay} aria-hidden="true">
+                <Play size={12} fill="currentColor" />
+              </span>
+            </span>
+            <span className={styles.continueProgress}>
+              <span style={{ width: `${current.course.progressPercent}%` }} />
+            </span>
+            <span className={styles.continueMeta}>
+              {current.course.completedCount}/{current.course.lessonCount} lessons · {current.course.progressPercent}%
+            </span>
+          </button>
+        )}
+        {renderItem(SETTINGS)}
+        {version && !collapsed && <div className={styles.version}>Version {version} · stored on this device</div>}
       </div>
     </aside>
   );

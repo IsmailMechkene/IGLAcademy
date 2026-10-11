@@ -29,6 +29,12 @@ export type Route =
   | { name: 'notes' }
   | { name: 'settings' };
 
+/** One step of the header breadcrumb; the last one is the current page. */
+export interface Crumb {
+  label: string;
+  route?: Route;
+}
+
 interface AppContextValue {
   route: Route;
   navigate: (route: Route) => void;
@@ -38,6 +44,9 @@ interface AppContextValue {
   refreshAll: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
+  /** Page-provided breadcrumb (e.g. Courses › <course title>); null = route default. */
+  crumbs: Crumb[] | null;
+  setCrumbs: (crumbs: Crumb[] | null) => void;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -48,13 +57,25 @@ export function useApp(): AppContextValue {
   return ctx;
 }
 
+/** Lets a page put its own trail in the header (cleared on every navigation). */
+export function useCrumbs(crumbs: Crumb[] | null): void {
+  const { setCrumbs } = useApp();
+  const key = JSON.stringify(crumbs);
+  useEffect(() => {
+    setCrumbs(crumbs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on content, not identity
+  }, [key, setCrumbs]);
+}
+
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'dashboard' });
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
 
   const navigate = useCallback((r: Route) => {
+    setCrumbs(null);
     setRoute(r);
   }, []);
 
@@ -161,24 +182,36 @@ export default function App() {
     }
   };
 
+  /*
+    The key remounts a page when the ROUTE changes (a different course or
+    lesson needs fresh component state). It deliberately does not include
+    refreshKey: every page re-fetches on it as an effect dependency instead,
+    because remounting on a data refresh also tore down the video element
+    mid-lesson.
+  */
+  const pageKey = `${route.name}-${'courseId' in route ? route.courseId : ''}-${'lessonId' in route ? route.lessonId : ''}`;
+  // The player is a focus mode: no app sidebar or header competing with the video.
+  const focus = route.name === 'player';
+
   return (
-    <AppContext.Provider value={{ route, navigate, settings, updateSettings, refreshKey, refreshAll, searchQuery, setSearchQuery }}>
-      <div className="app-shell">
-        <Sidebar />
-        <div className="app-main">
-          <Topbar />
-          {/*
-            The key remounts a page when the ROUTE changes (a different course
-            or lesson needs fresh component state). It deliberately does not
-            include refreshKey: every page re-fetches on it as an effect
-            dependency instead, because remounting on a data refresh also tore
-            down the video element mid-lesson.
-          */}
-          <main className="app-content" key={`${route.name}-${'courseId' in route ? route.courseId : ''}-${'lessonId' in route ? route.lessonId : ''}`}>
-            {renderPage()}
-          </main>
+    <AppContext.Provider
+      value={{ route, navigate, settings, updateSettings, refreshKey, refreshAll, searchQuery, setSearchQuery, crumbs, setCrumbs }}
+    >
+      {focus ? (
+        <main className="app-focus" key={pageKey}>
+          {renderPage()}
+        </main>
+      ) : (
+        <div className="app-shell">
+          <Sidebar />
+          <div className="app-main">
+            <Topbar />
+            <main className="app-content" key={pageKey}>
+              {renderPage()}
+            </main>
+          </div>
         </div>
-      </div>
+      )}
     </AppContext.Provider>
   );
 }

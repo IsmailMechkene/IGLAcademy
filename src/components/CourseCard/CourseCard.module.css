@@ -1,20 +1,23 @@
 .card {
   overflow: hidden;
   cursor: pointer;
-  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
   display: flex;
   flex-direction: column;
+  border-radius: var(--radius-lg);
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base),
+    background var(--transition-base);
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
+  transform: translateY(-3px);
   border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+  box-shadow: var(--highlight), var(--shadow-lg);
 }
 
 .card:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .thumbnail {
@@ -22,27 +25,71 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.thumbnail > div:first-child {
+  transition: transform 0.6s var(--ease);
+}
+
+.card:hover .thumbnail > div:first-child {
+  transform: scale(1.04);
+}
+
+.status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  color: #fff;
+  background: rgba(10, 10, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.statusDone {
+  background: rgba(22, 120, 80, 0.7);
+}
+
+.statusNew {
+  background: rgba(141, 127, 248, 0.55);
 }
 
 .playOverlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  background: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.45));
   opacity: 0;
   transition: opacity var(--transition-base);
   pointer-events: none;
 }
 
-.playOverlay svg {
-  width: 48px;
-  height: 48px;
-  padding: 14px;
+.playButton {
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: rgba(124, 108, 240, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(12px);
+  transform: scale(0.9);
+  transition: transform var(--transition-base);
 }
 
 .card:hover .playOverlay,
@@ -50,17 +97,22 @@
   opacity: 1;
 }
 
+.card:hover .playButton {
+  transform: scale(1);
+}
+
 .body {
-  padding: 12px 14px 14px;
+  padding: 16px 18px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
 .title {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 640;
+  letter-spacing: -0.012em;
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -80,29 +132,31 @@
 .lessonCount {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .percent {
-  font-weight: 600;
+  font-weight: 560;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .footer {
   margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .card,
-  .playOverlay {
+  .playOverlay,
+  .thumbnail > div:first-child {
     transition: none;
   }
 
   .card:hover {
+    transform: none;
+  }
+
+  .card:hover .thumbnail > div:first-child {
     transform: none;
   }
 }
