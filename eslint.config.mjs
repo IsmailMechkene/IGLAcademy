@@ -32,6 +32,21 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
+    // e2e suites: functions passed to page.run() execute inside the app
+    // window, where the harness provides these helpers (scripts/e2e/harness.mjs).
+    files: ['scripts/e2e/*.e2e.mjs'],
+    languageOptions: {
+      globals: {
+        api: 'readonly',
+        sleep: 'readonly',
+        waitFor: 'readonly',
+        byText: 'readonly',
+        click: 'readonly',
+        mainText: 'readonly',
+      },
+    },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],

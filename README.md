@@ -73,8 +73,8 @@ Useful commands:
 npm run typecheck   # strict TypeScript check (tsc --noEmit)
 npm run lint        # ESLint (hook rules, dead code, suspicious constructs)
 npm test            # run the Vitest suite (auto-selects the Node ABI)
-npm run test:e2e    # Electron end-to-end checks via DevTools protocol (local only:
-                    # downloads sample videos, reads a local practice-exam folder)
+npm run test:e2e    # drives the built app (run `npm run build` first); self-contained:
+                    # generated fixtures, throwaway profile, no network
 npm run build       # production build → dist/ + dist-electron/
 npm run dist        # package a Windows NSIS installer → release/
 npm run smoke       # verify packaged artifacts + boot the installed exe

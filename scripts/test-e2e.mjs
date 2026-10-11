@@ -1,52 +1,26 @@
-// Reliable end-to-end runner: kills stray Electron processes, then runs the
-// playback + exam UI verifiers sequentially. Exits non-zero on any failure.
-// Usage: npm run test:e2e  (requires `npm run build` first)
-import { spawn, execSync } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// End-to-end tests against the built app. Self-contained: fixtures come from
+// scripts/e2e/fixtures (a generated test clip and synthetic exams), each suite
+// uses a throwaway profile, and only the Electron processes the suites start
+// are stopped. No network, no personal files.
+//
+// Usage: npm run build && npm run test:e2e
+import { run as runMedia } from './e2e/media.e2e.mjs';
+import { run as runUi } from './e2e/ui.e2e.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, '..');
+const suites = [
+  ['media', runMedia],
+  ['ui', runUi],
+];
 
-function killStrays() {
+let ok = true;
+for (const [name, run] of suites) {
+  console.log(`[test:e2e] ${name}`);
   try {
-    if (process.platform === 'win32') {
-      execSync('taskkill /F /IM electron.exe /T', { stdio: 'ignore' });
-    } else {
-      execSync('pkill -f electron', { stdio: 'ignore' });
-    }
-  } catch {
-    // nothing running
+    if (!(await run())) ok = false;
+  } catch (err) {
+    ok = false;
+    console.error(`[test:e2e] ${name} crashed: ${err?.stack ?? err}`);
   }
 }
-
-function runScript(name) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(root, 'scripts', name)], {
-      cwd: root,
-      stdio: 'inherit',
-    });
-    child.on('exit', (code) => resolve(code ?? 1));
-    child.on('error', () => resolve(1));
-  });
-}
-
-const scripts = ['verify-playback.mjs', 'verify-exam-ui.mjs'];
-let failed = false;
-for (const name of scripts) {
-  console.log(`[test:e2e] running ${name}...`);
-  // No retries: the scripts wait for real conditions (debugger target, UI
-  // text) rather than sleeping, so a failure is a failure, not a flake to
-  // re-roll until it passes.
-  killStrays();
-  await new Promise((r) => setTimeout(r, 2000));
-  const code = await runScript(name);
-  killStrays();
-  if (code !== 0) {
-    console.error(`[test:e2e] ${name} FAILED (exit ${code})`);
-    failed = true;
-  } else {
-    console.log(`[test:e2e] ${name} passed`);
-  }
-}
-process.exit(failed ? 1 : 0);
+console.log(ok ? '[test:e2e] all suites passed' : '[test:e2e] FAILED');
+process.exit(ok ? 0 : 1);

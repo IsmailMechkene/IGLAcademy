@@ -25,5 +25,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      # npm run test:e2e is not run here: it downloads sample videos and reads
-      # a local practice-exam folder. Run it locally before releasing.
+      # Drives the built app through real flows (import, playback, subtitles,
+      # player panel, dialogs, practice explanations, exam resume across a
+      # restart) using bundled fixtures only.
+      - run: npm run test:e2e
