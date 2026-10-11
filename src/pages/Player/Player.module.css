@@ -1,54 +1,256 @@
+/* Focus mode: the player owns the whole window. */
 .page {
   display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: var(--bg);
 }
 
-.main {
+/* ---------- slim top bar ---------- */
+
+.top {
+  height: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+
+.topTitles {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  line-height: 1.25;
+  padding-left: 4px;
+}
+
+.courseLink {
+  align-self: flex-start;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 560;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.courseLink:hover {
+  color: var(--accent);
+}
+
+.topLesson {
+  font-size: 13.5px;
+  font-weight: 620;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topProgress {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  width: 170px;
+  margin-right: 6px;
+}
+
+.topProgressText {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.topProgressBar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-active);
   overflow: hidden;
 }
 
-.playerArea {
+.topProgressBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent-hover));
+  transition: width var(--transition-slow);
+}
+
+/* ---------- body ---------- */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.videoWrap {
   flex: 1;
   min-height: 0;
   position: relative;
   background: #000;
 }
 
-.playerBar {
+.lessonBar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  gap: 24px;
+  padding: 16px 24px;
   border-top: 1px solid var(--border);
-  background: var(--bg-elevated);
-  min-height: 52px;
+  background: var(--bg-sidebar);
 }
 
 .lessonInfo {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.lessonTitle {
-  font-size: 13px;
-  font-weight: 600;
+.lessonEyebrow {
+  font-size: 11.5px;
+  font-weight: 560;
+  color: var(--text-muted);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .lessonSection {
-  font-size: 11.5px;
-  color: var(--text-muted);
+  font-weight: 450;
+}
+
+.lessonTitle {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
+
+.lessonActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-strong);
+  margin: 0 4px;
+}
+
+.doneBtn {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: transparent;
+}
+
+.doneBtn:hover:not(:disabled) {
+  background: var(--success);
+  color: #06140e;
+}
+
+/* ---------- right panel ---------- */
+
+.panel {
+  width: 384px;
+  min-width: 384px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  animation: panelIn 0.22s var(--ease) both;
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.panelTabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  height: 48px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.panelSummaryRow strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.panelScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.panelNotes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelNotes > * {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1180px) {
+  .panel {
+    width: 330px;
+    min-width: 330px;
+  }
+
+  .topProgress {
+    display: none;
+  }
+}
+
+/* ---------- dialogs ---------- */
 
 .endActions {
   display: flex;
@@ -59,63 +261,29 @@
 .shortcutList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .shortcutRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .kbd {
   min-width: 72px;
   text-align: center;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: var(--bg-hover);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
-}
-
-.notesToggle {
-  flex-shrink: 0;
-}
-
-/* resume prompt */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(3px);
-}
-
-.dialog {
-  width: 400px;
-  max-width: calc(100vw - 48px);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.dialog h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-}
-
-.dialog p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13.5px;
+  color: var(--text);
 }
 
 .dialogActions {

@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bookmark, BookmarkPlus, CheckCircle2, Keyboard, ListVideo, RotateCcw, SkipForward, StickyNote } from 'lucide-react';
+import {
+  ArrowLeft, Bookmark, BookmarkPlus, Check, CheckCircle2, ChevronLeft, ChevronRight, Keyboard, ListVideo,
+  PanelRightClose, PanelRightOpen, RotateCcw, SkipForward,
+} from 'lucide-react';
 import type { CourseDetail } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatTime } from '../../utils/format';
+import { cleanTitle, splitOrdinal } from '../../utils/titles';
 import { locateFileMessage } from '../../utils/locateFile';
 import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlayer/VideoPlayer';
 import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
@@ -18,6 +22,19 @@ interface Props {
   lessonId: number;
   /** Optional position to jump to on open (bookmarks, review links). */
   startAt?: number;
+}
+
+type Panel = 'content' | 'notes' | null;
+const PANEL_KEY = 'ismalearn.playerPanel';
+
+/** The side panel the user last left open (per device; content by default). */
+function readPanel(): Panel {
+  try {
+    const v = localStorage.getItem(PANEL_KEY);
+    return v === 'notes' ? 'notes' : v === 'closed' ? null : 'content';
+  } catch {
+    return 'content';
+  }
 }
 
 const COMPLETION_THRESHOLD = 0.9; // 90% watched counts as complete
@@ -76,8 +93,7 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [notesWidth, setNotesWidth] = useState(340);
+  const [panel, setPanelState] = useState<Panel>(readPanel);
   const [completed, setCompleted] = useState(false);
   const [lessonTitle, setLessonTitle] = useState('');
   const [sectionTitle, setSectionTitle] = useState('');
@@ -88,6 +104,15 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [bookmarkSaved, setBookmarkSaved] = useState(false);
   const startAtRef = useRef<number | null>(startAt ?? null);
+
+  const setPanel = useCallback((next: Panel) => {
+    setPanelState(next);
+    try {
+      localStorage.setItem(PANEL_KEY, next ?? 'closed');
+    } catch {
+      // per-device convenience only
+    }
+  }, []);
 
   const playerRef = useRef<VideoPlayerHandle>(null);
   const lastSaveRef = useRef(0);
@@ -449,29 +474,6 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [lessonKind, handleNext, handlePrev, handleBookmark, handleToggleComplete]);
 
-  // Notes panel resize
-  const handleResizeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      const newWidth = window.innerWidth - e.clientX;
-      if (newWidth >= 260 && newWidth <= 640) setNotesWidth(newWidth);
-    },
-    [],
-  );
-
-  const handleResizeMouseUp = useCallback(() => {
-    document.removeEventListener('mousemove', handleResizeMouseMove);
-    document.removeEventListener('mouseup', handleResizeMouseUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }, [handleResizeMouseMove]);
-
-  const startResize = useCallback(() => {
-    document.addEventListener('mousemove', handleResizeMouseMove);
-    document.addEventListener('mouseup', handleResizeMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [handleResizeMouseMove, handleResizeMouseUp]);
-
   if (!course) {
     return (
       <div style={{ padding: 48, maxWidth: 560 }}>
@@ -486,116 +488,200 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
 
   const lessons = allLessons();
   const currentIdx = lessons.findIndex((l) => l.id === currentLessonId);
+  const nextLesson = currentIdx >= 0 ? lessons[currentIdx + 1] : undefined;
+  const sectionIdx = course.sections.findIndex((sec) => sec.lessons.some((l) => l.id === currentLessonId));
+  const displayLesson = splitOrdinal(lessonTitle).text;
 
   return (
     <div className={styles.page}>
-      <LessonSidebar
-        course={course}
-        activeLessonId={currentLessonId}
-        onSelectLesson={goToLesson}
-        completed={completed}
-        onToggleComplete={handleToggleComplete}
-      />
+      <header className={styles.top}>
+        <button
+          className="iconBtn"
+          onClick={() => navigate({ name: 'course', courseId })}
+          aria-label="Back to course"
+          title="Back to course"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div className={styles.topTitles}>
+          <button className={styles.courseLink} onClick={() => navigate({ name: 'course', courseId })} title={course.title}>
+            {cleanTitle(course.title)}
+          </button>
+          <span className={styles.topLesson} title={lessonTitle}>{displayLesson || 'Loading…'}</span>
+        </div>
+        <div className={styles.topProgress} title={`${course.completedCount} of ${course.lessonCount} lessons completed`}>
+          <span className={styles.topProgressText}>
+            {course.completedCount}/{course.lessonCount} · {course.progressPercent}%
+          </span>
+          <span className={styles.topProgressBar}>
+            <span style={{ width: `${course.progressPercent}%` }} />
+          </span>
+        </div>
+        <button
+          className="iconBtn"
+          onClick={() => setShowShortcuts(true)}
+          title="Keyboard shortcuts (?)"
+          aria-label="Show keyboard shortcuts"
+        >
+          <Keyboard size={17} />
+        </button>
+        <button
+          className="iconBtn"
+          onClick={() => setPanel(panel ? null : 'content')}
+          aria-pressed={panel !== null}
+          aria-label={panel ? 'Hide side panel' : 'Show course content'}
+          title={panel ? 'Hide side panel' : 'Show course content'}
+        >
+          {panel ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+        </button>
+      </header>
 
-      <div className={styles.main}>
-        <div className={styles.playerArea}>
-          {mediaUrl || fileMissing ? (
-            lessonKind === 'practice' && !fileMissing ? (
-              <PracticeViewer
-                src={mediaUrl ?? ''}
-                title={lessonTitle}
-                lessonId={currentLessonId}
-              />
+      <div className={styles.body}>
+        <div className={styles.stage}>
+          <div className={styles.videoWrap}>
+            {mediaUrl || fileMissing ? (
+              lessonKind === 'practice' && !fileMissing ? (
+                <PracticeViewer
+                  src={mediaUrl ?? ''}
+                  title={lessonTitle}
+                  lessonId={currentLessonId}
+                />
+              ) : (
+                <VideoPlayer
+                  ref={playerRef}
+                  src={mediaUrl ?? undefined}
+                  // Without this the player never asks for subtitle tracks, so
+                  // the CC menu (gated on tracks.length) could never appear.
+                  lessonId={currentLessonId}
+                  defaultSpeed={settings.defaultPlaybackSpeed}
+                  hasPrev={currentIdx > 0}
+                  hasNext={currentIdx >= 0 && currentIdx < lessons.length - 1}
+                  onPrev={handlePrev}
+                  onNext={handleNext}
+                  onTimeUpdate={handleTimeUpdate}
+                  onEnded={handleEnded}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  missing={fileMissing}
+                  mediaKind={lessonKind}
+                  onMissingFile={handleLocateFile}
+                  onError={handleVideoError}
+                  loadError={loadError}
+                />
+              )
+            ) : null}
+          </div>
+
+          <div className={styles.lessonBar}>
+            <div className={styles.lessonInfo}>
+              <span className={styles.lessonEyebrow}>
+                {sectionIdx >= 0 && `Section ${sectionIdx + 1} · `}Lesson {currentIdx + 1} of {lessons.length}
+                {sectionTitle && <span className={styles.lessonSection}> · {splitOrdinal(sectionTitle).text}</span>}
+              </span>
+              <h1 className={styles.lessonTitle} title={lessonTitle}>{displayLesson || 'Loading…'}</h1>
+            </div>
+            <div className={styles.lessonActions}>
+              {lessonKind === 'video' && (
+                <>
+                  <button
+                    className="iconBtn"
+                    onClick={handleBookmark}
+                    title="Bookmark this moment (B)"
+                    aria-label="Bookmark current position"
+                  >
+                    {bookmarkSaved ? <CheckCircle2 size={17} color="var(--success)" /> : <Bookmark size={17} />}
+                  </button>
+                  <button
+                    className="iconBtn"
+                    onClick={handleReviewLater}
+                    title="Review this lesson later"
+                    aria-label="Add lesson to review later queue"
+                  >
+                    <BookmarkPlus size={17} />
+                  </button>
+                  <span className={styles.divider} aria-hidden="true" />
+                </>
+              )}
+              <button
+                className="btn btn-ghost"
+                onClick={handlePrev}
+                disabled={currentIdx <= 0}
+                aria-label="Previous lesson"
+                title="Previous lesson (P)"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                className={`btn ${completed ? styles.doneBtn : 'btn-secondary'}`}
+                onClick={handleToggleComplete}
+                title="Mark complete / incomplete (C)"
+                aria-pressed={completed}
+              >
+                {completed ? <Check size={15} strokeWidth={2.6} /> : <CheckCircle2 size={15} />}
+                {completed ? 'Completed' : 'Mark complete'}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleNext}
+                disabled={!nextLesson}
+                title="Next lesson (N)"
+              >
+                Next lesson <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {panel && (
+          <aside className={styles.panel} aria-label="Course content and notes">
+            <div className={styles.panelTabs} role="tablist">
+              <button
+                role="tab"
+                className="tab"
+                aria-selected={panel === 'content'}
+                onClick={() => setPanel('content')}
+              >
+                Course content
+              </button>
+              <button
+                role="tab"
+                className="tab"
+                aria-selected={panel === 'notes'}
+                onClick={() => setPanel('notes')}
+              >
+                Notes
+              </button>
+            </div>
+            {panel === 'content' ? (
+              <>
+                <div className={styles.panelSummary}>
+                  <div className={styles.panelSummaryRow}>
+                    <span>{course.completedCount} of {course.lessonCount} lessons completed</span>
+                    <strong>{course.progressPercent}%</strong>
+                  </div>
+                  <span className={styles.topProgressBar}>
+                    <span style={{ width: `${course.progressPercent}%` }} />
+                  </span>
+                </div>
+                <div className={styles.panelScroll}>
+                  <LessonSidebar course={course} activeLessonId={currentLessonId} onSelectLesson={goToLesson} />
+                </div>
+              </>
             ) : (
-              <VideoPlayer
-                ref={playerRef}
-                src={mediaUrl ?? undefined}
-                // Without this the player never asks for subtitle tracks, so
-                // the CC menu (gated on tracks.length) could never appear.
-                lessonId={currentLessonId}
-                defaultSpeed={settings.defaultPlaybackSpeed}
-                hasPrev={currentIdx > 0}
-                hasNext={currentIdx >= 0 && currentIdx < lessons.length - 1}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={handleEnded}
-                onLoadedMetadata={handleLoadedMetadata}
-                missing={fileMissing}
-                mediaKind={lessonKind}
-                onMissingFile={handleLocateFile}
-                onError={handleVideoError}
-                loadError={loadError}
-              />
-            )
-          ) : null}
-        </div>
-        <div className={styles.playerBar}>
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate({ name: 'course', courseId })}>
-            <ArrowLeft size={15} /> Course
-          </button>
-          <div className={styles.lessonInfo}>
-            <div className={styles.lessonTitle}>{lessonTitle || 'Loading...'}</div>
-            <div className={styles.lessonSection}>{sectionTitle}</div>
-          </div>
-          {lessonKind === 'video' && (
-            <>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={handleBookmark}
-                title="Bookmark this moment (B)"
-                aria-label="Bookmark current position"
-              >
-                {bookmarkSaved ? <CheckCircle2 size={15} color="var(--success)" /> : <Bookmark size={15} />}
-                {bookmarkSaved ? 'Saved' : 'Bookmark'}
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={handleReviewLater}
-                title="Review this lesson later"
-                aria-label="Add lesson to review later queue"
-              >
-                <BookmarkPlus size={15} /> Later
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setShowShortcuts(true)}
-                title="Keyboard shortcuts (?)"
-                aria-label="Show keyboard shortcuts"
-              >
-                <Keyboard size={15} />
-              </button>
-            </>
-          )}
-          <button
-            className={`btn btn-ghost ${styles.notesToggle}`}
-            onClick={() => setNotesOpen((o) => !o)}
-            title={notesOpen ? 'Hide notes' : 'Show notes'}
-          >
-            <StickyNote size={16} />
-            {notesOpen ? 'Hide notes' : 'Notes'}
-          </button>
-        </div>
+              <div className={styles.panelNotes}>
+                <NotesPanel
+                  courseId={courseId}
+                  lessonId={currentLessonId}
+                  lessonTitle={lessonTitle}
+                  currentTime={currentTime}
+                  onTimestampClick={(seconds) => playerRef.current?.seek(seconds)}
+                  refreshKey={currentLessonId}
+                  embedded
+                />
+              </div>
+            )}
+          </aside>
+        )}
       </div>
-
-      {notesOpen && (
-        <>
-          <div
-            style={{ width: 5, cursor: 'col-resize', background: 'var(--border)' }}
-            onMouseDown={startResize}
-          />
-          <div style={{ width: notesWidth, minWidth: 260 }}>
-            <NotesPanel
-              courseId={courseId}
-              lessonId={currentLessonId}
-              lessonTitle={lessonTitle}
-              currentTime={currentTime}
-              onTimestampClick={(seconds) => playerRef.current?.seek(seconds)}
-              refreshKey={currentLessonId}
-            />
-          </div>
-        </>
-      )}
 
       {showResumePrompt && (
         <Modal label="Resume playback" onClose={() => setShowResumePrompt(false)}>
@@ -629,7 +715,6 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
       )}
 
       {showEndPrompt && (() => {
-        const nextLesson = lessons[currentIdx + 1];
         return (
           <Modal label="Lesson finished" onClose={() => setShowEndPrompt(false)}>
             <h2>Lesson finished</h2>
