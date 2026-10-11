@@ -297,26 +297,22 @@ export interface AppSettings {
   theme: 'dark' | 'light' | 'system';
   defaultPlaybackSpeed: number;
   resumePlayback: 'ask' | 'always' | 'never';
-  duplicateImportBehavior: 'ask' | 'skip' | 'rescan';
   autoBackup: boolean;
   backupKeep: number;
   rescanOnStartup: boolean;
   examPassPercent: number;
   examSecondsPerQuestion: number;
-  checkForUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   defaultPlaybackSpeed: 1,
   resumePlayback: 'ask',
-  duplicateImportBehavior: 'ask',
   autoBackup: true,
   backupKeep: 7,
   rescanOnStartup: false,
   examPassPercent: 70,
   examSecondsPerQuestion: 120,
-  checkForUpdates: true,
 };
 
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;

@@ -1,4 +1,4 @@
-import { ipcMain, app, dialog, shell } from 'electron';
+import { ipcMain, app, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb } from '../database/connection';
@@ -36,16 +36,4 @@ export function registerAppIpc(): void {
     );
   });
 
-  // Opens an https URL in the system browser (validated scheme + host).
-  ipcMain.handle('app:openUrl', async (_e, url: unknown) => {
-    if (typeof url !== 'string') throw new Error('Invalid URL');
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      throw new Error('Invalid URL');
-    }
-    if (parsed.protocol !== 'https:') throw new Error('Only https links can be opened.');
-    await shell.openExternal(parsed.href);
-  });
 }

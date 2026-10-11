@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Database, Download, FileText, FolderOpen, Info, Monitor, Moon, RefreshCw,
+  Database, Download, FileText, FolderOpen, Info, Monitor, Moon,
   RotateCcw, Save, Sun, Upload, ChevronDown,
 } from 'lucide-react';
 import { PLAYBACK_SPEEDS, type AppSettings, type BackupInfo } from '../../types';
@@ -9,12 +9,6 @@ import { useApp } from '../../App';
 import { formatBytes, formatDateTime } from '../../utils/format';
 import SegmentedControl, { type SegmentOption } from '../../components/SegmentedControl/SegmentedControl';
 import styles from './Settings.module.css';
-
-type UpdateState =
-  | { status: 'disabled' }
-  | { status: 'up-to-date'; version: string }
-  | { status: 'update-available'; version: string; current: string; url: string }
-  | { status: 'offline' | 'error'; message: string };
 
 const THEME_OPTIONS: Array<SegmentOption<AppSettings['theme']>> = [
   { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
@@ -59,8 +53,6 @@ export default function Settings() {
   const [paths, setPaths] = useState<{ userData: string; dbPath: string } | null>(null);
   const [libraryInfo, setLibraryInfo] = useState<{ courseCount: number; dbSizeBytes: number; dbPath: string } | null>(null);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
-  const [updateStatus, setUpdateStatus] = useState<UpdateState | null>(null);
-  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
   useEffect(() => {
     api().app.getVersion().then(setVersion).catch(() => undefined);
@@ -91,17 +83,6 @@ export default function Settings() {
       await api().app.showError('Restore complete', 'Your data was restored from backup. The app will now reload its views.');
     } else if (result.status === 'error') {
       await api().app.showError('Restore failed', result.error ?? 'Unknown error');
-    }
-  };
-
-  const handleCheckUpdates = async () => {
-    setCheckingUpdates(true);
-    try {
-      setUpdateStatus(await api().app.checkForUpdates());
-    } catch {
-      setUpdateStatus({ status: 'error', message: 'Could not reach the update server.' });
-    } finally {
-      setCheckingUpdates(false);
     }
   };
 
@@ -201,23 +182,6 @@ export default function Settings() {
 
       <section className={`card ${styles.section}`}>
         <h2>Course imports</h2>
-        <div className={styles.settingRow}>
-          <div className={styles.settingInfo}>
-            <div className={styles.settingLabel}>When a duplicate course is imported</div>
-            <div className={styles.settingDesc}>
-              IsmaLearn detects when you import a folder that is already in your library.
-            </div>
-          </div>
-          <ThemedSelect
-            label="When a duplicate course is imported"
-            value={settings.duplicateImportBehavior}
-            onChange={(v) => updateSettings({ duplicateImportBehavior: v as AppSettings['duplicateImportBehavior'] })}
-          >
-            <option value="ask">Show options</option>
-            <option value="skip">Skip import</option>
-            <option value="rescan">Rescan existing course</option>
-          </ThemedSelect>
-        </div>
         <div className={styles.settingRow}>
           <div className={styles.settingInfo}>
             <div className={styles.settingLabel}>Rescan library on startup</div>
@@ -377,35 +341,6 @@ export default function Settings() {
           <strong>IsmaLearn</strong> — Your courses. Your pace. Your progress.
           A local-first learning platform for studying downloaded courses offline.
         </p>
-        <div className={styles.settingRow}>
-          <div className={styles.settingInfo}>
-            <div className={styles.settingLabel}>Application updates</div>
-            <div className={styles.settingDesc}>
-              {updateStatus === null
-                ? 'Check whether a newer release is available.'
-                : updateStatus.status === 'disabled'
-                  ? 'Update checks are not configured for this build.'
-                  : updateStatus.status === 'up-to-date'
-                    ? `IsmaLearn v${updateStatus.version} is the latest version.`
-                    : updateStatus.status === 'update-available'
-                      ? `IsmaLearn v${updateStatus.version} is available (you have v${updateStatus.current}).`
-                      : updateStatus.message}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {updateStatus?.status === 'update-available' && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => void api().app.openUrl(updateStatus.url)}
-              >
-                <Download size={14} /> Get update
-              </button>
-            )}
-            <button className="btn btn-ghost btn-sm" onClick={handleCheckUpdates} disabled={checkingUpdates}>
-              <RefreshCw size={14} /> {checkingUpdates ? 'Checking...' : 'Check now'}
-            </button>
-          </div>
-        </div>
       </section>
     </div>
   );

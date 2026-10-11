@@ -89,9 +89,4 @@ export function registerBackupIpc(): void {
     fs.mkdirSync(dir, { recursive: true });
     await shell.openPath(dir);
   });
-
-  ipcMain.handle('app:checkForUpdates', async () => {
-    const { checkForUpdates } = await import('../services/updateService');
-    return checkForUpdates();
-  });
 }

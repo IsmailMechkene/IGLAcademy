@@ -11,24 +11,47 @@ through its real IPC surface and real UI. Nothing in the repo was modified excep
 
 ---
 
-## 0. Status — Phase 0 applied 2026-10-11
+## 0. Status — Phases 0, 1 and 2 applied 2026-10-11
+
+Phase 2 was run as **"delete the fakes"**: anything with nothing behind it was removed rather than
+built. Features that were fully implemented and merely *unwired* were connected instead — deleting
+those would have removed working code (and a CC menu, an SRT converter and its tests) to fix a
+one-line omission. Say the word if you want them gone as well.
 
 | ID | Status | What changed | Verified by |
 |---|---|---|---|
+| **H1** | **FIXED (wired, not deleted)** | The subtitle branch in the `media://` handler now runs *before* the single-id parse that turned `sub/<id>/<index>` into `NaN`, and the player passes `lessonId` so tracks are actually requested. | Runtime probe: `media://sub/5/0` now returns **200 `text/vtt`** (was 400). Player probe: CC button appears, menu lists **"Off / Subtitles / FR"**, selecting one yields `<track src="media://sub/1/0">` that Chromium parses into **2 cues**, first reading "Hello from SRT". New unit test covers track listing + SRT→VTT. |
+| **H2** | **FIXED (wired, not deleted)** | `connect-src 'self' media:` added to the CSP; `.txt`/`.md`/`.srt` added to the served MIME types. | Runtime probe: `fetch('media://resource/2')` → **`{ok: true, status: 200}`** with the file's text (was `Failed to fetch`), and the CSP console error is gone. |
+| **M5** | **FIXED** | Lesson duration is learned from the player at `loadedmetadata` and persisted via `courses:setLessonDuration` (validated, 24 h ceiling, only rewritten on >1 s drift), so the duration UI and the resume heuristic have real data. | Runtime probe: `durationBefore: null` → `durationAfter: 10.026667`. New unit test covers the write-only-when-changed rule. |
+| **M4** | **DELETED (the claim, not the data)** | The dashboard's "Learning time" card claimed watch time but summed the furthest point reached per lesson. Relabelled **"Content covered"** with a tooltip saying skipping ahead counts, and the unused `addWatchedTime` accumulator — the half-built real implementation — was removed, with the column's true meaning documented on `savePosition`. | Code change; the metric is unchanged, only its (previously false) label. Real watch time would need a playback ticker, deliberately not built. |
+| **M14** | **DELETED** | "When a duplicate course is imported" (ask/skip/rescan) was stored and validated but never read. Setting, UI row, type field, default and validation all removed; migration 6 deletes the stored rows. | New unit test upgrades a pre-v6 database and asserts the key is gone while real settings survive. |
+| **M15** | **DELETED** | The update checker could only ever report "not configured" (`UPDATE_REPO = ''`, no publish feed). `updateService.ts`, the `app:checkForUpdates` IPC, the preload method, the Settings row and the unread `checkForUpdates` setting are gone — as is `app:openUrl`, whose only caller was the deleted "Get update" button. README no longer advertises it. | Typecheck + build; the preload surface is two channels smaller. |
+| **M16** | **FIXED (one line)** | Clicking a timestamp in a note now passes `startAt`, so the player actually seeks — the route already supported it and the comment claiming the player handled it was wrong. | Code change; the same `startAt` path is already exercised by the bookmark "Jump" button. |
+| **M17** | **FIXED** | `examPassPercent` is now honoured in QuizHistory, PracticeExams (2 places), ExamStats (trend pass-line + weak-topic threshold) and the ModePicker's "N% to pass" label, which all hardcoded 70. | `grep` shows no hardcoded pass marks left in `src/`. |
+| **C2** | **FIXED** | `refreshKey` removed from the `<main>` key, so a data refresh no longer remounts the page; the player records completion into local state (`withCompletion`) instead of calling `refreshAll()`. Settings' data effect now depends on `refreshKey` rather than the stable `refreshAll`. | Runtime probe at 93% of a real video: `videoStillSameElement: **true**`, `oldElementDetached: **false**`, playback ran on to 10.03s instead of resetting to 0. Sidebar still flips to "Completed". |
+| **C3** | **FIXED** | `practice:submit` places each answer by `questionIndex` (the question's position in the file) instead of trusting array order, rejecting duplicate/out-of-range indices; `FileExamPage` sends it. Array position is still accepted for callers that submit in file order. | New unit test replaying the real shuffle pipeline + **full UI probe**: shuffle on, display order `[3,1,4,6,5,2]`, every question answered correctly as displayed → **"6 of 6 correct", 100%**, stored attempt reads back in file order. |
+| **H7** | **FIXED** | Scoring extracted to `scoreAttempt(quiz, answers)`: one row per quiz question, `total = quiz.questions.length`, blank answers count as incorrect instead of raising `Invalid option selected`, out-of-range options dropped, unknown ids ignored. Exam mode can now submit (and advance past) blank questions, as the real exam does. | New unit test: short payload now scores **1/3 = 33%** (was 1/1 = 100%); blank + out-of-range answers no longer throw. |
+| **M1** | **FIXED** | The exam clock derives from a wall-clock deadline, ticks twice a second, and re-syncs on `visibilitychange`, instead of decrementing a counter per interval. | Runtime probe: starving the JS event loop for ~3.9 s moved the clock `12:00` → **`11:56`**. The old counter would have lost that time. |
+| **M12** | **FIXED** | A `null` submit result is treated as a failure in both runners (`QuizTaker`, `PracticeRunner`) instead of leaving the button stuck on "Submitting...". | Code change; the triggering condition (exam file changing mid-run) is not reproducible on demand — **not runtime-verified**. |
 | **C1** | **FIXED** | Rescan now flags vanished files (`lessons.missing_since`, migration 5) instead of deleting the row; `getCourseHealth` keeps the flag in sync; missing lessons are badged in the lesson list and sidebar; permanent removal moved behind an explicit, confirmed "Forget lesson" action (`courses:forgetLesson`). | 4 new unit tests + runtime probe: notes 1→**1**, bookmarks 1→**1**, watched 123.5→**123.5** after the same rescan that used to zero them. UI probe shows the banner, badge and both dialogs. |
 | **H3** | **FIXED** | `media:locateFile` validates containment, file kind and existence **before** writing the lesson row, and returns a typed `LocateFileResult`; both call sites now report `outside-course` / `wrong-type` / `error` through a dialog instead of swallowing an unhandled rejection. | Typecheck + both call sites rewritten; refusal paths unit-reachable (containment behaviour already covered by `tests/database.test.ts`). |
 | **H4** | **FIXED** | Attempt answers now store a snapshot of the question as asked, the `question_id` FK cascade was removed (table rebuild in migration 5), and the editor diffs questions instead of replacing them wholesale. | 2 new unit tests + runtime probe: after rewriting Q1 and deleting Q2 through the real IPC, the attempt still reads back **both** original questions, options, explanations and 1/2 = 50%. |
 | **H6** | **FIXED** | `schema_migrations` removed from backup/restore; restore takes column names from the live schema (not the file) and coerces non-primitives; a failed open now quarantines the database by **renaming** it (never deleting), with a dialog and a retry, and `createDatabase` closes the handle on failure so the rename can succeed on Windows. A pre-migration copy is written to `backups/` before any schema upgrade. | 4 new unit tests, including a populated **pre-v5 database upgraded in place** (data intact, cascade gone) and a quarantine-then-reopen cycle. |
 | L12 | **not done** | The 26 uncommitted CSS/`main.ts` changes were left untouched — committing someone else's unreviewed design pass is not mine to do. My edits do not overlap them (only `CourseDetail.module.css` gained one new class). | — |
 
-Phase 0 deliberately left alone: resource rows are still dropped on rescan (no user data attached to
-them); the notes/bookmarks cascade still applies to *explicit* lesson removal (that is the point of
-the confirmation); **M10** now surfaces as a duplicate section full of "File missing" badges when a
-section folder is renamed, instead of silent data loss — still worth fixing in Phase 3. **H7** is
-Phase 1: `insertAttempt` gained an optional `total` argument but the IPC behaviour is unchanged.
+Deliberately left alone: resource rows are still dropped on rescan (no user data attached to them);
+the notes/bookmarks cascade still applies to *explicit* lesson removal (that is the point of the
+confirmation); **M10** now surfaces as a duplicate section full of "File missing" badges when a
+section folder is renamed, instead of silent data loss — still worth fixing in Phase 3. Exam timers
+are anchored but still **not persisted**, so closing the window mid-exam loses the clock; resuming
+vs voiding an interrupted exam is a product decision, not a bug fix.
 
-After Phase 0: `tsc --noEmit` clean, **106/106 unit tests pass** (was 96), `npm run build` clean,
-`npm run test:e2e` passes first try.
+Fixed as a side effect of C2: rescan/import result dialogs are now readable. `refreshAll()` used to
+remount the page that had just opened them, so "Rescan complete: N new lessons" was destroyed in the
+same tick it was created — confirmed visible in a UI probe after the change.
+
+After Phases 0 + 1: `tsc --noEmit` clean, **108/108 unit tests pass** (was 96), `npm run build`
+clean, `npm run test:e2e` passes, 6 CDP probes against the built app.
 
 ---
 

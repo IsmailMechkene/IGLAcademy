@@ -176,5 +176,3 @@ export function registerQuizIpc(): void {
     return getAttemptDetail(db, requireId(attemptId, 'attemptId'));
   });
 }
-
-export { ValidationError };

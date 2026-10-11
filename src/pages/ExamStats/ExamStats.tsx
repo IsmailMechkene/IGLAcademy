@@ -16,7 +16,7 @@ interface Props {
   filePath: string;
 }
 
-function TrendChart({ attempts }: { attempts: QuizAttemptSummary[] }) {
+function TrendChart({ attempts, passPercent }: { attempts: QuizAttemptSummary[]; passPercent: number }) {
   const points = [...attempts].sort((a, b) => a.id - b.id);
   if (points.length === 0) return null;
   const W = 560;
@@ -27,7 +27,8 @@ function TrendChart({ attempts }: { attempts: QuizAttemptSummary[] }) {
   const line = points.map((a, i) => `${i === 0 ? 'M' : 'L'}${xs(i).toFixed(1)},${ys(a.percent).toFixed(1)}`).join(' ');
   return (
     <svg className={styles.trendSvg} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Score trend over ${points.length} attempts`}>
-      <line x1={PAD} y1={ys(70)} x2={W - PAD} y2={ys(70)} stroke="var(--danger)" strokeWidth="1" strokeDasharray="4 4" opacity="0.7" />
+      {/* pass line follows the configured pass mark, not a hardcoded 70 */}
+      <line x1={PAD} y1={ys(passPercent)} x2={W - PAD} y2={ys(passPercent)} stroke="var(--danger)" strokeWidth="1" strokeDasharray="4 4" opacity="0.7" />
       <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" />
       {points.map((a, i) => (
         <circle key={a.id} cx={xs(i)} cy={ys(a.percent)} r="4" fill="var(--accent)">
@@ -159,7 +160,7 @@ export default function ExamStats({ filePath }: Props) {
           <div className={styles.grid}>
             <div className={`card ${styles.panel}`}>
               <h2><TrendingUp size={15} /> Score trend</h2>
-              <TrendChart attempts={attempts} />
+              <TrendChart attempts={attempts} passPercent={settings.examPassPercent} />
               {comparison && (
                 <div className="secondary" style={{ fontSize: 13 }}>
                   Last attempt{' '}
@@ -187,7 +188,7 @@ export default function ExamStats({ filePath }: Props) {
                     </div>
                     <div className={styles.topicBar} role="img" aria-label={`${t.topic}: ${t.percent}% correct`}>
                       <div
-                        className={`${styles.topicFill} ${t.percent < 70 ? styles.weak : ''}`}
+                        className={`${styles.topicFill} ${t.percent < settings.examPassPercent ? styles.weak : ''}`}
                         style={{ width: `${t.percent}%` }}
                       />
                     </div>

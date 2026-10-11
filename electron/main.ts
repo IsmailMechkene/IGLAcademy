@@ -45,11 +45,10 @@ function registerMediaProtocol(): void {
   protocol.handle('media', async (request) => {
     try {
       const url = new URL(request.url);
-      const id = Number(url.pathname.replace(/^\//, ''));
-      if (!Number.isInteger(id) || id <= 0) {
-        return new Response('Bad request', { status: 400 });
-      }
       const db = getDb();
+
+      // Subtitles come first: their path is <lessonId>/<index>, so the
+      // single-id parse below would read it as NaN and 400 every request.
       if (url.host === 'sub') {
         // media://sub/<lessonId>/<index> — converted to VTT on the fly
         const parts = url.pathname.replace(/^\//, '').split('/');
@@ -63,6 +62,11 @@ function registerMediaProtocol(): void {
           status: 200,
           headers: { 'Content-Type': 'text/vtt; charset=utf-8' },
         });
+      }
+
+      const id = Number(url.pathname.replace(/^\//, ''));
+      if (!Number.isInteger(id) || id <= 0) {
+        return new Response('Bad request', { status: 400 });
       }
       const filePath =
         url.host === 'lesson'

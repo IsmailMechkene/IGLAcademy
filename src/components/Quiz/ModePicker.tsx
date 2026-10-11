@@ -15,6 +15,8 @@ interface Props {
   onPickDuration: (seconds: number) => void;
   onPick: (mode: ExamMode) => void;
   onBack: () => void;
+  /** Pass mark from settings (the label used to claim a hardcoded 70%). */
+  passPercent: number;
 }
 
 /** Choose between untimed practice (instant feedback) and a timed exam. */
@@ -30,6 +32,7 @@ export default function ModePicker({
   onPickDuration,
   onPick,
   onBack,
+  passPercent,
 }: Props) {
   return (
     <div className={`fade-in ${styles.modeWrap}`}>
@@ -39,7 +42,7 @@ export default function ModePicker({
       <h1 className={styles.modeTitle}>{title}</h1>
       <p className="secondary" style={{ margin: 0 }}>
         {questionCount} questions
-        {multiCount > 0 ? ` (${multiCount} multi-select)` : ''} · 70% to pass
+        {multiCount > 0 ? ` (${multiCount} multi-select)` : ''} · {passPercent}% to pass
       </p>
       {description && (
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>

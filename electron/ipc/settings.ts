@@ -20,13 +20,12 @@ export function registerSettingsIpc(): void {
     // Validate known setting values
     if (k === 'theme') requireEnum(value, ['dark', 'light', 'system'] as const, 'theme');
     if (k === 'resumePlayback') requireEnum(value, ['ask', 'always', 'never'] as const, 'resumePlayback');
-    if (k === 'duplicateImportBehavior') requireEnum(value, ['ask', 'skip', 'rescan'] as const, 'duplicateImportBehavior');
     if (k === 'defaultPlaybackSpeed') {
       if (typeof value !== 'number' || !VALID_SPEEDS.includes(value)) {
         throw new ValidationError('defaultPlaybackSpeed must be a supported speed');
       }
     }
-    if (k === 'autoBackup' || k === 'rescanOnStartup' || k === 'checkForUpdates') {
+    if (k === 'autoBackup' || k === 'rescanOnStartup') {
       if (typeof value !== 'boolean') throw new ValidationError(`${k} must be a boolean`);
     }
     if (k === 'backupKeep') {
@@ -54,5 +53,3 @@ export function registerSettingsIpc(): void {
     return getAllSettings(db);
   });
 }
-
-export { ValidationError };

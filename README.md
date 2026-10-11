@@ -33,8 +33,10 @@ tracking, notes with video timestamps, and self-made quizzes.
 - **File resilience** — per-course health checks, missing-file recovery, bulk
   folder relocation, library-wide rescan, and optional startup rescan.
 - **Backup & safety** — one-click JSON export/import (with safety backup),
-  automatic timestamped database backups with pruning, diagnostic logs, and
-  an update checker.
+  automatic timestamped database backups with pruning (including one taken
+  before any schema upgrade), diagnostic logs, and recovery from an unreadable
+  database without losing the old file. There is no auto-update: builds are
+  installed manually.
 - **Progress tracking** — dashboard stats, continue-learning, recently opened,
   per-course progress bars, all persisted in SQLite.
 - **Notes** — per-course/per-lesson notes with autosave, Markdown preview,
@@ -42,7 +44,7 @@ tracking, notes with video timestamps, and self-made quizzes.
 - **Quizzes** — create multiple-choice quizzes per course, take them, review
   answers with explanations, and keep a full attempt history.
 - **Settings** — dark/light/system theme, default playback speed, resume preference,
-  duplicate-import behavior, exam pass mark and pace, backup controls, and storage info.
+  startup rescan, exam pass mark and pace, backup controls, and storage info.
 
 ## Tech stack
 
@@ -143,7 +145,9 @@ node scripts/register-exam-source.mjs --db "<path-to-ismalearn.db>" --dir "<exam
 each answer instantly with explanations (untimed), while **Exam mode** runs
 under real AWS pacing (2 minutes per question — 130 minutes for a 65-question
 exam), hiding answers until submit, with a question navigator, flag-for-review,
-and automatic submission when time runs out. Passing is 70%.
+and automatic submission when time runs out. Questions may be left blank (they
+count as incorrect). The pass mark defaults to 70% and is configurable in
+Settings → Exams.
 
 Attempt history (scores, dates, full answer review) is stored per file, so
 re-taking the same test tracks your progress over time. Removing a source

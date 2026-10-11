@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, History } from 'lucide-react';
 import type { Quiz, QuizAttemptSummary } from '../../types';
 import { api } from '../../services/api';
+import { useApp } from '../../App';
 import { formatDateTime } from '../../utils/format';
 import LoadError from '../LoadError/LoadError';
 import styles from './Quiz.module.css';
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function QuizHistory({ quiz, onClose }: Props) {
+  const { settings } = useApp();
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([]);
   const [loadError, setLoadError] = useState(false);
 
@@ -69,7 +71,7 @@ export default function QuizHistory({ quiz, onClose }: Props) {
             <div key={a.id} className={`card ${styles.historyRow}`}>
               <span
                 className={styles.historyScore}
-                style={{ color: a.percent >= 70 ? 'var(--success)' : 'var(--danger)' }}
+                style={{ color: a.percent >= settings.examPassPercent ? 'var(--success)' : 'var(--danger)' }}
               >
                 {a.percent}%
               </span>

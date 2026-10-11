@@ -274,6 +274,17 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_answers_question ON quiz_attempt_answers(question_id);
     `,
   },
+  {
+    version: 6,
+    name: 'drop_unimplemented_settings',
+    sql: `
+      -- Two settings were stored and validated but never read by anything:
+      -- the duplicate-import behaviour (the import flow always asks) and the
+      -- update-check toggle (there is no update feed). Both UIs are gone, so
+      -- the stored rows go too rather than lingering in getAllSettings().
+      DELETE FROM app_settings WHERE key IN ('duplicateImportBehavior', 'checkForUpdates');
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

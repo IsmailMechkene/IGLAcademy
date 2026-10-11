@@ -14,6 +14,7 @@ import {
   getCourseBySourcePath,
   deleteCourse,
   countCourses,
+  updateLessonDuration,
 } from '../electron/database/repositories/courses';
 import {
   savePosition,
@@ -75,6 +76,8 @@ import { getAllSettings, setSetting } from '../electron/database/repositories/se
 import {
   checkFileExists,
   resolveLessonFile,
+  listSubtitleTracks,
+  resolveSubtitleFile,
 } from '../electron/services/fileService';
 import { validateQuestionInput, scoreAttempt } from '../electron/ipc/quizzes';
 import { mulberry32, normalizeSelected, shuffledIndexes } from '../src/utils/examAnalytics';
@@ -851,6 +854,81 @@ describe('settings', () => {
     db.close();
     db = createDatabase(path.join(dbDir, 'test.db'));
     expect(getAllSettings(db).theme).toBe('light');
+  });
+
+  it('drops settings that nothing implements when an older database is upgraded', () => {
+    // A database from before the removal: migrations up to 5, with the two
+    // dead settings stored.
+    const oldPath = path.join(dbDir, 'pre-removal.db');
+    const old = new SqliteDatabase(oldPath);
+    old.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, name TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+    for (const m of MIGRATIONS.filter((x) => x.version <= 5)) {
+      old.exec(m.sql);
+      old.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(m.version, m.name);
+    }
+    old.exec(`INSERT INTO app_settings (key, value) VALUES
+      ('theme', '"light"'),
+      ('duplicateImportBehavior', '"rescan"'),
+      ('checkForUpdates', 'true');`);
+    old.close();
+
+    const upgraded = createDatabase(oldPath);
+    const keys = (upgraded.prepare('SELECT key FROM app_settings').all() as Array<{ key: string }>).map((r) => r.key);
+    expect(keys).not.toContain('duplicateImportBehavior');
+    expect(keys).not.toContain('checkForUpdates');
+    // real settings are untouched
+    expect(keys).toContain('theme');
+    expect(getAllSettings(upgraded).theme).toBe('light');
+    expect(Object.keys(getAllSettings(upgraded))).not.toContain('checkForUpdates');
+    upgraded.close();
+  });
+});
+
+describe('lesson duration', () => {
+  it('is learned from the player and only rewritten when it really changes', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const lesson = getCourseDetail(db, courseId)!.sections[0].lessons[0];
+    // The scanner cannot know a duration without decoding, so it starts null.
+    expect(lesson.duration).toBeNull();
+
+    expect(updateLessonDuration(db, lesson.id, 630.4)).toBe(true);
+    const stored = getCourseDetail(db, courseId)!.sections[0].lessons.find((l) => l.id === lesson.id);
+    expect(stored?.duration).toBeCloseTo(630.4);
+
+    // sub-second drift on replay must not keep touching the row
+    expect(updateLessonDuration(db, lesson.id, 630.9)).toBe(false);
+    expect(updateLessonDuration(db, lesson.id, 999)).toBe(true);
+    expect(updateLessonDuration(db, 999999, 100)).toBe(false);
+  });
+});
+
+describe('subtitles', () => {
+  it('resolves sidecar tracks for a lesson and converts SRT on the fly', () => {
+    const courseRoot = makeCourseDir();
+    const videoPath = path.join(courseRoot, '01 - Introduction', '01 - Welcome.mp4');
+    fs.writeFileSync(
+      path.join(courseRoot, '01 - Introduction', '01 - Welcome.srt'),
+      '1\n00:00:01,000 --> 00:00:02,000\nHello\n',
+    );
+    fs.writeFileSync(
+      path.join(courseRoot, '01 - Introduction', '01 - Welcome.fr.vtt'),
+      'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nBonjour\n',
+    );
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const lesson = getCourseDetail(db, courseId)!
+      .sections.flatMap((s) => s.lessons)
+      .find((l) => l.filePath === videoPath)!;
+
+    const tracks = listSubtitleTracks(db, lesson.id);
+    expect(tracks.map((t) => t.label)).toEqual(['Subtitles', 'FR']);
+    // The URL shape the renderer gets: media://sub/<lessonId>/<index>. The
+    // protocol handler used to parse "<id>/<index>" as a single id and 400.
+    expect(tracks[0].url).toBe(`media://sub/${lesson.id}/0`);
+    expect(resolveSubtitleFile(db, lesson.id, 0).content).toContain('00:00:01.000 --> 00:00:02.000');
+    expect(resolveSubtitleFile(db, lesson.id, 1).content).toContain('Bonjour');
+    expect(() => resolveSubtitleFile(db, lesson.id, 5)).toThrow(/not found/i);
   });
 });
 

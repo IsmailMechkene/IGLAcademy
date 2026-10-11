@@ -183,6 +183,7 @@ export default function FileExamPage({ filePath }: Props) {
       onPickDuration={setSecondsPerQuestion}
       onPick={startRun}
       onBack={backToLibrary}
+      passPercent={settings.examPassPercent}
     />
   );
 }

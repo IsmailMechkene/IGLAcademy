@@ -23,6 +23,20 @@ interface Props {
 const COMPLETION_THRESHOLD = 0.9; // 90% watched counts as complete
 const POSITION_SAVE_INTERVAL = 5; // seconds
 
+/** Records a freshly learned media duration on the loaded course. */
+function withDuration(course: CourseDetail, lessonId: number, duration: number): CourseDetail {
+  if (!course.sections.some((s) => s.lessons.some((l) => l.id === lessonId && l.duration !== duration))) {
+    return course;
+  }
+  return {
+    ...course,
+    sections: course.sections.map((section) => ({
+      ...section,
+      lessons: section.lessons.map((l) => (l.id === lessonId ? { ...l, duration } : l)),
+    })),
+  };
+}
+
 /**
  * Applies a completion change to the loaded course in place, so the lesson
  * sidebar and its counters update without re-fetching (and without the
@@ -275,13 +289,27 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
   }, [courseId, currentLessonId, lessonTitle]);
 
   // Jump links (bookmarks) can open the player at a position.
-  const handleLoadedMetadata = useCallback(() => {
-    if (startAtRef.current !== null && startAtRef.current > 0) {
-      const at = startAtRef.current;
-      startAtRef.current = null;
-      setTimeout(() => playerRef.current?.seek(at), 200);
-    }
-  }, []);
+  // This is also the only moment the real media duration is known, so it gets
+  // persisted here — the scanner cannot read it without decoding the file.
+  const handleLoadedMetadata = useCallback(
+    (duration: number) => {
+      if (startAtRef.current !== null && startAtRef.current > 0) {
+        const at = startAtRef.current;
+        startAtRef.current = null;
+        setTimeout(() => playerRef.current?.seek(at), 200);
+      }
+      if (Number.isFinite(duration) && duration > 0) {
+        const lessonId = currentLessonId;
+        void api()
+          .courses.setLessonDuration(lessonId, duration)
+          .then(() => {
+            setCourse((prev) => (prev ? withDuration(prev, lessonId, duration) : prev));
+          })
+          .catch(() => undefined);
+      }
+    },
+    [currentLessonId],
+  );
 
   const goToLesson = useCallback(
     (id: number) => {
@@ -486,6 +514,9 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
               <VideoPlayer
                 ref={playerRef}
                 src={mediaUrl ?? undefined}
+                // Without this the player never asks for subtitle tracks, so
+                // the CC menu (gated on tracks.length) could never appear.
+                lessonId={currentLessonId}
                 defaultSpeed={settings.defaultPlaybackSpeed}
                 hasPrev={currentIdx > 0}
                 hasNext={currentIdx >= 0 && currentIdx < lessons.length - 1}

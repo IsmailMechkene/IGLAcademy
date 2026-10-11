@@ -234,6 +234,22 @@ export function renameLesson(db: Database.Database, lessonId: number, title: str
   db.prepare('UPDATE lessons SET title = ? WHERE id = ?').run(title, lessonId);
 }
 
+/**
+ * Stores the real media duration, learned from the player the first time a
+ * lesson is opened (the scanner cannot know it without decoding). Writes only
+ * when the value is new or has drifted by more than a second, so playing a
+ * lesson does not keep touching the row.
+ */
+export function updateLessonDuration(db: Database.Database, lessonId: number, duration: number): boolean {
+  const row = db.prepare('SELECT duration FROM lessons WHERE id = ?').get(lessonId) as
+    | { duration: number | null }
+    | undefined;
+  if (!row) return false;
+  if (row.duration !== null && Math.abs(row.duration - duration) < 1) return false;
+  db.prepare('UPDATE lessons SET duration = ? WHERE id = ?').run(duration, lessonId);
+  return true;
+}
+
 /** Re-points a lesson at a new file. A relinked lesson is no longer missing. */
 export function updateLessonFilePath(db: Database.Database, lessonId: number, filePath: string): void {
   db.prepare('UPDATE lessons SET file_path = ?, missing_since = NULL WHERE id = ?').run(filePath, lessonId);

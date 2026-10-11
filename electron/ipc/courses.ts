@@ -2,7 +2,7 @@ import { ipcMain, dialog } from 'electron';
 import { getDb } from '../database/connection';
 import {
   listCourses, getCourseDetail, updateCourse, markCourseOpened, deleteCourse,
-  renameSection, renameLesson,
+  renameSection, renameLesson, updateLessonDuration,
 } from '../database/repositories/courses';
 import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
@@ -62,6 +62,15 @@ export function registerCourseIpc(): void {
     renameLesson(db, requireId(lessonId, 'lessonId'), requireString(title, 'title', 200));
   });
 
+  // Reported by the player once the media metadata is known. Bounded to a
+  // plausible range so a corrupt file cannot store nonsense (24h ceiling).
+  ipcMain.handle('courses:setLessonDuration', (_e, lessonId: unknown, duration: unknown) => {
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0 || duration > 86400) {
+      throw new ValidationError('duration must be a positive number of seconds');
+    }
+    updateLessonDuration(db, requireId(lessonId, 'lessonId'), duration);
+  });
+
   ipcMain.handle('courses:thumbnailUrl', (_e, courseId: unknown) => {
     return getCourseThumbnailUrl(db, requireId(courseId, 'courseId'));
   });
@@ -113,5 +122,3 @@ export function registerCourseIpc(): void {
     return forgetLesson(db, requireId(lessonId, 'lessonId'));
   });
 }
-
-export { ValidationError };

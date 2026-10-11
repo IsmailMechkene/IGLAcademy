@@ -1,6 +1,15 @@
 import type Database from 'better-sqlite3';
 import type { LearningStats, LessonActivity } from '../../../src/types';
 
+/**
+ * Saves the playback position.
+ *
+ * NOTE on `watched_seconds`: it is the FURTHEST point reached in the lesson
+ * (hence MAX), not time actually spent watching — skipping ahead counts. The
+ * UI labels it accordingly ("Content covered"). Real watch time would need a
+ * playback ticker; there is deliberately no half-built accumulator here any
+ * more, because the unused one made the column look like something it is not.
+ */
 export function savePosition(db: Database.Database, lessonId: number, seconds: number): void {
   db.prepare(
     `INSERT INTO lesson_progress (lesson_id, position_seconds, watched_seconds, updated_at)
@@ -10,16 +19,6 @@ export function savePosition(db: Database.Database, lessonId: number, seconds: n
        watched_seconds = MAX(lesson_progress.watched_seconds, excluded.watched_seconds),
        updated_at = datetime('now')`,
   ).run(lessonId, seconds, seconds);
-}
-
-export function addWatchedTime(db: Database.Database, lessonId: number, seconds: number): void {
-  db.prepare(
-    `INSERT INTO lesson_progress (lesson_id, position_seconds, watched_seconds, updated_at)
-     VALUES (?, 0, ?, datetime('now'))
-     ON CONFLICT(lesson_id) DO UPDATE SET
-       watched_seconds = lesson_progress.watched_seconds + excluded.watched_seconds,
-       updated_at = datetime('now')`,
-  ).run(lessonId, seconds);
 }
 
 export function setCompleted(db: Database.Database, lessonId: number, completed: boolean): void {

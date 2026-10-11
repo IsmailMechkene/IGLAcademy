@@ -21,7 +21,7 @@ interface ExamGroup {
 }
 
 export default function PracticeExams() {
-  const { navigate, refreshKey } = useApp();
+  const { navigate, refreshKey, settings } = useApp();
   const [sources, setSources] = useState<ExamSource[]>([]);
   const [files, setFiles] = useState<PracticeExamFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,7 +213,7 @@ export default function PracticeExams() {
                     ) : file.bestPercent !== null ? (
                       <span
                         className={styles.bestScore}
-                        style={{ color: file.bestPercent >= 70 ? 'var(--success)' : 'var(--warning)' }}
+                        style={{ color: file.bestPercent >= settings.examPassPercent ? 'var(--success)' : 'var(--warning)' }}
                       >
                         Best {file.bestPercent}%
                       </span>
@@ -359,7 +359,7 @@ export default function PracticeExams() {
               <div key={a.id} className={styles.historyRow}>
                 <span
                   className={styles.bestScore}
-                  style={{ color: a.percent >= 70 ? 'var(--success)' : 'var(--danger)' }}
+                  style={{ color: a.percent >= settings.examPassPercent ? 'var(--success)' : 'var(--danger)' }}
                 >
                   {a.percent}%
                 </span>

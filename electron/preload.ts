@@ -27,6 +27,8 @@ const api = {
       ipcRenderer.invoke('courses:renameSection', sectionId, title),
     renameLesson: (lessonId: number, title: string): Promise<void> =>
       ipcRenderer.invoke('courses:renameLesson', lessonId, title),
+    setLessonDuration: (lessonId: number, duration: number): Promise<void> =>
+      ipcRenderer.invoke('courses:setLessonDuration', lessonId, duration),
     thumbnailUrl: (courseId: number): Promise<string | null> =>
       ipcRenderer.invoke('courses:thumbnailUrl', courseId),
     health: (courseId: number): Promise<CourseHealth> =>
@@ -165,14 +167,7 @@ const api = {
     getLibraryInfo: (): Promise<{ courseCount: number; dbSizeBytes: number; dbPath: string }> =>
       ipcRenderer.invoke('app:getLibraryInfo'),
     showError: (title: string, message: string): Promise<void> => ipcRenderer.invoke('app:showError', title, message),
-    openUrl: (url: string): Promise<void> => ipcRenderer.invoke('app:openUrl', url),
     openLogs: (): Promise<void> => ipcRenderer.invoke('app:openLogs'),
-    checkForUpdates: (): Promise<
-      | { status: 'disabled' }
-      | { status: 'up-to-date'; version: string }
-      | { status: 'update-available'; version: string; current: string; url: string }
-      | { status: 'offline' | 'error'; message: string }
-    > => ipcRenderer.invoke('app:checkForUpdates'),
   },
 };
 

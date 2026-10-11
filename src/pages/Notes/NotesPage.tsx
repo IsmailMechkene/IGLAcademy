@@ -187,9 +187,15 @@ export default function NotesPage() {
                   {renderMarkdown(note.content, {
                     onTimestampClick: (seconds) => {
                       if (note.lessonId) {
-                        navigate({ name: 'player', courseId: note.courseId, lessonId: note.lessonId });
-                        // seek happens on mount via timestamp — handled by player resume
-                        void seconds;
+                        // startAt is what makes the player actually seek —
+                        // it used to be dropped, so the link just opened the
+                        // lesson at its saved position.
+                        navigate({
+                          name: 'player',
+                          courseId: note.courseId,
+                          lessonId: note.lessonId,
+                          startAt: Math.floor(seconds),
+                        });
                       }
                     },
                   })}

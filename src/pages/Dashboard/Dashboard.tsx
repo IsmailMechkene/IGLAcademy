@@ -171,13 +171,18 @@ export default function Dashboard() {
       chip: styles.chipViolet,
       value: String(stats?.courseCount ?? 0),
       label: 'Courses',
+      title: undefined as string | undefined,
       extra: null as ReactNode,
     },
     {
       icon: Clock,
       chip: styles.chipGreen,
+      // Honest label: the underlying number is the sum of the furthest point
+      // reached in each lesson, not time actually spent watching (skipping
+      // ahead counts). Calling it "Learning time" overstated it.
       value: formatHours(stats?.totalWatchedSeconds ?? 0),
-      label: 'Learning time',
+      label: 'Content covered',
+      title: 'Total runtime you have reached across all lessons (skipping ahead counts as covered).',
       extra: null as ReactNode,
     },
     {
@@ -185,6 +190,7 @@ export default function Dashboard() {
       chip: styles.chipAmber,
       value: String(stats?.lessonsCompleted ?? 0),
       label: `Lessons completed of ${stats?.totalLessons ?? 0}`,
+      title: undefined as string | undefined,
       extra: null as ReactNode,
     },
     {
@@ -192,6 +198,7 @@ export default function Dashboard() {
       chip: styles.chipBlue,
       value: `${stats?.overallProgressPercent ?? 0}%`,
       label: 'Overall progress',
+      title: undefined as string | undefined,
       extra: <ProgressRing percent={stats?.overallProgressPercent ?? 0} />,
     },
   ];
@@ -233,7 +240,7 @@ export default function Dashboard() {
         {statItems.map((s) => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className={`card ${styles.statCard}`}>
+            <div key={s.label} className={`card ${styles.statCard}`} title={s.title}>
               <div className={styles.statTop}>
                 <span className={`${styles.chip} ${s.chip}`}>
                   <Icon size={16} />
