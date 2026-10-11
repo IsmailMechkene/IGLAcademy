@@ -12,18 +12,18 @@ export default function LoadError({ message, onRetry }: Props) {
       className="card"
       role="alert"
       style={{
-        padding: 32,
+        padding: 28,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 10,
+        gap: 8,
         textAlign: 'center',
       }}
     >
-      <AlertTriangle size={28} color="var(--warning)" />
-      <div style={{ fontWeight: 650, fontSize: 14.5 }}>{message}</div>
-      <button className="btn btn-ghost" onClick={onRetry}>
-        <RefreshCw size={14} /> Try again
+      <AlertTriangle size={24} color="var(--warning)" />
+      <div style={{ fontWeight: 600, fontSize: 13.5 }}>{message}</div>
+      <button className="btn btn-ghost btn-sm" onClick={onRetry}>
+        <RefreshCw size={13} /> Try again
       </button>
     </div>
   );

@@ -26,6 +26,12 @@ export interface Lesson {
   fileType: 'video' | 'practice' | 'resource';
   duration: number | null;
   position: number;
+  /**
+   * When set, the lesson's file was not on disk at the last rescan. The lesson
+   * (and its notes, bookmarks and progress) is kept until the user forgets it
+   * explicitly, so a moved folder or an unplugged drive loses nothing.
+   */
+  missingSince: string | null;
 }
 
 export interface LessonProgress {
@@ -330,9 +336,23 @@ export interface RescanResult {
   status: 'ok' | 'error';
   addedLessons: number;
   addedSections: number;
-  removedLessons: number;
+  /**
+   * Lessons newly flagged as missing (files gone). Rescan never deletes them —
+   * progress, notes and bookmarks stay until the user forgets the lesson.
+   */
+  missingLessons: number;
+  /** Lessons whose file came back since the last rescan. */
+  restoredLessons: number;
   error?: string;
 }
+
+/** Result of relinking a single missing lesson file via the native dialog. */
+export type LocateFileResult =
+  | { status: 'ok'; url: string }
+  | { status: 'cancelled' }
+  | { status: 'outside-course'; courseTitle: string }
+  | { status: 'wrong-type'; expected: string }
+  | { status: 'error'; message: string };
 
 export interface NoteInput {
   courseId: number;

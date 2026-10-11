@@ -54,7 +54,7 @@ function ThemedSelect({
 }
 
 export default function Settings() {
-  const { settings, updateSettings, refreshAll } = useApp();
+  const { settings, updateSettings, refreshAll, refreshKey } = useApp();
   const [version, setVersion] = useState('');
   const [paths, setPaths] = useState<{ userData: string; dbPath: string } | null>(null);
   const [libraryInfo, setLibraryInfo] = useState<{ courseCount: number; dbSizeBytes: number; dbPath: string } | null>(null);
@@ -67,7 +67,9 @@ export default function Settings() {
     api().app.getPaths().then(setPaths).catch(() => undefined);
     api().app.getLibraryInfo().then(setLibraryInfo).catch(() => undefined);
     api().backup.list().then(setBackups).catch(() => undefined);
-  }, [refreshAll]);
+    // refreshKey (not refreshAll, which is a stable callback) is what changes
+    // after a restore or a reset — the page no longer remounts to pick it up.
+  }, [refreshKey]);
 
   const handleBackupNow = () => {
     void api().backup.now().then(() => {

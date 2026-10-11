@@ -1,9 +1,22 @@
 import { ipcMain, dialog, shell } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type Database from 'better-sqlite3';
+import type { Course, LocateFileResult } from '../../src/types';
 import { getDb } from '../database/connection';
 import { getMediaUrl, checkFileExists, listSubtitleTracks, resolveLessonFile } from '../services/fileService';
-import { updateLessonFilePath, getLesson } from '../database/repositories/courses';
+import { updateLessonFilePath, getLesson, getCourse } from '../database/repositories/courses';
+import { VIDEO_EXTENSIONS, PRACTICE_EXTENSIONS } from '../services/courseScanner';
 import { requireId } from '../services/validate';
+
+/** The course a lesson belongs to (lessons reach courses through sections). */
+function getCourseForLesson(db: Database.Database, lessonId: number): Course | null {
+  const row = db
+    .prepare('SELECT s.course_id FROM lessons l JOIN sections s ON s.id = l.section_id WHERE l.id = ?')
+    .get(lessonId) as { course_id: number } | undefined;
+  return row ? getCourse(db, row.course_id) : null;
+}
 
 export function registerMediaIpc(): void {
   const db = getDb();
@@ -27,20 +40,43 @@ export function registerMediaIpc(): void {
     await shell.openExternal(pathToFileURL(filePath).href);
   });
   // Lets the user relocate a missing lesson file via a native file dialog.
-  ipcMain.handle('media:locateFile', async (_e, lessonId: unknown) => {
+  // The chosen file is validated BEFORE the lesson row is touched: writing an
+  // unusable path (outside the course folder, wrong kind) used to leave the
+  // lesson permanently unplayable with no error shown anywhere.
+  ipcMain.handle('media:locateFile', async (_e, lessonId: unknown): Promise<LocateFileResult> => {
     const id = requireId(lessonId, 'lessonId');
     const lesson = getLesson(db, id);
-    if (!lesson) throw new Error('Lesson not found');
+    if (!lesson) return { status: 'error', message: 'Lesson not found.' };
+    const course = getCourseForLesson(db, id);
+    if (!course) return { status: 'error', message: 'Course not found.' };
 
+    const expected = lesson.fileType === 'practice' ? PRACTICE_EXTENSIONS : VIDEO_EXTENSIONS;
     const result = await dialog.showOpenDialog({
       title: `Locate "${lesson.title}"`,
       defaultPath: lesson.filePath,
       properties: ['openFile'],
+      filters: [{ name: lesson.fileType === 'practice' ? 'Practice tests' : 'Video', extensions: expected.map((e) => e.slice(1)) }],
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
+    if (result.canceled || result.filePaths.length === 0) return { status: 'cancelled' };
 
-    const newPath = result.filePaths[0];
-    updateLessonFilePath(db, id, newPath);
-    return getMediaUrl(db, id);
+    const picked = path.resolve(result.filePaths[0]);
+    const courseRoot = path.resolve(course.sourcePath);
+    if (picked !== courseRoot && !picked.startsWith(courseRoot + path.sep)) {
+      // Refuse rather than store a path the media protocol will always deny.
+      return { status: 'outside-course', courseTitle: course.title };
+    }
+    if (!(expected as readonly string[]).includes(path.extname(picked).toLowerCase())) {
+      return { status: 'wrong-type', expected: expected.join(', ') };
+    }
+    if (!fs.existsSync(picked)) {
+      return { status: 'error', message: 'That file no longer exists.' };
+    }
+
+    updateLessonFilePath(db, id, picked);
+    try {
+      return { status: 'ok', url: getMediaUrl(db, id) };
+    } catch (err) {
+      return { status: 'error', message: err instanceof Error ? err.message : 'Could not open that file.' };
+    }
   });
 }

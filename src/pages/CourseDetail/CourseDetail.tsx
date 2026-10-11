@@ -6,8 +6,9 @@ import {
 import type { CourseDetail as CourseDetailType, CourseHealth } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
-import { formatTime } from '../../utils/format';
+import { formatDateTime, formatTime } from '../../utils/format';
 import { cleanTitle } from '../../utils/titles';
+import { locateFileMessage } from '../../utils/locateFile';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
 import LoadError from '../../components/LoadError/LoadError';
@@ -31,6 +32,7 @@ export default function CourseDetail({ courseId }: Props) {
   const [health, setHealth] = useState<CourseHealth | null>(null);
   const [showHealth, setShowHealth] = useState(false);
   const [relocating, setRelocating] = useState(false);
+  const [forgetting, setForgetting] = useState<{ lessonId: number; title: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +66,40 @@ export default function CourseDetail({ courseId }: Props) {
       .then(setHealth)
       .catch(() => undefined);
   }, [courseId, refreshKey]);
+
+  const refreshHealth = async () => {
+    const next = await api().courses.health(courseId).catch(() => null);
+    if (next) setHealth(next);
+  };
+
+  const handleLocate = async (lessonId: number) => {
+    try {
+      const result = await api().media.locateFile(lessonId);
+      if (result.status === 'cancelled') return;
+      if (result.status !== 'ok') {
+        await api().app.showError('Could not use that file', locateFileMessage(result));
+        return;
+      }
+      await refreshHealth();
+      refreshAll();
+    } catch (err) {
+      await api().app.showError('Could not use that file', err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
+  const handleForget = async (lessonId: number) => {
+    const result = await api().courses.forgetLesson(lessonId).catch(() => ({
+      status: 'error' as const,
+      title: '',
+      error: 'Could not remove the lesson.',
+    }));
+    setForgetting(null);
+    if (result.status === 'error') {
+      await api().app.showError('Could not forget this lesson', result.error ?? 'Unknown error');
+    }
+    await refreshHealth();
+    refreshAll();
+  };
 
   const handleRelocate = async () => {
     setRelocating(true);
@@ -268,7 +304,9 @@ export default function CourseDetail({ courseId }: Props) {
                   {section.lessons.map((lesson) => (
                     <button key={lesson.id} className={styles.lessonRow} onClick={() => openLesson(lesson.id)}>
                       <span className={styles.statusIcon}>
-                        {lesson.completed ? (
+                        {lesson.missingSince !== null ? (
+                          <FileWarning size={17} color="var(--warning)" />
+                        ) : lesson.completed ? (
                           <CheckCircle2 size={17} color="var(--success)" />
                         ) : lesson.fileType === 'practice' ? (
                           <FileText size={17} color="var(--text-muted)" />
@@ -277,6 +315,14 @@ export default function CourseDetail({ courseId }: Props) {
                         )}
                       </span>
                       <span className={styles.lessonTitle}>{lesson.title}</span>
+                      {lesson.missingSince !== null && (
+                        <span
+                          className={styles.lessonMissing}
+                          title={`File not found since ${formatDateTime(lesson.missingSince)} — progress and notes are kept`}
+                        >
+                          File missing
+                        </span>
+                      )}
                       {lesson.duration !== null && (
                         <span className={styles.lessonDuration}>{formatTime(lesson.duration)}</span>
                       )}
@@ -302,22 +348,23 @@ export default function CourseDetail({ courseId }: Props) {
         <Modal label="Fix missing files" onClose={() => setShowHealth(false)} wide>
           <h2>Missing files ({health.missingLessons.length})</h2>
           <p>Locate each file individually, or relocate the whole course folder at once.</p>
+          <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+            Nothing has been deleted — these lessons keep their progress, notes and bookmarks until
+            you forget them.
+          </p>
           <div className={styles.healthList}>
             {health.missingLessons.map((m) => (
               <div key={m.lessonId} className={styles.healthRow}>
                 <span title={m.filePath}>{m.title}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => void handleLocate(m.lessonId)}>
+                  Locate
+                </button>
                 <button
                   className="btn btn-ghost btn-sm"
-                  onClick={async () => {
-                    const url = await api().media.locateFile(m.lessonId);
-                    if (url) {
-                      const next = await api().courses.health(course.id).catch(() => null);
-                      if (next) setHealth(next);
-                      refreshAll();
-                    }
-                  }}
+                  title="Remove this lesson and its progress, notes and bookmarks"
+                  onClick={() => setForgetting({ lessonId: m.lessonId, title: m.title })}
                 >
-                  Locate
+                  Forget
                 </button>
               </div>
             ))}
@@ -337,6 +384,31 @@ export default function CourseDetail({ courseId }: Props) {
               }}
             >
               <FolderInput size={15} /> {relocating ? 'Relocating...' : 'Relocate folder'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {forgetting && (
+        <Modal label="Forget lesson" onClose={() => setForgetting(null)}>
+          <h2>Forget this lesson?</h2>
+          <p>
+            <strong>{forgetting.title}</strong> will be removed from the course along with its
+            progress, notes and bookmarks. This cannot be undone.
+          </p>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            If the file is only temporarily unavailable (external drive, moved folder), close this
+            and use <strong>Locate</strong> or <strong>Relocate folder</strong> instead — the lesson
+            keeps everything until you forget it.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-ghost" onClick={() => setForgetting(null)}>Cancel</button>
+            <button
+              className="btn btn-danger"
+              data-autofocus
+              onClick={() => void handleForget(forgetting.lessonId)}
+            >
+              Forget lesson
             </button>
           </div>
         </Modal>

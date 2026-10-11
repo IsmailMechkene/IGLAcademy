@@ -1,10 +1,10 @@
 .page {
-  padding: 28px 32px;
+  padding: 24px 28px;
   max-width: 1000px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .header {
@@ -15,25 +15,26 @@
 }
 
 .header h1 {
-  font-size: 22px;
+  font-size: var(--font-size-title);
   font-weight: 700;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .toolbar {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 
 .searchWrap {
   position: relative;
-  width: 340px;
+  width: 320px;
 }
 
 .searchIcon {
   position: absolute;
-  left: 12px;
+  left: 11px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -44,16 +45,16 @@
 .notesList {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .noteCard {
-  padding: 16px 18px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .noteCard:hover {
@@ -64,39 +65,39 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .noteTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 .noteContext {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--accent);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .noteContent {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .noteMeta {
   display: flex;
   align-items: center;
-  gap: 14px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
 }
 
 .empty {
   text-align: center;
-  padding: 64px 24px;
+  padding: 56px 24px;
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
@@ -105,8 +106,8 @@
 }
 
 .empty h2 {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 650;
   color: var(--text);
   margin: 0;
 }
@@ -128,32 +129,32 @@
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  padding: 24px;
-  gap: 14px;
+  padding: 22px;
+  gap: 12px;
 }
 
 .editorDialog h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .editorTitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .editorTextarea {
   flex: 1;
-  min-height: 220px;
+  min-height: 200px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
   font-family: inherit;
-  font-size: 13.5px;
-  line-height: 1.6;
-  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 10px 12px;
   resize: none;
   outline: none;
 }
@@ -172,13 +173,13 @@
 
 .editorFooter .left {
   display: flex;
-  gap: 8px;
+  gap: 7px;
 }
 
 .saveStatus {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }

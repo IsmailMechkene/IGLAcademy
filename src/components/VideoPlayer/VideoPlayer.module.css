@@ -20,23 +20,23 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   border: none;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background var(--transition-fast), transform var(--transition-fast);
   z-index: 5;
 }
 
 .centerPlay:hover {
-  background: rgba(124, 108, 240, 0.85);
-  transform: translate(-50%, -50%) scale(1.06);
+  background: rgba(124, 108, 240, 0.88);
+  transform: translate(-50%, -50%) scale(1.05);
 }
 
 .controls {
@@ -44,13 +44,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 24px 16px 12px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  padding: 20px 14px 10px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
   z-index: 4;
 }
 
@@ -62,7 +62,7 @@
 .seekRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .seekBar {
@@ -84,13 +84,13 @@
 
 .seekBar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .player:hover .seekBar::-webkit-slider-thumb,
@@ -99,23 +99,23 @@
 }
 
 .time {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.85);
   font-variant-numeric: tabular-nums;
-  min-width: 40px;
+  min-width: 38px;
   text-align: center;
 }
 
 .controlRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .controlBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
   border: none;
   background: transparent;
   color: #fff;
@@ -123,7 +123,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .controlBtn:hover:not(:disabled) {
@@ -131,7 +131,7 @@
 }
 
 .controlBtn:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: default;
 }
 
@@ -142,13 +142,13 @@
 .volumeWrap {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .volumeSlider {
   -webkit-appearance: none;
   appearance: none;
-  width: 80px;
+  width: 72px;
   height: 4px;
   border-radius: 999px;
   background: linear-gradient(
@@ -164,8 +164,8 @@
 
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
@@ -173,27 +173,27 @@
 
 .speedMenu {
   position: absolute;
-  bottom: 60px;
-  right: 16px;
+  bottom: 56px;
+  right: 14px;
   background: #1c2130;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  padding: 6px;
+  border-radius: 9px;
+  padding: 5px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   z-index: 10;
-  box-shadow: var(--shadow);
-  min-width: 110px;
+  box-shadow: var(--shadow-lg);
+  min-width: 100px;
 }
 
 .speedOption {
-  padding: 7px 12px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
-  border-radius: 6px;
+  font-size: 12.5px;
+  border-radius: 5px;
   cursor: pointer;
   text-align: left;
   display: flex;
@@ -202,7 +202,7 @@
 }
 
 .loopLabel {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -221,22 +221,23 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 32px;
+  gap: 10px;
+  padding: 28px;
   text-align: center;
   color: #fff;
 }
 
 .errorState h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .errorState p {
   margin: 0;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 13px;
-  max-width: 420px;
+  font-size: 12.5px;
+  max-width: 400px;
+  line-height: 1.55;
 }
 
 .errorState .btn {

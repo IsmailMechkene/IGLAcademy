@@ -9,6 +9,16 @@ import type Database from 'better-sqlite3';
 
 export const BACKUP_FORMAT = 'ismalearn-backup/1';
 
+/**
+ * User-data tables, children first, so a wipe-and-restore respects foreign
+ * keys (insertion walks the list in reverse).
+ *
+ * `schema_migrations` is deliberately NOT here. It describes the shape of the
+ * live database, not the user's data: restoring an older backup's ledger would
+ * make the app re-run migrations that have already been applied, which fails
+ * on the second launch and bricks startup. Backups from before this change may
+ * still contain the table — it is ignored on import.
+ */
 const TABLES_IN_DELETE_ORDER = [
   'quiz_attempt_answers',
   'practice_attempts',
@@ -28,8 +38,13 @@ const TABLES_IN_DELETE_ORDER = [
   'courses',
   'exam_sources',
   'app_settings',
-  'schema_migrations',
 ] as const;
+
+/** Column names actually present in the live table, for whitelisting. */
+function columnsOf(db: Database.Database, table: string): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return new Set(rows.map((r) => r.name));
+}
 
 export interface BackupData {
   format: string;
@@ -71,7 +86,15 @@ export function validateBackup(data: unknown): asserts data is BackupData {
   }
 }
 
-/** Replaces ALL user data with the backup content (caller backs up first). */
+/**
+ * Replaces ALL user data with the backup content (caller backs up first).
+ *
+ * Column names come from the live schema, never from the file: a backup is
+ * untrusted input, and interpolating its keys into SQL would let a crafted
+ * file break out of the statement. Unknown columns are dropped and missing
+ * ones fall back to their schema default, so backups taken on an older or
+ * newer schema still restore.
+ */
 export function importData(db: Database.Database, data: BackupData): void {
   validateBackup(data);
   const tx = db.transaction(() => {
@@ -81,16 +104,31 @@ export function importData(db: Database.Database, data: BackupData): void {
     const insertOrder = [...TABLES_IN_DELETE_ORDER].reverse();
     for (const table of insertOrder) {
       const rows = data.tables[table];
-      if (rows.length === 0) continue;
-      const columns = Object.keys(rows[0]);
-      const placeholders = columns.map(() => '?').join(', ');
-      const stmt = db.prepare(
-        `INSERT INTO ${table} (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-      );
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      const allowed = columnsOf(db, table);
+      // One prepared statement per distinct column set (usually exactly one).
+      const statements = new Map<string, Database.Statement>();
       for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        const columns = Object.keys(row).filter((c) => allowed.has(c));
+        if (columns.length === 0) continue;
+        const signature = columns.join(',');
+        let stmt = statements.get(signature);
+        if (!stmt) {
+          const placeholders = columns.map(() => '?').join(', ');
+          stmt = db.prepare(
+            `INSERT INTO ${table} (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+          );
+          statements.set(signature, stmt);
+        }
         const values = columns.map((c) => {
           const v = (row as Record<string, unknown>)[c];
-          return v === undefined ? null : v;
+          if (v === undefined) return null;
+          // SQLite only binds primitives; a nested object/array in a hand-
+          // edited backup would otherwise throw mid-restore.
+          if (v !== null && typeof v === 'object') return JSON.stringify(v);
+          if (typeof v === 'boolean') return v ? 1 : 0;
+          return v;
         });
         stmt.run(...values);
       }

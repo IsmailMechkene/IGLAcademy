@@ -3,8 +3,8 @@
   min-height: var(--topbar-height);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 24px;
+  gap: 14px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
 }
@@ -12,12 +12,12 @@
 .searchWrap {
   position: relative;
   flex: 1;
-  max-width: 480px;
+  max-width: 440px;
 }
 
 .searchIcon {
   position: absolute;
-  left: 12px;
+  left: 11px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -28,11 +28,11 @@
 .searchInput {
   /* Higher specificity than .input so the icon padding always wins,
      regardless of stylesheet order in the bundle. */
-  padding-left: 40px;
+  padding-left: 36px;
 }
 
 .searchWrap .searchInput {
-  padding-left: 40px;
+  padding-left: 36px;
 }
 
 .spacer {

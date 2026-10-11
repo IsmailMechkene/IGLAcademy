@@ -233,6 +233,47 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE practice_attempts ADD COLUMN flags TEXT NOT NULL DEFAULT '[]';
     `,
   },
+  {
+    version: 5,
+    name: 'missing_lessons_and_attempt_snapshots',
+    sql: `
+      -- A lesson whose file is not on disk is FLAGGED, never deleted: deleting
+      -- it would cascade away the user's notes, bookmarks and progress (an
+      -- unplugged drive or a renamed folder used to be enough). NULL = present.
+      ALTER TABLE lessons ADD COLUMN missing_since TEXT;
+      CREATE INDEX idx_lessons_missing ON lessons(missing_since);
+
+      -- Attempt answers keep their own copy of the question they were given,
+      -- so editing a quiz question can never rewrite history. NULL on legacy
+      -- rows, which fall back to the live question.
+      --
+      -- The question_id foreign key is also dropped (table rebuild): it was
+      -- ON DELETE CASCADE, so removing a question erased the answer rows of
+      -- every past attempt that contained it. The snapshot is authoritative
+      -- now, and question_id is kept purely as a soft reference.
+      CREATE TABLE quiz_attempt_answers_v5 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        attempt_id INTEGER NOT NULL REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+        question_id INTEGER NOT NULL,
+        selected_index INTEGER NOT NULL,
+        is_correct INTEGER NOT NULL,
+        selected_indices TEXT NOT NULL DEFAULT '[]',
+        question_text TEXT,
+        options_snapshot TEXT,
+        correct_snapshot TEXT,
+        explanation_snapshot TEXT,
+        position_snapshot INTEGER
+      );
+      INSERT INTO quiz_attempt_answers_v5
+        (id, attempt_id, question_id, selected_index, is_correct, selected_indices)
+        SELECT id, attempt_id, question_id, selected_index, is_correct, selected_indices
+        FROM quiz_attempt_answers;
+      DROP TABLE quiz_attempt_answers;
+      ALTER TABLE quiz_attempt_answers_v5 RENAME TO quiz_attempt_answers;
+      CREATE INDEX idx_answers_attempt ON quiz_attempt_answers(attempt_id);
+      CREATE INDEX idx_answers_question ON quiz_attempt_answers(question_id);
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

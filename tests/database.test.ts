@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import SqliteDatabase from 'better-sqlite3';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDatabase } from '../electron/database/connection';
+import { createDatabase, quarantineDatabase } from '../electron/database/connection';
 import { MIGRATIONS } from '../electron/database/migrations';
-import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot } from '../electron/services/courseImportService';
+import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../electron/services/courseImportService';
 import {
   listCourses,
   getCourse,
@@ -29,6 +30,8 @@ import {
 import {
   insertQuiz,
   insertQuestion,
+  updateQuestion,
+  deleteQuestion,
   getQuiz,
   listQuizzesForCourse,
   insertAttempt,
@@ -73,7 +76,8 @@ import {
   checkFileExists,
   resolveLessonFile,
 } from '../electron/services/fileService';
-import { validateQuestionInput } from '../electron/ipc/quizzes';
+import { validateQuestionInput, scoreAttempt } from '../electron/ipc/quizzes';
+import { mulberry32, normalizeSelected, shuffledIndexes } from '../src/utils/examAnalytics';
 
 const tmpRoots: string[] = [];
 let db: Database.Database;
@@ -129,6 +133,84 @@ describe('migrations', () => {
   it('is idempotent when run twice', () => {
     const db2 = createDatabase(path.join(dbDir, 'test.db'));
     db2.close();
+  });
+
+  it('upgrades a populated older database without losing anything', () => {
+    // Build a database the way an already-installed copy looks: every
+    // migration except the newest, with real user data in it.
+    const legacyPath = path.join(dbDir, 'legacy.db');
+    const legacy = new SqliteDatabase(legacyPath);
+    legacy.pragma('journal_mode = WAL');
+    legacy.pragma('foreign_keys = ON');
+    const older = MIGRATIONS.filter((m) => m.version < 5);
+    legacy.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, name TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+    for (const m of older) {
+      legacy.exec(m.sql);
+      legacy.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(m.version, m.name);
+    }
+    legacy.exec(`
+      INSERT INTO courses (id, title, source_path) VALUES (1, 'Legacy course', 'C:\\legacy');
+      INSERT INTO sections (id, course_id, title, position) VALUES (1, 1, 'S1', 1);
+      INSERT INTO lessons (id, section_id, title, file_path, file_type, position)
+        VALUES (1, 1, 'L1', 'C:\\legacy\\L1.mp4', 'video', 1);
+      INSERT INTO lesson_progress (lesson_id, completed, position_seconds, watched_seconds)
+        VALUES (1, 1, 77, 77);
+      INSERT INTO notes (id, course_id, lesson_id, title, content) VALUES (1, 1, 1, 'note', 'body');
+      INSERT INTO quizzes (id, course_id, title, description) VALUES (1, 1, 'Q', '');
+      INSERT INTO quiz_questions (id, quiz_id, question, options, correct_index, explanation, position)
+        VALUES (1, 1, 'legacy question?', '["a","b"]', 0, 'why', 1);
+      INSERT INTO quiz_attempts (id, quiz_id, score, total) VALUES (1, 1, 1, 1);
+      INSERT INTO quiz_attempt_answers (id, attempt_id, question_id, selected_index, is_correct, selected_indices)
+        VALUES (1, 1, 1, 0, 1, '[0]');
+    `);
+    legacy.close();
+
+    // Now open it the way the app does — migrations must carry it forward.
+    const upgraded = createDatabase(legacyPath);
+    const cols = (table: string) =>
+      (upgraded.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    expect(cols('lessons')).toContain('missing_since');
+    expect(cols('quiz_attempt_answers')).toContain('question_text');
+
+    // user data intact, including the rebuilt answers table
+    expect((upgraded.prepare('SELECT COUNT(*) AS n FROM notes').get() as { n: number }).n).toBe(1);
+    expect((upgraded.prepare('SELECT position_seconds AS p FROM lesson_progress WHERE lesson_id = 1').get() as { p: number }).p).toBe(77);
+    const answer = upgraded.prepare('SELECT * FROM quiz_attempt_answers WHERE id = 1').get() as {
+      attempt_id: number; question_id: number; selected_indices: string; is_correct: number;
+    };
+    expect(answer).toMatchObject({ attempt_id: 1, question_id: 1, selected_indices: '[0]', is_correct: 1 });
+
+    // deleting the question no longer wipes history (the old FK cascaded)
+    upgraded.prepare('DELETE FROM quiz_questions WHERE id = 1').run();
+    expect((upgraded.prepare('SELECT COUNT(*) AS n FROM quiz_attempt_answers').get() as { n: number }).n).toBe(1);
+    // ...but deleting the attempt still cleans up its answers
+    upgraded.prepare('DELETE FROM quiz_attempts WHERE id = 1').run();
+    expect((upgraded.prepare('SELECT COUNT(*) AS n FROM quiz_attempt_answers').get() as { n: number }).n).toBe(0);
+    upgraded.close();
+  });
+
+  it('releases the file and can be quarantined when migrations cannot run', () => {
+    // A database whose tables exist but whose ledger is empty: migration 1
+    // then fails ("table courses already exists"). This is the shape that
+    // used to make the app throw on every launch, forever.
+    const brokenPath = path.join(dbDir, 'broken.db');
+    const broken = new SqliteDatabase(brokenPath);
+    broken.exec('CREATE TABLE courses (id INTEGER PRIMARY KEY);');
+    broken.close();
+
+    expect(() => createDatabase(brokenPath)).toThrow();
+    // The handle must be closed, or Windows would refuse to move the file.
+    const moved = quarantineDatabase(brokenPath);
+    expect(moved).toBeTruthy();
+    expect(fs.existsSync(brokenPath)).toBe(false);
+    expect(fs.existsSync(moved!)).toBe(true); // nothing is deleted
+
+    // ...and a fresh database opens in its place
+    const fresh = createDatabase(brokenPath);
+    expect(countCourses(fresh)).toBe(0);
+    fresh.close();
   });
 
   it('applies the multi-answer and practice-source columns', () => {
@@ -350,6 +432,73 @@ describe('course import', () => {
     expect(() => loadExamFile(db, htmlPath)).toThrow(/registered/i);
   });
 
+  it('scores a shuffled run against the questions it was actually given', () => {
+    const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-shuffle-')));
+    const htmlPath = path.join(root, 'Shuffle.html');
+    fs.writeFileSync(
+      htmlPath,
+      `<html><body><script>const quizData = ${JSON.stringify({
+        quiz_title: 'Shuffle Exam',
+        questions: [
+          { assessment_type: 'multiple-choice', prompt: { question: '<p>Q1?</p>', answers: ['<p>a1</p>', '<p>b1</p>', '<p>c1</p>'], explanation: '' }, correct_response: ['a'] },
+          { assessment_type: 'multiple-choice', prompt: { question: '<p>Q2?</p>', answers: ['<p>a2</p>', '<p>b2</p>', '<p>c2</p>'], explanation: '' }, correct_response: ['b'] },
+          { assessment_type: 'multi-select', prompt: { question: '<p>Q3?</p>', answers: ['<p>a3</p>', '<p>b3</p>', '<p>c3</p>'], explanation: '' }, correct_response: ['a', 'c'] },
+          { assessment_type: 'multiple-choice', prompt: { question: '<p>Q4?</p>', answers: ['<p>a4</p>', '<p>b4</p>', '<p>c4</p>'], explanation: '' }, correct_response: ['c'] },
+        ],
+      })};</script></body></html>`,
+    );
+    registerSource(db, root, 'dir');
+    const exam = loadExamFile(db, htmlPath);
+
+    // Rebuild exactly what the runner does when "shuffle" is on.
+    const rand = mulberry32(98765);
+    const order = shuffledIndexes(exam.questions.length, rand);
+    const optionOrders: Record<number, number[]> = {};
+    const displayed = order.map((qi) => {
+      const q = exam.questions[qi];
+      const optionOrder = shuffledIndexes(q.options.length, rand);
+      optionOrders[qi] = optionOrder;
+      return {
+        id: qi,
+        correctIndices: q.correctIndices.map((ci) => optionOrder.indexOf(ci)).sort((a, b) => a - b),
+      };
+    });
+    // the test is only meaningful if the order really changed
+    expect(order).not.toEqual([0, 1, 2, 3]);
+
+    // Answer every question correctly AS DISPLAYED, submitted in display order.
+    const payload = displayed.map((d) => ({
+      questionIndex: d.id,
+      selected: normalizeSelected(d.correctIndices, optionOrders[d.id]),
+      seconds: 2,
+    }));
+    const attempt = submitExamAttempt(db, htmlPath, payload);
+    expect(attempt.percent).toBe(100);
+    expect(attempt.score).toBe(4);
+    // ...and the stored attempt reads back in the FILE's order
+    expect(attempt.answers.map((a) => a.question)).toEqual(['Q1?', 'Q2?', 'Q3?', 'Q4?']);
+    expect(attempt.answers.map((a) => a.selectedIndices)).toEqual([[0], [1], [0, 2], [2]]);
+
+    // A payload that claims the same question twice, or one out of range, is a
+    // bug worth failing loudly rather than mis-scoring.
+    expect(() =>
+      submitExamAttempt(db, htmlPath, [
+        { questionIndex: 0, selected: [0], seconds: 1 },
+        { questionIndex: 0, selected: [0], seconds: 1 },
+        { questionIndex: 2, selected: [0, 2], seconds: 1 },
+        { questionIndex: 3, selected: [2], seconds: 1 },
+      ]),
+    ).toThrow(/same question/i);
+    expect(() =>
+      submitExamAttempt(db, htmlPath, [
+        { questionIndex: 9, selected: [0], seconds: 1 },
+        { questionIndex: 1, selected: [1], seconds: 1 },
+        { questionIndex: 2, selected: [0, 2], seconds: 1 },
+        { questionIndex: 3, selected: [2], seconds: 1 },
+      ]),
+    ).toThrow(/not in this exam/i);
+  });
+
   it('loads content only from the exact registered file for file sources', () => {
     const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-libfile-')));
     const htmlPath = path.join(root, 'Solo.html');
@@ -377,7 +526,7 @@ describe('course import', () => {
 });
 
 describe('rescan', () => {
-  it('adds new lessons and removes deleted ones while preserving progress', () => {
+  it('adds new lessons and flags (never deletes) vanished ones while preserving progress', () => {
     const courseRoot = makeCourseDir();
     const { courseId } = importCourse(db, courseRoot) as { courseId: number };
     const before = getCourseDetail(db, courseId)!;
@@ -385,20 +534,102 @@ describe('rescan', () => {
     setCompleted(db, firstLesson.id, true);
     savePosition(db, firstLesson.id, 120);
 
-    // add a lesson, delete another
+    // add a lesson, make another one's file disappear
     fs.writeFileSync(path.join(courseRoot, '02 - EC2', '02 - New Lesson.mp4'), '');
     fs.rmSync(path.join(courseRoot, '01 - Introduction', '02 - Overview.mp4'));
 
     const result = rescanCourse(db, courseId);
     expect(result.status).toBe('ok');
     expect(result.addedLessons).toBe(1);
-    expect(result.removedLessons).toBe(1);
+    expect(result.missingLessons).toBe(1);
+    expect(result.restoredLessons).toBe(0);
 
     const after = getCourseDetail(db, courseId)!;
-    expect(after.lessonCount).toBe(3);
+    // 4 lessons: nothing was deleted, the vanished one is only flagged
+    expect(after.lessonCount).toBe(4);
+    const flagged = after.sections[0].lessons.find((l) => l.title === '02 - Overview');
+    expect(flagged?.missingSince).toBeTruthy();
     const kept = after.sections[0].lessons.find((l) => l.id === firstLesson.id);
     expect(kept?.completed).toBe(true);
     expect(kept?.positionSeconds).toBe(120);
+    expect(kept?.missingSince).toBeNull();
+
+    // rescanning again must not double-count or change the flag
+    const second = rescanCourse(db, courseId);
+    expect(second.missingLessons).toBe(0);
+    expect(getCourseDetail(db, courseId)!.lessonCount).toBe(4);
+  });
+
+  it('keeps notes, bookmarks and progress when a lesson file disappears', () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const lesson = getCourseDetail(db, courseId)!.sections[0].lessons[0];
+    savePosition(db, lesson.id, 123.5);
+    setCompleted(db, lesson.id, true);
+    insertNote(db, { courseId, lessonId: lesson.id, title: 'Keep me', content: 'important' });
+    insertBookmark(db, { courseId, lessonId: lesson.id, positionSeconds: 42, title: 'bm' });
+
+    fs.rmSync(path.join(courseRoot, '01 - Introduction', '01 - Welcome.mp4'));
+    expect(rescanCourse(db, courseId).status).toBe('ok');
+
+    // the user's work survives an unplugged drive / renamed folder
+    expect(listNotes(db, courseId)).toHaveLength(1);
+    expect(listBookmarks(db, courseId)).toHaveLength(1);
+    expect(getStats(db).totalWatchedSeconds).toBe(123.5);
+    const still = getCourseDetail(db, courseId)!.sections[0].lessons.find((l) => l.id === lesson.id);
+    expect(still?.completed).toBe(true);
+    expect(still?.positionSeconds).toBe(123.5);
+    expect(still?.missingSince).toBeTruthy();
+  });
+
+  it('clears the missing flag when the file comes back', () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const target = path.join(courseRoot, '01 - Introduction', '01 - Welcome.mp4');
+    const lessonId = getCourseDetail(db, courseId)!.sections[0].lessons[0].id;
+
+    fs.rmSync(target);
+    expect(rescanCourse(db, courseId).missingLessons).toBe(1);
+    fs.writeFileSync(target, '');
+    const back = rescanCourse(db, courseId);
+    expect(back.restoredLessons).toBe(1);
+    expect(back.missingLessons).toBe(0);
+    const lesson = getCourseDetail(db, courseId)!.sections[0].lessons.find((l) => l.id === lessonId);
+    expect(lesson?.missingSince).toBeNull();
+  });
+
+  it('forgets a missing lesson only on explicit request, refusing when the file is back', () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const target = path.join(courseRoot, '01 - Introduction', '01 - Welcome.mp4');
+    const lesson = getCourseDetail(db, courseId)!.sections[0].lessons[0];
+    insertNote(db, { courseId, lessonId: lesson.id, title: 'n', content: 'c' });
+
+    // present file: forgetting is refused, nothing is touched
+    expect(forgetLesson(db, lesson.id).status).toBe('error');
+    expect(getCourseDetail(db, courseId)!.lessonCount).toBe(3);
+
+    fs.rmSync(target);
+    rescanCourse(db, courseId);
+    const result = forgetLesson(db, lesson.id);
+    expect(result.status).toBe('ok');
+    expect(result.title).toBe('01 - Welcome');
+    expect(getCourseDetail(db, courseId)!.lessonCount).toBe(2);
+    // forgetting IS destructive — that is the point of the confirmation
+    expect(listNotes(db, courseId)).toHaveLength(0);
+  });
+
+  it('syncs the missing flag from a health check', () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = importCourse(db, courseRoot) as { courseId: number };
+    const lessonId = getCourseDetail(db, courseId)!.sections[0].lessons[0].id;
+    fs.rmSync(path.join(courseRoot, '01 - Introduction', '01 - Welcome.mp4'));
+
+    const health = getCourseHealth(db, courseId);
+    expect(health.missingLessons.map((m) => m.lessonId)).toContain(lessonId);
+    expect(
+      getCourseDetail(db, courseId)!.sections[0].lessons.find((l) => l.id === lessonId)?.missingSince,
+    ).toBeTruthy();
   });
 });
 
@@ -506,6 +737,105 @@ describe('quizzes', () => {
     expect(listAttempts(db, quizId)).toHaveLength(1);
     deleteQuiz(db, quizId);
     expect(listQuizzesForCourse(db, courseId)).toHaveLength(0);
+  });
+
+  it('keeps attempt history intact when its questions are edited or deleted', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const quizId = insertQuiz(db, { courseId, sectionId: null, title: 'Checkpoint', description: '' });
+    const q1 = insertQuestion(db, quizId, {
+      question: 'Original question?', options: ['right', 'wrong'],
+      correctIndex: 0, correctIndices: [0], explanation: 'because', position: 1,
+    });
+    const q2 = insertQuestion(db, quizId, {
+      question: 'Second question?', options: ['a', 'b'],
+      correctIndex: 1, correctIndices: [1], explanation: '', position: 2,
+    });
+    const attemptId = insertAttempt(db, quizId, [
+      { questionId: q1, selectedIndex: 0, selectedIndices: [0], isCorrect: true },
+      { questionId: q2, selectedIndex: 0, selectedIndices: [0], isCorrect: false },
+    ]);
+
+    // Edit one question in place and delete the other, as the editor now does.
+    updateQuestion(db, q1, {
+      question: 'Rewritten question?', options: ['x', 'y', 'z'],
+      correctIndex: 2, correctIndices: [2], explanation: 'new reason', position: 1,
+    });
+    deleteQuestion(db, q2);
+
+    const detail = getAttemptDetail(db, attemptId)!;
+    expect(detail.score).toBe(1);
+    expect(detail.total).toBe(2);
+    // both answers still readable, showing the questions AS ASKED
+    expect(detail.answers).toHaveLength(2);
+    expect(detail.answers[0].question).toBe('Original question?');
+    expect(detail.answers[0].options).toEqual(['right', 'wrong']);
+    expect(detail.answers[0].explanation).toBe('because');
+    expect(detail.answers[0].isCorrect).toBe(true);
+    expect(detail.answers[1].question).toBe('Second question?');
+    expect(detail.answers[1].correctIndices).toEqual([1]);
+    expect(detail.answers[1].isCorrect).toBe(false);
+  });
+
+  it('scores every question, not just the submitted ones', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const quizId = insertQuiz(db, { courseId, sectionId: null, title: 'Scoring', description: '' });
+    const q1 = insertQuestion(db, quizId, {
+      question: 'one?', options: ['a', 'b'], correctIndex: 0, correctIndices: [0], explanation: '', position: 1,
+    });
+    const q2 = insertQuestion(db, quizId, {
+      question: 'two?', options: ['a', 'b'], correctIndex: 1, correctIndices: [1], explanation: '', position: 2,
+    });
+    const q3 = insertQuestion(db, quizId, {
+      question: 'three?', options: ['a', 'b', 'c'], correctIndex: 2, correctIndices: [0, 2], explanation: '', position: 3,
+    });
+    const quiz = getQuiz(db, quizId)!;
+
+    // A timed auto-submit: one right, one blank, one out of range.
+    const rows = scoreAttempt(quiz, [
+      { questionId: q1, selectedIndex: 0, selectedIndices: [0] },
+      { questionId: q2, selectedIndex: -1, selectedIndices: [] },
+      { questionId: q3, selectedIndex: 7, selectedIndices: [7] },
+    ]);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.isCorrect)).toEqual([true, false, false]);
+    expect(rows[1].selectedIndices).toEqual([]); // blank, not an error
+    expect(rows[2].selectedIndices).toEqual([]); // out-of-range dropped
+
+    // A short payload still scores out of the full quiz (used to be 100%).
+    const short = scoreAttempt(quiz, [{ questionId: q1, selectedIndex: 0, selectedIndices: [0] }]);
+    expect(short).toHaveLength(3);
+    const attemptId = insertAttempt(db, quizId, short, quiz.questions.length);
+    const detail = getAttemptDetail(db, attemptId)!;
+    expect(detail.score).toBe(1);
+    expect(detail.total).toBe(3);
+    expect(detail.percent).toBe(33);
+
+    // Multi-select still needs the complete set, and junk ids are ignored.
+    expect(scoreAttempt(quiz, [{ questionId: q3, selectedIndices: [0] }])[2].isCorrect).toBe(false);
+    expect(scoreAttempt(quiz, [{ questionId: q3, selectedIndices: [2, 0] }])[2].isCorrect).toBe(true);
+    expect(scoreAttempt(quiz, [{ questionId: 9999, selectedIndices: [0] }]).map((r) => r.isCorrect)).toEqual([
+      false, false, false,
+    ]);
+  });
+
+  it('records the real question count even when answers are missing', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const quizId = insertQuiz(db, { courseId, sectionId: null, title: 'Partial', description: '' });
+    const q1 = insertQuestion(db, quizId, {
+      question: 'a?', options: ['a', 'b'], correctIndex: 0, correctIndices: [0], explanation: '', position: 1,
+    });
+    insertQuestion(db, quizId, {
+      question: 'b?', options: ['a', 'b'], correctIndex: 0, correctIndices: [0], explanation: '', position: 2,
+    });
+    const attemptId = insertAttempt(
+      db,
+      quizId,
+      [{ questionId: q1, selectedIndex: 0, selectedIndices: [0], isCorrect: true }],
+      2,
+    );
+    const detail = getAttemptDetail(db, attemptId)!;
+    expect(detail.total).toBe(2);
+    expect(detail.percent).toBe(50);
   });
 });
 
@@ -688,6 +1018,49 @@ describe('backup round trip', () => {
     db2.close();
 
     expect(() => importData(db, { format: 'nope' } as never)).toThrow(/format/i);
+  });
+
+  it('never restores the schema ledger, so the app still starts afterwards', () => {
+    importCourse(db, makeCourseDir());
+    const backup = exportData(db, '1.0.0-test');
+    // A backup must not carry the live schema version around with it.
+    expect(backup.tables.schema_migrations).toBeUndefined();
+
+    const applied = () =>
+      (db.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM schema_migrations').get() as { v: number }).v;
+    const latest = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0);
+    expect(applied()).toBe(latest);
+
+    // Simulate restoring a backup taken on an older schema: it used to replace
+    // the ledger, which made the next launch re-run migrations and crash.
+    importData(db, { ...backup, tables: { ...backup.tables, schema_migrations: [{ version: 1, name: 'initial_schema' }] } } as never);
+    expect(applied()).toBe(latest);
+    expect(() => {
+      const reopened = createDatabase(path.join(dbDir, 'test.db'));
+      reopened.close();
+    }).not.toThrow();
+  });
+
+  it('ignores unknown columns and non-primitive values in a hand-edited backup', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    insertNote(db, { courseId, lessonId: null, title: 'n', content: 'c' });
+    const backup = exportData(db, '1.0.0-test');
+    const poisoned = {
+      ...backup,
+      tables: {
+        ...backup.tables,
+        notes: backup.tables.notes.map((n) => ({
+          ...n,
+          'evil") VALUES (1); DROP TABLE notes; --': 'x',
+          content: { nested: true },
+        })),
+      },
+    };
+    expect(() => importData(db, poisoned as never)).not.toThrow();
+    expect(listNotes(db)).toHaveLength(1);
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'notes'").get() as { n: number }).n,
+    ).toBe(1);
   });
 });
 

@@ -20,7 +20,8 @@ export interface RescanAllResult {
   courses: number;
   addedLessons: number;
   addedSections: number;
-  removedLessons: number;
+  missingLessons: number;
+  restoredLessons: number;
   errors: number;
 }
 
@@ -111,7 +112,7 @@ export default function Library({ filter = 'all' }: Props) {
       setDialog({
         kind: 'rescan',
         courseId,
-        result: { status: 'error', addedLessons: 0, addedSections: 0, removedLessons: 0, error: err instanceof Error ? err.message : 'Rescan failed' },
+        result: { status: 'error', addedLessons: 0, addedSections: 0, missingLessons: 0, restoredLessons: 0, error: err instanceof Error ? err.message : 'Rescan failed' },
       });
     }
   };
@@ -316,7 +317,11 @@ export default function Library({ filter = 'all' }: Props) {
                   <CheckCircle2 size={17} />
                   <span>
                     Rescan complete: {dialog.result.addedSections} new sections, {dialog.result.addedLessons} new lessons
-                    {dialog.result.removedLessons > 0 ? `, ${dialog.result.removedLessons} removed` : ''}.
+                    {dialog.result.restoredLessons > 0 ? `, ${dialog.result.restoredLessons} file${dialog.result.restoredLessons === 1 ? '' : 's'} found again` : ''}
+                    {dialog.result.missingLessons > 0
+                      ? `. ${dialog.result.missingLessons} file${dialog.result.missingLessons === 1 ? '' : 's'} missing — those lessons keep their progress and notes until you forget them`
+                      : ''}
+                    .
                   </span>
                 </div>
                 <div className={styles.dialogActions}>
@@ -362,7 +367,8 @@ export default function Library({ filter = 'all' }: Props) {
                 <span>
                   Rescanned {dialog.result.courses} course{dialog.result.courses === 1 ? '' : 's'}: {dialog.result.addedSections} new sections,{' '}
                   {dialog.result.addedLessons} new lessons
-                  {dialog.result.removedLessons > 0 ? `, ${dialog.result.removedLessons} removed` : ''}
+                  {dialog.result.restoredLessons > 0 ? `, ${dialog.result.restoredLessons} found again` : ''}
+                  {dialog.result.missingLessons > 0 ? `, ${dialog.result.missingLessons} now missing (nothing deleted)` : ''}
                   {dialog.result.errors > 0 ? `, ${dialog.result.errors} failed` : ''}.
                 </span>
               </div>

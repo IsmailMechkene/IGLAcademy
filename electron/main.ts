@@ -1,6 +1,7 @@
-import { app, BrowserWindow, shell, protocol } from 'electron';
+import { app, BrowserWindow, dialog, shell, protocol } from 'electron';
 import path from 'node:path';
-import { getDb } from './database/connection';
+import type Database from 'better-sqlite3';
+import { getDb, quarantineDatabase } from './database/connection';
 import { resolveLessonFile, resolveThumbnailFile, resolveResourceFile, resolveSubtitleFile, serveMediaFile } from './services/fileService';
 import { registerCourseIpc } from './ipc/courses';
 import { registerProgressIpc } from './ipc/progress';
@@ -99,6 +100,9 @@ function createWindow(): void {
     },
   });
 
+  // Start maximized so the app fills the screen by default.
+  win.maximize();
+
   // Open external links in the system browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://') || url.startsWith('http://')) {
@@ -119,6 +123,46 @@ function createWindow(): void {
   }
 }
 
+/**
+ * Opens the database, and if that is impossible (corrupt file, half-applied
+ * migration) quarantines it and starts on a fresh one rather than dying on
+ * every launch. The broken file is renamed, never deleted.
+ */
+function openDatabaseOrRecover(): Database.Database | null {
+  try {
+    return getDb();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log('error', 'database could not be opened', message);
+    const choice = dialog.showMessageBoxSync({
+      type: 'error',
+      buttons: ['Start with a new database', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'IsmaLearn cannot open its database',
+      message: 'Your learning database could not be opened.',
+      detail:
+        `${message}\n\nIsmaLearn can set the file aside (nothing is deleted) and start with a new, ` +
+        'empty database. Your existing file stays in the IsmaLearn folder, and backups are kept in ' +
+        'its "backups" subfolder — both can be restored from Settings → Export / import data.',
+    });
+    if (choice !== 0) return null;
+
+    const moved = quarantineDatabase();
+    log('warn', `quarantined unreadable database${moved ? ` to ${path.basename(moved)}` : ' (rename failed)'}`);
+    try {
+      return getDb();
+    } catch (err2) {
+      log('error', 'database still unusable after quarantine', err2 instanceof Error ? err2.message : String(err2));
+      dialog.showErrorBox(
+        'IsmaLearn cannot start',
+        'A new database could not be created either. Check that the IsmaLearn folder is writable, then try again.',
+      );
+      return null;
+    }
+  }
+}
+
 app.whenReady().then(() => {
   const userData = app.getPath('userData');
   initLogger(userData);
@@ -128,8 +172,8 @@ app.whenReady().then(() => {
   // Packaging smoke test: verify boot + database, then exit without UI.
   if (process.argv.includes('--smoke-test')) {
     try {
-      const db = getDb();
-      const settings = getAllSettings(db);
+      const smokeDb = getDb();
+      const settings = getAllSettings(smokeDb);
       log('info', 'smoke test ok');
       console.log(JSON.stringify({ ok: true, version: app.getVersion(), theme: settings.theme }));
       app.exit(0);
@@ -141,7 +185,11 @@ app.whenReady().then(() => {
   }
 
   // Initialize database (runs migrations) before any IPC handler fires
-  const db = getDb();
+  const db = openDatabaseOrRecover();
+  if (!db) {
+    app.exit(1);
+    return;
+  }
   registerMediaProtocol();
 
   // Automatic safety backup (before anything else touches the database)

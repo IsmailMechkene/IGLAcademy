@@ -5,6 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
+  LocateFileResult,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -32,8 +33,10 @@ const api = {
       ipcRenderer.invoke('courses:health', courseId),
     relocate: (courseId: number): Promise<RelocateResult | { status: 'cancelled'; relocated: number; stillMissing: number }> =>
       ipcRenderer.invoke('courses:relocate', courseId),
-    rescanAll: (): Promise<{ courses: number; addedLessons: number; addedSections: number; removedLessons: number; errors: number }> =>
+    rescanAll: (): Promise<{ courses: number; addedLessons: number; addedSections: number; missingLessons: number; restoredLessons: number; errors: number }> =>
       ipcRenderer.invoke('courses:rescanAll'),
+    forgetLesson: (lessonId: number): Promise<{ status: 'ok' | 'error'; title: string; error?: string }> =>
+      ipcRenderer.invoke('courses:forgetLesson', lessonId),
   },
   progress: {
     savePosition: (lessonId: number, seconds: number): Promise<void> =>
@@ -80,8 +83,13 @@ const api = {
     scan: (): Promise<PracticeExamFile[]> => ipcRenderer.invoke('practice:scan'),
     load: (filePath: string): Promise<PracticeExamContent> =>
       ipcRenderer.invoke('practice:load', filePath),
-    submit: (filePath: string, answers: Array<{ selected: number[]; seconds: number }>, flagged?: number[]): Promise<QuizAttemptDetail> =>
-      ipcRenderer.invoke('practice:submit', filePath, answers, flagged),
+    submit: (
+      filePath: string,
+      // questionIndex = the question's position in the file; required when the
+      // runner shuffles, since scoring places answers by it.
+      answers: Array<{ questionIndex?: number; selected: number[]; seconds: number }>,
+      flagged?: number[],
+    ): Promise<QuizAttemptDetail> => ipcRenderer.invoke('practice:submit', filePath, answers, flagged),
     history: (filePath: string): Promise<QuizAttemptSummary[]> =>
       ipcRenderer.invoke('practice:history', filePath),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
@@ -134,7 +142,7 @@ const api = {
   media: {
     getUrl: (lessonId: number): Promise<string> => ipcRenderer.invoke('media:getUrl', lessonId),
     checkFile: (lessonId: number): Promise<boolean> => ipcRenderer.invoke('media:checkFile', lessonId),
-    locateFile: (lessonId: number): Promise<string | null> => ipcRenderer.invoke('media:locateFile', lessonId),
+    locateFile: (lessonId: number): Promise<LocateFileResult> => ipcRenderer.invoke('media:locateFile', lessonId),
     openExternal: (lessonId: number): Promise<void> => ipcRenderer.invoke('media:openExternal', lessonId),
     subtitles: (lessonId: number): Promise<Array<{ index: number; label: string; url: string }>> =>
       ipcRenderer.invoke('media:subtitles', lessonId),

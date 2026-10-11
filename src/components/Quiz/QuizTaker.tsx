@@ -42,7 +42,8 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   const multi = question.correctIndices.length > 1;
   const selected = answers.get(question.id) ?? [];
   const isLast = current === total - 1;
-  const allAnswered = quiz.questions.every((q) => (answers.get(q.id) ?? []).length > 0);
+  const unansweredCount = quiz.questions.filter((q) => (answers.get(q.id) ?? []).length === 0).length;
+  const allAnswered = unansweredCount === 0;
 
   const toggle = (optionIndex: number) => {
     setAnswers((prev) => {
@@ -92,6 +93,13 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
           .then((attemptId) => api().quizzes.attemptDetail(attemptId));
+      // A null detail is a failure, not a result: leaving it unhandled left
+      // the button stuck on "Submitting..." with no way back.
+      if (!detail) {
+        setSubmitting(false);
+        setSubmitError(true);
+        return;
+      }
       setResult(detail);
     } catch {
       setSubmitting(false);
@@ -106,20 +114,33 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   });
 
   // Countdown for timed exams; auto-submits once at zero.
+  //
+  // The remaining time is derived from a wall-clock deadline rather than
+  // counted down by the interval: Chromium throttles timers in a backgrounded
+  // or occluded window and stops them across OS sleep, which handed the
+  // candidate extra real time on a timed exam. Ticking twice a second also
+  // means the display re-syncs immediately after a throttled period.
   useEffect(() => {
     if (!timed || timeLimitSeconds === undefined) return;
+    const deadline = Date.now() + timeLimitSeconds * 1000;
     setSecondsLeft(timeLimitSeconds);
-    const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(id);
-          void submitRef.current();
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
+    let fired = false;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left === 0 && !fired) {
+        fired = true;
+        clearInterval(id);
+        void submitRef.current();
+      }
+    };
+    const id = setInterval(tick, 500);
+    // Re-sync the moment the window becomes visible again after a sleep.
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timed, timeLimitSeconds, quiz.id]);
 
@@ -247,14 +268,17 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
           <ArrowLeft size={15} /> Previous
         </button>
         {isLast ? (
-          <button className="btn btn-primary" disabled={!allAnswered || submitting} onClick={submit}>
+          // A timed exam may be submitted with questions left blank (they
+          // score as incorrect) — the real exam works that way, and the
+          // auto-submit at zero does the same thing.
+          <button className="btn btn-primary" disabled={(!allAnswered && !timed) || submitting} onClick={submit}>
             <CheckCircle2 size={16} />
             {submitting ? 'Submitting...' : 'Submit quiz'}
           </button>
         ) : (
           <button
             className="btn btn-primary"
-            disabled={selected.length === 0}
+            disabled={!timed && selected.length === 0}
             onClick={() => setCurrent((c) => c + 1)}
           >
             Next <ArrowRight size={15} />
@@ -263,7 +287,9 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       </div>
       {!allAnswered && isLast && (
         <p className="muted" style={{ fontSize: 12.5, textAlign: 'center', margin: 0 }}>
-          Answer all questions to submit.
+          {timed
+            ? `${unansweredCount} question${unansweredCount === 1 ? '' : 's'} left blank — blank answers count as incorrect.`
+            : 'Answer all questions to submit.'}
         </p>
       )}
       {submitError && (

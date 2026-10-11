@@ -1,13 +1,13 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
-  backdrop-filter: blur(3px);
-  animation: fadeIn 0.18s ease both;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.15s ease both;
 }
 
 .dialog {
@@ -15,11 +15,12 @@
   max-width: calc(100vw - 48px);
   max-height: 88vh;
   overflow-y: auto;
-  padding: 24px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   outline: none;
+  box-shadow: var(--shadow-lg);
 }
 
 .dialog.wide {
@@ -28,14 +29,15 @@
 
 .dialog h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .dialog p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -108,12 +108,15 @@ export default function FileExamPage({ filePath }: Props) {
     flagged: number[],
   ): Promise<QuizAttemptDetail | null> => {
     if (!quiz) return null;
+    // `q.id` is the question's index in the FILE, which survives shuffling —
+    // both the option remapping and `questionIndex` are keyed on it, so the
+    // main process scores every answer against the question it belongs to.
     const payload = quiz.questions.map((q) => {
       const ans = answers.find((a) => a.questionId === q.id);
       const displaySel = ans?.selectedIndices ?? [];
       const order = shuffled?.optionOrders[q.id];
       const selected = order ? normalizeSelected(displaySel, order) : [...displaySel].sort((a, b) => a - b);
-      return { selected, seconds: timings[q.id] ?? 0 };
+      return { questionIndex: q.id, selected, seconds: timings[q.id] ?? 0 };
     });
     return api().practice.submit(filePath, payload, flagged);
   };

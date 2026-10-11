@@ -129,14 +129,20 @@ export function insertQuestion(
 export function updateQuestion(
   db: Database.Database,
   questionId: number,
-  data: { question: string; options: string[]; correctIndex: number; correctIndices: number[]; explanation: string },
+  data: { question: string; options: string[]; correctIndex: number; correctIndices: number[]; explanation: string; position?: number },
 ): void {
-  db.prepare('UPDATE quiz_questions SET question = ?, options = ?, correct_index = ?, correct_indices = ?, explanation = ? WHERE id = ?').run(
+  db.prepare(
+    `UPDATE quiz_questions
+     SET question = ?, options = ?, correct_index = ?, correct_indices = ?, explanation = ?,
+         position = COALESCE(?, position)
+     WHERE id = ?`,
+  ).run(
     data.question,
     JSON.stringify(data.options),
     data.correctIndex,
     JSON.stringify(data.correctIndices),
     data.explanation,
+    data.position ?? null,
     questionId,
   );
 }
@@ -165,30 +171,53 @@ export function getAttemptDetail(db: Database.Database, attemptId: number): Quiz
     .get(attemptId) as { id: number; quiz_id: number; score: number; total: number; created_at: string } | undefined;
   if (!attempt) return null;
 
+  // LEFT JOIN + snapshot-first: the attempt must still read back correctly
+  // after its questions have been edited or deleted.
   const answers = (db
     .prepare(
       `SELECT qa.question_id, qa.selected_index, qa.selected_indices, qa.is_correct,
-              qq.question, qq.options, qq.correct_index, qq.correct_indices, qq.explanation
+              qa.question_text, qa.options_snapshot, qa.correct_snapshot,
+              qa.explanation_snapshot, qa.position_snapshot,
+              qq.question, qq.options, qq.correct_index, qq.correct_indices, qq.explanation, qq.position
        FROM quiz_attempt_answers qa
-       JOIN quiz_questions qq ON qq.id = qa.question_id
+       LEFT JOIN quiz_questions qq ON qq.id = qa.question_id
        WHERE qa.attempt_id = ?
-       ORDER BY qq.position`,
+       ORDER BY COALESCE(qa.position_snapshot, qq.position), qa.id`,
     )
     .all(attemptId) as Array<{
     question_id: number; selected_index: number; selected_indices: string | null; is_correct: number;
-    question: string; options: string; correct_index: number; correct_indices: string | null; explanation: string;
+    question_text: string | null; options_snapshot: string | null; correct_snapshot: string | null;
+    explanation_snapshot: string | null; position_snapshot: number | null;
+    question: string | null; options: string | null; correct_index: number | null;
+    correct_indices: string | null; explanation: string | null; position: number | null;
   }>)
-    .map((a): QuizAttemptAnswer => ({
-      questionId: a.question_id,
-      question: a.question,
-      options: JSON.parse(a.options) as string[],
-      correctIndex: a.correct_index,
-      correctIndices: parseIndexSet(a.correct_indices, a.correct_index),
-      selectedIndex: a.selected_index,
-      selectedIndices: parseIndexSet(a.selected_indices, a.selected_index),
-      isCorrect: a.is_correct === 1,
-      explanation: a.explanation,
-    }));
+    .map((a): QuizAttemptAnswer => {
+      const optionsRaw = a.options_snapshot ?? a.options;
+      let options: string[] = [];
+      try {
+        const parsed = optionsRaw ? (JSON.parse(optionsRaw) as unknown) : [];
+        if (Array.isArray(parsed)) options = parsed.filter((o): o is string => typeof o === 'string');
+      } catch {
+        options = [];
+      }
+      // A legacy row whose question was deleted has neither source: an empty
+      // set is the honest answer, not the -1 sentinel.
+      const correctIndices = (a.correct_snapshot
+        ? parseIndexSet(a.correct_snapshot, a.correct_index ?? -1)
+        : parseIndexSet(a.correct_indices, a.correct_index ?? -1)
+      ).filter((n) => n >= 0);
+      return {
+        questionId: a.question_id,
+        question: a.question_text ?? a.question ?? '(question no longer exists)',
+        options,
+        correctIndex: correctIndices[0] ?? a.correct_index ?? -1,
+        correctIndices,
+        selectedIndex: a.selected_index,
+        selectedIndices: parseIndexSet(a.selected_indices, a.selected_index),
+        isCorrect: a.is_correct === 1,
+        explanation: a.explanation_snapshot ?? a.explanation ?? '',
+      };
+    });
 
   return {
     id: attempt.id,
@@ -201,22 +230,49 @@ export function getAttemptDetail(db: Database.Database, attemptId: number): Quiz
   };
 }
 
+/**
+ * Records an attempt together with a snapshot of every question as it was
+ * asked. Without the snapshot, editing (or deleting) a question afterwards
+ * rewrote or erased the stored history, because `quiz_attempt_answers` only
+ * referenced the live question row.
+ */
 export function insertAttempt(
   db: Database.Database,
   quizId: number,
   answers: Array<{ questionId: number; selectedIndex: number; selectedIndices: number[]; isCorrect: boolean }>,
+  total = answers.length,
 ): number {
   const score = answers.filter((a) => a.isCorrect).length;
   const tx = db.transaction(() => {
     const info = db
       .prepare('INSERT INTO quiz_attempts (quiz_id, score, total) VALUES (?, ?, ?)')
-      .run(quizId, score, answers.length);
+      .run(quizId, score, total);
     const attemptId = Number(info.lastInsertRowid);
+    const questionStmt = db.prepare(
+      'SELECT question, options, correct_index, correct_indices, explanation, position FROM quiz_questions WHERE id = ?',
+    );
     const stmt = db.prepare(
-      'INSERT INTO quiz_attempt_answers (attempt_id, question_id, selected_index, selected_indices, is_correct) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO quiz_attempt_answers
+         (attempt_id, question_id, selected_index, selected_indices, is_correct,
+          question_text, options_snapshot, correct_snapshot, explanation_snapshot, position_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const a of answers) {
-      stmt.run(attemptId, a.questionId, a.selectedIndex, JSON.stringify(a.selectedIndices), a.isCorrect ? 1 : 0);
+      const q = questionStmt.get(a.questionId) as
+        | { question: string; options: string; correct_index: number; correct_indices: string | null; explanation: string; position: number }
+        | undefined;
+      stmt.run(
+        attemptId,
+        a.questionId,
+        a.selectedIndex,
+        JSON.stringify(a.selectedIndices),
+        a.isCorrect ? 1 : 0,
+        q?.question ?? null,
+        q?.options ?? null,
+        q ? JSON.stringify(parseIndexSet(q.correct_indices, q.correct_index)) : null,
+        q?.explanation ?? null,
+        q?.position ?? null,
+      );
     }
     return attemptId;
   });

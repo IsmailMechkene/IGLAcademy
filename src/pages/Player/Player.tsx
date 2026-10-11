@@ -4,6 +4,7 @@ import type { CourseDetail } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatTime } from '../../utils/format';
+import { locateFileMessage } from '../../utils/locateFile';
 import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlayer/VideoPlayer';
 import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
@@ -22,8 +23,37 @@ interface Props {
 const COMPLETION_THRESHOLD = 0.9; // 90% watched counts as complete
 const POSITION_SAVE_INTERVAL = 5; // seconds
 
+/**
+ * Applies a completion change to the loaded course in place, so the lesson
+ * sidebar and its counters update without re-fetching (and without the
+ * global refresh that used to remount the whole player mid-lesson).
+ */
+function withCompletion(course: CourseDetail, lessonId: number, completed: boolean): CourseDetail {
+  let changed = false;
+  const sections = course.sections.map((section) => {
+    if (!section.lessons.some((l) => l.id === lessonId && l.completed !== completed)) return section;
+    changed = true;
+    return {
+      ...section,
+      lessons: section.lessons.map((l) =>
+        l.id === lessonId
+          ? { ...l, completed, completedAt: completed ? new Date().toISOString() : null }
+          : l,
+      ),
+    };
+  });
+  if (!changed) return course;
+  const completedCount = sections.reduce((n, s) => n + s.lessons.filter((l) => l.completed).length, 0);
+  return {
+    ...course,
+    sections,
+    completedCount,
+    progressPercent: course.lessonCount > 0 ? Math.round((completedCount / course.lessonCount) * 100) : 0,
+  };
+}
+
 export default function Player({ courseId, lessonId, startAt }: Props) {
-  const { navigate, settings, refreshAll } = useApp();
+  const { navigate, settings } = useApp();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [fileMissing, setFileMissing] = useState(false);
@@ -179,15 +209,22 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
     return () => clearInterval(interval);
   }, [currentLessonId]);
 
+  // Records completion locally + in the database. Never triggers a global
+  // refresh: the page is keyed on the route, and a refresh here would unmount
+  // the <video> element (the player used to restart at 90% of every lesson).
+  const markCompleted = useCallback((lessonId: number, next: boolean) => {
+    completedRef.current = next;
+    setCompleted(next);
+    setCourse((prev) => (prev ? withCompletion(prev, lessonId, next) : prev));
+    void api().progress.setCompleted(lessonId, next);
+  }, []);
+
   const handleTimeUpdate = useCallback(
     (time: number, duration: number) => {
       setCurrentTime(time);
       // Auto-complete at 90%
       if (duration > 0 && time / duration >= COMPLETION_THRESHOLD && !completedRef.current) {
-        completedRef.current = true;
-        setCompleted(true);
-        void api().progress.setCompleted(currentLessonId, true);
-        refreshAll();
+        markCompleted(currentLessonId, true);
       }
       // Periodic position save
       if (time - lastSaveRef.current >= POSITION_SAVE_INTERVAL) {
@@ -195,7 +232,7 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
         void api().progress.savePosition(currentLessonId, time);
       }
     },
-    [currentLessonId, refreshAll],
+    [currentLessonId, markCompleted],
   );
 
   const handleEnded = useCallback(() => {
@@ -269,18 +306,27 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
   }, [allLessons, currentLessonId, goToLesson]);
 
   const handleToggleComplete = useCallback(() => {
-    const next = !completed;
-    completedRef.current = next;
-    setCompleted(next);
-    void api().progress.setCompleted(currentLessonId, next);
-    refreshAll();
-  }, [completed, currentLessonId, refreshAll]);
+    markCompleted(currentLessonId, !completed);
+  }, [completed, currentLessonId, markCompleted]);
 
+  // Relinking can fail (file outside the course folder, wrong kind). Those
+  // outcomes are reported instead of silently doing nothing.
   const handleLocateFile = useCallback(async () => {
-    const newUrl = await api().media.locateFile(currentLessonId);
-    if (newUrl) {
-      setMediaUrl(newUrl);
-      setFileMissing(false);
+    try {
+      const result = await api().media.locateFile(currentLessonId);
+      if (result.status === 'ok') {
+        setMediaUrl(result.url);
+        setFileMissing(false);
+        setLoadError(null);
+        return;
+      }
+      if (result.status === 'cancelled') return;
+      await api().app.showError('Could not use that file', locateFileMessage(result));
+    } catch (err) {
+      await api().app.showError(
+        'Could not use that file',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
     }
   }, [currentLessonId]);
 

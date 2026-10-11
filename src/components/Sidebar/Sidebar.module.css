@@ -6,23 +6,23 @@
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
-  gap: 4px;
+  padding: 14px 10px;
+  gap: 2px;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 16px;
+  padding: 4px 8px 14px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .logoIcon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   background: linear-gradient(160deg, var(--accent), #5a48d6);
   display: flex;
   align-items: center;
@@ -35,41 +35,50 @@
   display: flex;
   flex-direction: column;
   line-height: 1.2;
+  min-width: 0;
 }
 
 .logoName {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .logoTag {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   flex: 1;
+  overflow-y: auto;
 }
 
 .navItem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 9px;
+  padding: 7px 10px;
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background var(--transition-fast), color var(--transition-fast);
   text-align: left;
   width: 100%;
+  min-height: 34px;
 }
 
 .navItem:hover {
@@ -80,23 +89,28 @@
 .navItem.active {
   background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 600;
 }
 
 .navIcon {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
 }
 
 .sidebarFooter {
   border-top: 1px solid var(--border);
-  padding-top: 12px;
+  padding-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .version {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted);
   text-align: center;
 }

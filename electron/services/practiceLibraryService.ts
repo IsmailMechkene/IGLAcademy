@@ -167,6 +167,12 @@ export function loadExamFile(db: Database.Database, filePath: string): PracticeE
 }
 
 export interface PracticeAnswerInput {
+  /**
+   * Index of the question in the file's own order. Required whenever the
+   * runner shuffles questions, because scoring is positional: without it a
+   * shuffled run scored every answer against the wrong question.
+   */
+  questionIndex?: unknown;
   selected: unknown;
   seconds?: unknown;
 }
@@ -181,8 +187,24 @@ export function submitExamAttempt(
   if (!Array.isArray(answers) || answers.length !== exam.questions.length) {
     throw new ValidationError('Answer count does not match the exam.');
   }
-  const perQuestion = (answers as PracticeAnswerInput[]).map((answer, i) => {
-    const options = exam.questions[i].options;
+
+  // Place each answer against the question it was actually given for.
+  // `questionIndex` is authoritative when present; array position is the
+  // fallback for callers that submit in file order.
+  const slots = new Array<{ selected: number[]; seconds: number } | undefined>(exam.questions.length);
+  (answers as PracticeAnswerInput[]).forEach((answer, i) => {
+    const claimed = Array.isArray(answer) ? undefined : answer?.questionIndex;
+    let target = i;
+    if (claimed !== undefined) {
+      if (typeof claimed !== 'number' || !Number.isInteger(claimed) || claimed < 0 || claimed >= exam.questions.length) {
+        throw new ValidationError('An answer refers to a question that is not in this exam.');
+      }
+      target = claimed;
+    }
+    if (slots[target] !== undefined) {
+      throw new ValidationError('Two answers refer to the same question.');
+    }
+    const options = exam.questions[target].options;
     const raw = Array.isArray(answer) ? answer : answer?.selected;
     const set = Array.isArray(raw)
       ? [...new Set(raw.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < options.length))].sort((a, b) => a - b)
@@ -190,7 +212,12 @@ export function submitExamAttempt(
     const seconds = typeof answer === 'object' && answer !== null && Number.isFinite((answer as { seconds?: unknown }).seconds)
       ? Math.max(0, Number((answer as { seconds?: unknown }).seconds))
       : 0;
-    return { selected: set, seconds, isCorrect: setsEqual(set, exam.questions[i].correctIndices) };
+    slots[target] = { selected: set, seconds };
+  });
+
+  const perQuestion = exam.questions.map((question, i) => {
+    const slot = slots[i] ?? { selected: [], seconds: 0 };
+    return { ...slot, isCorrect: setsEqual(slot.selected, question.correctIndices) };
   });
   const flagList = Array.isArray(flagged)
     ? [...new Set(flagged.filter((n): n is number => Number.isInteger(n) && n >= 0 && n < exam.questions.length))].sort((a, b) => a - b)

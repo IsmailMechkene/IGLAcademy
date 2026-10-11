@@ -1,10 +1,10 @@
 .page {
-  padding: 28px 32px;
+  padding: 24px 28px;
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .header {
@@ -24,7 +24,7 @@
 .header p {
   margin: 2px 0 0;
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* card wrapper + hover actions menu */
@@ -34,29 +34,29 @@
 
 .menuWrap {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   z-index: 5;
 }
 
 .menuBtn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: 1px solid transparent;
-  background: rgba(10, 12, 18, 0.55);
+  background: rgba(10, 12, 18, 0.6);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.18s ease, background 0.15s ease, transform 0.1s ease;
+  transition: opacity var(--transition-base), background var(--transition-fast), transform var(--transition-fast);
   backdrop-filter: blur(4px);
 }
 
 .menuBtn:hover {
-  background: rgba(10, 12, 18, 0.8);
+  background: rgba(10, 12, 18, 0.85);
 }
 
 .cardWrap:hover .menuBtn,
@@ -80,33 +80,33 @@
 
 .menu {
   position: absolute;
-  top: 36px;
+  top: 34px;
   right: 0;
   z-index: 41;
-  min-width: 200px;
-  padding: 6px;
+  min-width: 190px;
+  padding: 5px;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
 }
 
 .menuItem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 8px 12px;
+  gap: 9px;
+  min-height: 34px;
+  padding: 7px 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   width: 100%;
-  transition: background 0.12s ease;
+  transition: background var(--transition-fast);
 }
 
 .menuItem:hover {
@@ -123,8 +123,8 @@
 
 .courseGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
 }
 
 .emptyState {
@@ -132,31 +132,32 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 64px 24px;
+  padding: 56px 24px;
   gap: 8px;
 }
 
 .emptyState h2 {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 650;
   margin: 0;
 }
 
 .emptyState p {
   color: var(--text-secondary);
   margin: 0 0 12px;
+  font-size: 13.5px;
 }
 
 .emptyIcon {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
   background: var(--accent-soft);
   color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 /* skeleton loading cards */
@@ -172,20 +173,20 @@
 }
 
 .skeletonBody {
-  padding: 14px 16px 16px;
+  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .skeletonLine {
-  height: 13px;
-  border-radius: 6px;
+  height: 12px;
+  border-radius: 5px;
 }
 
 .filterInfo {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 /* import progress overlay */
@@ -228,8 +229,8 @@
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 3px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -247,7 +248,7 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .resultRow.success {

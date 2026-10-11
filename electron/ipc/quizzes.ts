@@ -2,10 +2,10 @@ import { ipcMain } from 'electron';
 import { getDb } from '../database/connection';
 import {
   listQuizzesForCourse, getQuiz, insertQuiz, updateQuiz, deleteQuiz,
-  insertQuestion, deleteQuestion, listAttempts, getAttemptDetail, insertAttempt,
+  insertQuestion, updateQuestion, deleteQuestion, listAttempts, getAttemptDetail, insertAttempt,
 } from '../database/repositories/quizzes';
 import { requireId, requireString, optionalId, optionalString, ValidationError } from '../services/validate';
-import type { QuizQuestionInput, AnswerInput } from '../../src/types';
+import type { QuizDetail, QuizQuestionInput } from '../../src/types';
 
 export function validateQuestionInput(q: unknown, index: number): QuizQuestionInput {
   const data = q as { question?: unknown; options?: unknown; correctIndex?: unknown; correctIndices?: unknown; explanation?: unknown };
@@ -37,6 +37,53 @@ export function validateQuestionInput(q: unknown, index: number): QuizQuestionIn
     correctIndices,
     explanation: optionalString(data.explanation, `question ${index + 1} explanation`, 2000),
   };
+}
+
+export interface ScoredAnswer {
+  questionId: number;
+  selectedIndex: number;
+  selectedIndices: number[];
+  isCorrect: boolean;
+}
+
+/**
+ * Scores a submission against the QUIZ rather than against the payload: one
+ * row per question, in the quiz's own order, regardless of what the client
+ * sent. A short or partly-empty submission therefore cannot inflate the
+ * percentage (the total used to be `answers.length`) and cannot be rejected
+ * outright (a timed auto-submit legitimately contains unanswered questions,
+ * which simply count as incorrect).
+ */
+export function scoreAttempt(quiz: QuizDetail, answers: unknown[]): ScoredAnswer[] {
+  const submitted = new Map<number, number[]>();
+  answers.forEach((a: unknown, i: number) => {
+    const data = a as { questionId?: unknown; selectedIndex?: unknown; selectedIndices?: unknown };
+    const questionId = requireId(data.questionId, `answer ${i + 1} questionId`);
+    const raw = Array.isArray(data.selectedIndices)
+      ? data.selectedIndices
+      : data.selectedIndex === undefined || data.selectedIndex === null
+        ? []
+        : [data.selectedIndex];
+    const selectedIndices = [...new Set(raw)].filter(
+      (n): n is number => Number.isInteger(n) && (n as number) >= 0,
+    );
+    // Entries for questions that no longer exist are ignored rather than
+    // thrown on: losing the whole attempt would be the worse outcome.
+    if (quiz.questions.some((q) => q.id === questionId)) {
+      submitted.set(questionId, selectedIndices.sort((x, y) => x - y));
+    }
+  });
+
+  return quiz.questions.map((question) => {
+    // Out-of-range options are dropped; an empty set means "unanswered".
+    const selectedIndices = (submitted.get(question.id) ?? []).filter((n) => n < question.options.length);
+    return {
+      questionId: question.id,
+      selectedIndex: selectedIndices[0] ?? -1,
+      selectedIndices,
+      isCorrect: selectedIndices.length > 0 && setsEqual(selectedIndices, question.correctIndices),
+    };
+  });
 }
 
 /** Exact set match: a multi-select answer is correct only when complete. */
@@ -87,13 +134,25 @@ export function registerQuizIpc(): void {
     const questions = data.questions.map(validateQuestionInput);
     if (questions.length === 0) throw new ValidationError('a quiz needs at least one question');
 
-    updateQuiz(db, quizId, { title, description });
-    // Replace questions wholesale (simplest correct approach for an editor)
     const existing = getQuiz(db, quizId);
-    existing?.questions.forEach((q) => deleteQuestion(db, q.id));
-    questions.forEach((q, i) => {
-      insertQuestion(db, quizId, { ...q, position: i + 1 });
+    if (!existing) throw new ValidationError('Quiz not found');
+
+    // Update questions in place, insert the new ones, and delete only the
+    // ones that are really gone. Replacing them wholesale used to cascade
+    // away every past attempt's answers (quiz_attempt_answers.question_id is
+    // ON DELETE CASCADE) — history must survive an edit.
+    const tx = db.transaction(() => {
+      updateQuiz(db, quizId, { title, description });
+      questions.forEach((q, i) => {
+        const current = existing.questions[i];
+        if (current) updateQuestion(db, current.id, { ...q, position: i + 1 });
+        else insertQuestion(db, quizId, { ...q, position: i + 1 });
+      });
+      for (const surplus of existing.questions.slice(questions.length)) {
+        deleteQuestion(db, surplus.id);
+      }
     });
+    tx();
     return getQuiz(db, quizId);
   });
 
@@ -106,40 +165,7 @@ export function registerQuizIpc(): void {
     const quiz = getQuiz(db, qid);
     if (!quiz) throw new ValidationError('Quiz not found');
     if (!Array.isArray(answers)) throw new ValidationError('answers must be an array');
-
-    const parsed: AnswerInput[] = (answers as unknown[]).map((a: unknown, i: number) => {
-      const data = a as { questionId?: unknown; selectedIndex?: unknown; selectedIndices?: unknown };
-      const questionId = requireId(data.questionId, `answer ${i + 1} questionId`);
-      let selectedIndices: number[];
-      if (Array.isArray(data.selectedIndices)) {
-        // May be empty (unanswered on auto-submit) — counts as incorrect.
-        selectedIndices = [...new Set(data.selectedIndices)].filter(
-          (n): n is number => Number.isInteger(n) && (n as number) >= 0,
-        ) as number[];
-      } else {
-        selectedIndices = [requireId(data.selectedIndex, `answer ${i + 1} selectedIndex`)];
-      }
-      return { questionId, selectedIndex: selectedIndices[0] ?? -1, selectedIndices };
-    });
-
-    const answerRows = parsed.map((a) => {
-      const question = quiz.questions.find((q) => q.id === a.questionId);
-      if (!question) throw new ValidationError(`Unknown question id ${a.questionId}`);
-      const selectedIndices = (a.selectedIndices ?? [a.selectedIndex]).filter(
-        (n) => Number.isInteger(n) && n >= 0 && n < question.options.length,
-      );
-      if (selectedIndices.length === 0) {
-        throw new ValidationError(`Invalid option selected for question ${a.questionId}`);
-      }
-      return {
-        questionId: a.questionId,
-        selectedIndex: selectedIndices[0],
-        selectedIndices,
-        isCorrect: setsEqual(selectedIndices, question.correctIndices),
-      };
-    });
-
-    return insertAttempt(db, qid, answerRows);
+    return insertAttempt(db, qid, scoreAttempt(quiz, answers as unknown[]), quiz.questions.length);
   });
 
   ipcMain.handle('quizzes:attempts', (_e, quizId: unknown) => {

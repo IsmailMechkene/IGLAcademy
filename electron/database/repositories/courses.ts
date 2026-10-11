@@ -126,6 +126,7 @@ export function getCourseDetail(db: Database.Database, id: number): CourseDetail
     const lessons = (lessonStmt.all(s.id) as Array<{
       id: number; section_id: number; title: string; file_path: string;
       file_type: string; duration: number | null; position: number;
+      missing_since: string | null;
       completed: number | null; completed_at: string | null;
       position_seconds: number | null; watched_seconds: number | null;
     }>).map((l) => ({
@@ -136,6 +137,7 @@ export function getCourseDetail(db: Database.Database, id: number): CourseDetail
       fileType: l.file_type as 'video' | 'practice',
       duration: l.duration,
       position: l.position,
+      missingSince: l.missing_since,
       completed: l.completed === 1,
       completedAt: l.completed_at,
       positionSeconds: l.position_seconds ?? 0,
@@ -178,6 +180,7 @@ export function getLesson(db: Database.Database, lessonId: number): LessonWithPr
     | {
         id: number; section_id: number; title: string; file_path: string;
         file_type: string; duration: number | null; position: number;
+        missing_since: string | null;
         completed: number | null; completed_at: string | null;
         position_seconds: number | null; watched_seconds: number | null;
       }
@@ -191,6 +194,7 @@ export function getLesson(db: Database.Database, lessonId: number): LessonWithPr
     fileType: row.file_type as 'video' | 'practice' | 'resource',
     duration: row.duration,
     position: row.position,
+    missingSince: row.missing_since,
     completed: row.completed === 1,
     completedAt: row.completed_at,
     positionSeconds: row.position_seconds ?? 0,
@@ -230,8 +234,40 @@ export function renameLesson(db: Database.Database, lessonId: number, title: str
   db.prepare('UPDATE lessons SET title = ? WHERE id = ?').run(title, lessonId);
 }
 
+/** Re-points a lesson at a new file. A relinked lesson is no longer missing. */
 export function updateLessonFilePath(db: Database.Database, lessonId: number, filePath: string): void {
-  db.prepare('UPDATE lessons SET file_path = ? WHERE id = ?').run(filePath, lessonId);
+  db.prepare('UPDATE lessons SET file_path = ?, missing_since = NULL WHERE id = ?').run(filePath, lessonId);
+}
+
+/**
+ * Flags a lesson whose file is gone. Idempotent: the first-seen timestamp is
+ * kept so the UI can say how long it has been missing. Returns true when this
+ * call is what flagged it (for rescan counters).
+ */
+export function markLessonMissing(db: Database.Database, lessonId: number, atIso: string): boolean {
+  const info = db
+    .prepare('UPDATE lessons SET missing_since = ? WHERE id = ? AND missing_since IS NULL')
+    .run(atIso, lessonId);
+  return info.changes > 0;
+}
+
+/** Clears the missing flag after a file reappears. Returns true when it was set. */
+export function clearLessonMissing(db: Database.Database, lessonId: number): boolean {
+  const info = db
+    .prepare('UPDATE lessons SET missing_since = NULL WHERE id = ? AND missing_since IS NOT NULL')
+    .run(lessonId);
+  return info.changes > 0;
+}
+
+export function listMissingLessonIds(db: Database.Database, courseId: number): number[] {
+  return (
+    db
+      .prepare(
+        `SELECT l.id FROM lessons l JOIN sections s ON s.id = l.section_id
+         WHERE s.course_id = ? AND l.missing_since IS NOT NULL`,
+      )
+      .all(courseId) as Array<{ id: number }>
+  ).map((r) => r.id);
 }
 
 export function deleteLesson(db: Database.Database, lessonId: number): void {

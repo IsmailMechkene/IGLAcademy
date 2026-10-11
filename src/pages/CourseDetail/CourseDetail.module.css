@@ -1,10 +1,10 @@
 .page {
-  padding: 28px 32px;
+  padding: 24px 28px;
   max-width: 1000px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .backButton {
@@ -13,12 +13,12 @@
 
 .header {
   display: flex;
-  gap: 24px;
+  gap: 22px;
   align-items: flex-start;
 }
 
 .thumbnail {
-  width: 240px;
+  width: 220px;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius);
   flex-shrink: 0;
@@ -29,12 +29,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .headerInfo h1 {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.02em;
@@ -43,16 +43,17 @@
 
 .description {
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 13px;
   margin: 0;
   white-space: pre-wrap;
+  line-height: 1.55;
 }
 
 .metaRow {
   display: flex;
   align-items: center;
-  gap: 18px;
-  font-size: 13px;
+  gap: 16px;
+  font-size: 12.5px;
   color: var(--text-muted);
   flex-wrap: wrap;
 }
@@ -60,13 +61,13 @@
 .metaItem {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .progressRow {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .progressRow > div:first-child {
@@ -75,30 +76,31 @@
 
 .progressPercent {
   font-weight: 700;
-  font-size: 15px;
-  min-width: 44px;
+  font-size: 14px;
+  min-width: 40px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .healthBanner {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 12px;
+  padding: 12px 16px;
   border-color: var(--warning);
 }
 
 .healthList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
+  gap: 6px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
@@ -106,11 +108,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 7px 12px;
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .healthRow span {
@@ -129,16 +131,17 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 12px 16px;
   background: transparent;
   border: none;
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
+  min-height: 44px;
 }
 
 .sectionHeader:hover {
@@ -159,18 +162,20 @@
 }
 
 .sectionMeta {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 .chevron {
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
   color: var(--text-muted);
   flex-shrink: 0;
+  display: flex;
 }
 
 .chevron.open {
@@ -186,16 +191,17 @@
 .lessonRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 18px 11px 44px;
+  gap: 10px;
+  padding: 10px 16px 10px 40px;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--transition-fast);
   border: none;
   background: transparent;
   color: var(--text);
   width: 100%;
   text-align: left;
-  font-size: 13.5px;
+  font-size: 13px;
+  min-height: 40px;
 }
 
 .lessonRow:hover {
@@ -220,9 +226,23 @@
 }
 
 .lessonDuration {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Flagged by a rescan: the file is gone but the lesson's data is intact. */
+.lessonMissing {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid var(--warning-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 
 .statusIcon {
@@ -239,7 +259,7 @@
 .quizSection {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .quizHeader {
@@ -249,7 +269,7 @@
 }
 
 .quizHeader h2 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 650;
   margin: 0;
 }
@@ -257,14 +277,14 @@
 .quizList {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .quizRow {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 12px;
+  padding: 12px 16px;
 }
 
 .quizInfo {
@@ -274,18 +294,18 @@
 
 .quizTitle {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .quizMeta {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .quizActions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }

@@ -5,7 +5,8 @@ import type { CourseHealth, ImportResult, RelocateResult, RescanResult } from '.
 import { scanCourseDirectory } from './courseScanner';
 import {
   insertCourse, getCourseBySourcePath, getCourse, insertSection, insertLesson,
-  findLessonByPath, deleteLesson, deleteSection, updateLessonFilePath,
+  deleteLesson, deleteSection, updateLessonFilePath, getLesson,
+  markLessonMissing, clearLessonMissing,
   getCourseDetail, updateCourse,
 } from '../database/repositories/courses';
 import {
@@ -75,16 +76,31 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
  * Rescans an existing course directory and merges new content:
  * - new sections and lessons are added
  * - lessons whose file moved are re-linked (matched by title within the section)
- * - lessons whose files disappeared are removed
+ * - lessons whose files disappeared are FLAGGED missing, never deleted
  * existing progress is preserved whenever a lesson can be matched
+ *
+ * Nothing the user created (progress, notes, bookmarks) is ever removed by a
+ * rescan: a renamed folder or an unplugged drive must not cost data, and the
+ * notes/bookmarks foreign keys cascade on lesson delete. Forgetting a missing
+ * lesson for good is an explicit, confirmed user action (`forgetLesson`).
  */
 export function rescanCourse(db: Database.Database, courseId: number): RescanResult {
   const course = getCourse(db, courseId);
-  if (!course) return { status: 'error', addedLessons: 0, addedSections: 0, removedLessons: 0, error: 'Course not found' };
+  if (!course) {
+    return {
+      status: 'error',
+      addedLessons: 0,
+      addedSections: 0,
+      missingLessons: 0,
+      restoredLessons: 0,
+      error: 'Course not found',
+    };
+  }
 
   let addedLessons = 0;
   let addedSections = 0;
-  let removedLessons = 0;
+  let missingLessons = 0;
+  let restoredLessons = 0;
 
   const tx = db.transaction(() => {
     const scanned = scanCourseDirectory(course.sourcePath);
@@ -95,10 +111,18 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
     const existingByPath = new Map<string, { id: number; sectionId: number; title: string }>();
     const existingByTitle = new Map<string, { id: number; sectionId: number; title: string }>();
     const existingSectionIds = new Set<number>();
+    // Lessons already flagged missing before this rescan, so "restored" counts
+    // only genuine comebacks.
+    const missingBefore = new Set<number>(
+      detail.sections.flatMap((s) => s.lessons.filter((l) => l.missingSince !== null).map((l) => l.id)),
+    );
     for (const section of detail.sections) {
       existingSectionIds.add(section.id);
       for (const lesson of section.lessons) {
         existingByPath.set(path.resolve(lesson.filePath), { id: lesson.id, sectionId: section.id, title: lesson.title });
+        // A lesson already flagged missing must stay claimable by title so a
+        // renamed/moved file re-links to it (keeping its progress and notes)
+        // instead of being added again as a brand-new lesson.
         existingByTitle.set(`${section.title}::${lesson.title}`, { id: lesson.id, sectionId: section.id, title: lesson.title });
       }
     }
@@ -136,14 +160,18 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       const newLessons: typeof scannedSection.lessons = [];
       for (const scannedLesson of scannedSection.lessons) {
         const resolved = path.resolve(scannedLesson.filePath);
-        if (existingByPath.get(resolved)) {
-          // Unchanged — keep as is (progress preserved)
+        const unchanged = existingByPath.get(resolved);
+        if (unchanged) {
+          // Unchanged — keep as is (progress preserved). If it had been
+          // flagged missing, the file is back.
+          if (clearLessonMissing(db, unchanged.id)) restoredLessons++;
           continue;
         }
         const byTitle = existingByTitle.get(`${scannedSection.title}::${scannedLesson.title}`);
         if (byTitle) {
-          // File moved/renamed — re-link, keep progress
+          // File moved/renamed — re-link, keep progress (and clear any flag)
           updateLessonFilePath(db, byTitle.id, scannedLesson.filePath);
+          if (missingBefore.has(byTitle.id)) restoredLessons++;
           continue;
         }
         if (claimedByOther.has(resolved)) continue;
@@ -184,20 +212,24 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       });
     }
 
-    // Remove lessons whose files no longer exist on disk
+    // Flag lessons whose files no longer exist on disk. They keep their row —
+    // and therefore their progress, notes and bookmarks — so an unplugged
+    // drive or a renamed folder is recoverable (see `forgetLesson` for the
+    // explicit, confirmed removal path).
     const scannedPaths = new Set(
       scanned.sections.flatMap((s) => s.lessons.map((l) => path.resolve(l.filePath))),
     );
+    const nowIso = new Date().toISOString();
     for (const section of detail.sections) {
       for (const lesson of section.lessons) {
-        if (!scannedPaths.has(path.resolve(lesson.filePath))) {
-          // Only remove if it wasn't re-linked above (re-linked lessons keep their id)
-          const stillThere = findLessonByPath(db, lesson.filePath);
-          if (stillThere && stillThere.id === lesson.id) {
-            deleteLesson(db, lesson.id);
-            removedLessons++;
-          }
-        }
+        if (scannedPaths.has(path.resolve(lesson.filePath))) continue;
+        // Skip lessons that were re-linked above: their row now points at a
+        // path the scan did find, so the stale closure value is out of date.
+        const current = db.prepare('SELECT file_path FROM lessons WHERE id = ?').get(lesson.id) as
+          | { file_path: string }
+          | undefined;
+        if (!current || path.resolve(current.file_path) !== path.resolve(lesson.filePath)) continue;
+        if (markLessonMissing(db, lesson.id, nowIso)) missingLessons++;
       }
     }
 
@@ -236,30 +268,61 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       status: 'error',
       addedLessons,
       addedSections,
-      removedLessons,
+      missingLessons,
+      restoredLessons,
       error: err instanceof Error ? err.message : 'Rescan failed',
     };
   }
 
-  return { status: 'ok', addedLessons, addedSections, removedLessons };
+  return { status: 'ok', addedLessons, addedSections, missingLessons, restoredLessons };
 }
 
 /**
- * Checks every lesson file of a course without touching anything.
+ * Permanently removes a single lesson the user has decided to give up on.
+ * This DOES cascade its progress, notes and bookmarks, so it is only ever
+ * called from an explicitly confirmed UI action — never from a rescan.
+ */
+export function forgetLesson(
+  db: Database.Database,
+  lessonId: number,
+): { status: 'ok' | 'error'; title: string; error?: string } {
+  const lesson = getLesson(db, lessonId);
+  if (!lesson) return { status: 'error', title: '', error: 'Lesson not found' };
+  if (fs.existsSync(lesson.filePath)) {
+    return {
+      status: 'error',
+      title: lesson.title,
+      error: 'This lesson’s file is on disk again — rescan the course instead of forgetting it.',
+    };
+  }
+  deleteLesson(db, lessonId);
+  return { status: 'ok', title: lesson.title };
+}
+
+/**
+ * Checks every lesson file of a course. Never touches files or user data; it
+ * does keep the `missing_since` flag in sync with what is actually on disk so
+ * the lesson lists can badge missing lessons without a full rescan.
  */
 export function getCourseHealth(db: Database.Database, courseId: number): CourseHealth {
   const detail = getCourseDetail(db, courseId);
   if (!detail) throw new Error('Course not found');
-  const missingLessons = detail.sections
-    .flatMap((s) => s.lessons)
-    .filter((l) => {
-      try {
-        return !fs.existsSync(l.filePath);
-      } catch {
-        return true;
-      }
-    })
-    .map((l) => ({ lessonId: l.id, title: l.title, filePath: l.filePath }));
+  const nowIso = new Date().toISOString();
+  const missingLessons: CourseHealth['missingLessons'] = [];
+  for (const lesson of detail.sections.flatMap((s) => s.lessons)) {
+    let present: boolean;
+    try {
+      present = fs.existsSync(lesson.filePath);
+    } catch {
+      present = false;
+    }
+    if (present) {
+      clearLessonMissing(db, lesson.id);
+      continue;
+    }
+    markLessonMissing(db, lesson.id, nowIso);
+    missingLessons.push({ lessonId: lesson.id, title: lesson.title, filePath: lesson.filePath });
+  }
   return { courseId, totalLessons: detail.lessonCount, missingLessons };
 }
 

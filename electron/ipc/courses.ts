@@ -4,7 +4,7 @@ import {
   listCourses, getCourseDetail, updateCourse, markCourseOpened, deleteCourse,
   renameSection, renameLesson,
 } from '../database/repositories/courses';
-import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot } from '../services/courseImportService';
+import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
 import { requireId, requireString, optionalString, ValidationError } from '../services/validate';
 
@@ -85,7 +85,7 @@ export function registerCourseIpc(): void {
 
   // Rescans every course (used by the library button and startup setting).
   ipcMain.handle('courses:rescanAll', () => {
-    const summary = { courses: 0, addedLessons: 0, addedSections: 0, removedLessons: 0, errors: 0 };
+    const summary = { courses: 0, addedLessons: 0, addedSections: 0, missingLessons: 0, restoredLessons: 0, errors: 0 };
     const ids = (db.prepare('SELECT id FROM courses').all() as Array<{ id: number }>).map((r) => r.id);
     for (const courseId of ids) {
       try {
@@ -94,7 +94,8 @@ export function registerCourseIpc(): void {
         if (r.status === 'ok') {
           summary.addedLessons += r.addedLessons;
           summary.addedSections += r.addedSections;
-          summary.removedLessons += r.removedLessons;
+          summary.missingLessons += r.missingLessons;
+          summary.restoredLessons += r.restoredLessons;
         } else {
           summary.errors += 1;
         }
@@ -103,6 +104,13 @@ export function registerCourseIpc(): void {
       }
     }
     return summary;
+  });
+
+  // Permanently drops a lesson whose file is gone, together with its progress,
+  // notes and bookmarks. Only ever reached from a confirmed UI action — a
+  // rescan flags missing lessons instead (see rescanCourse).
+  ipcMain.handle('courses:forgetLesson', (_e, lessonId: unknown) => {
+    return forgetLesson(db, requireId(lessonId, 'lessonId'));
   });
 }
 

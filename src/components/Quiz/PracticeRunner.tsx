@@ -115,6 +115,11 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
           .then((attemptId) => api().quizzes.attemptDetail(attemptId));
+      if (!detail) {
+        setSubmitting(false);
+        setSubmitError(true);
+        return;
+      }
       setResult(detail);
     } catch {
       setSubmitting(false);

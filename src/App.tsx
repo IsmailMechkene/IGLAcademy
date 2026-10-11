@@ -160,7 +160,14 @@ export default function App() {
         <Sidebar />
         <div className="app-main">
           <Topbar />
-          <main className="app-content" key={`${route.name}-${'courseId' in route ? route.courseId : ''}-${'lessonId' in route ? route.lessonId : ''}-${refreshKey}`}>
+          {/*
+            The key remounts a page when the ROUTE changes (a different course
+            or lesson needs fresh component state). It deliberately does not
+            include refreshKey: every page re-fetches on it as an effect
+            dependency instead, because remounting on a data refresh also tore
+            down the video element mid-lesson.
+          */}
+          <main className="app-content" key={`${route.name}-${'courseId' in route ? route.courseId : ''}-${'lessonId' in route ? route.lessonId : ''}`}>
             {renderPage()}
           </main>
         </div>

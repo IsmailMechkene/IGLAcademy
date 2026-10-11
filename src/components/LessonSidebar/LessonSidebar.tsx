@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, FileText } from 'lucide-react';
+import { CheckCircle2, Circle, FileText, FileWarning } from 'lucide-react';
 import type { CourseDetail } from '../../types';
 import styles from './LessonSidebar.module.css';
 
@@ -28,9 +28,12 @@ export default function LessonSidebar({ course, activeLessonId, onSelectLesson, 
                 key={lesson.id}
                 className={`${styles.lessonRow} ${lesson.id === activeLessonId ? styles.active : ''}`}
                 onClick={() => onSelectLesson(lesson.id)}
+                title={lesson.missingSince !== null ? `${lesson.title} — file missing (progress and notes kept)` : lesson.title}
               >
                 <span className={styles.statusIcon}>
-                  {lesson.completed ? (
+                  {lesson.missingSince !== null ? (
+                    <FileWarning size={16} color="var(--warning)" />
+                  ) : lesson.completed ? (
                     <CheckCircle2 size={16} color="var(--success)" />
                   ) : lesson.fileType === 'practice' ? (
                     <FileText size={16} color="var(--text-muted)" />
