@@ -2,11 +2,12 @@ import { ipcMain, dialog } from 'electron';
 import { getDb } from '../database/connection';
 import {
   listCourses, getCourseDetail, updateCourse, markCourseOpened, deleteCourse,
-  renameSection, renameLesson, updateLessonDuration,
+  renameSection, renameLesson, updateLessonDuration, getLesson, getSection,
 } from '../database/repositories/courses';
+import type { LessonContext } from '../../src/types';
 import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
-import { requireId, requireString, optionalString, ValidationError } from '../services/validate';
+import { requireId, requireString, requirePath, optionalString, ValidationError } from '../services/validate';
 
 export function registerCourseIpc(): void {
   const db = getDb();
@@ -17,6 +18,17 @@ export function registerCourseIpc(): void {
 
   ipcMain.handle('courses:get', (_e, courseId: unknown) => {
     return getCourseDetail(db, requireId(courseId, 'courseId'));
+  });
+
+  // One lesson's metadata, for the player: switching lessons used to re-read
+  // the whole course tree (every lesson with its progress) just for this.
+  ipcMain.handle('courses:getLesson', (_e, courseId: unknown, lessonId: unknown): LessonContext | null => {
+    const cid = requireId(courseId, 'courseId');
+    const lesson = getLesson(db, requireId(lessonId, 'lessonId'));
+    if (!lesson) return null;
+    const section = getSection(db, lesson.sectionId);
+    if (!section || section.course_id !== cid) return null;
+    return { lesson, sectionTitle: section.title };
   });
 
   ipcMain.handle('courses:import', async () => {
@@ -31,7 +43,7 @@ export function registerCourseIpc(): void {
   });
 
   ipcMain.handle('courses:importPath', (_e, dirPath: unknown) => {
-    return importCourse(db, requireString(dirPath, 'dirPath', 4096));
+    return importCourse(db, requirePath(dirPath, 'dirPath'));
   });
 
   ipcMain.handle('courses:rename', (_e, courseId: unknown, title: unknown) => {

@@ -9,7 +9,9 @@ import {
 import { getCourse } from '../database/repositories/courses';
 import { listNotes } from '../database/repositories/notes';
 import { getQuiz } from '../database/repositories/quizzes';
-import { requireId, requireString, optionalString, optionalId, ValidationError } from '../services/validate';
+import {
+  requireId, requireString, optionalString, optionalId, optionalTimestamp, ValidationError,
+} from '../services/validate';
 
 const REVIEW_KINDS = ['lesson', 'note', 'quiz', 'exam'] as const;
 
@@ -57,7 +59,7 @@ export function registerStudyIpc(): void {
       kind: kind as 'lesson' | 'note' | 'quiz' | 'exam',
       refId: String(data.refId ?? ''),
       title: requireString(data.title, 'title', 200),
-      dueAt: typeof data.dueAt === 'string' ? data.dueAt : undefined,
+      dueAt: optionalTimestamp(data.dueAt, 'dueAt', new Date(Date.now() + 24 * 3600 * 1000).toISOString()),
     });
   });
 
@@ -122,7 +124,7 @@ export function registerStudyIpc(): void {
     const ease = typeof data.ease === 'number' ? data.ease : 2.5;
     const intervalDays = typeof data.intervalDays === 'number' ? data.intervalDays : 0;
     const reps = typeof data.reps === 'number' ? Math.floor(data.reps) : 0;
-    const dueAt = typeof data.dueAt === 'string' && data.dueAt ? data.dueAt : new Date().toISOString();
+    const dueAt = optionalTimestamp(data.dueAt, 'dueAt', new Date().toISOString());
     if (!(ease >= 1.3 && ease <= 4) || !(intervalDays >= 0 && intervalDays <= 36500) || reps < 0) {
       throw new ValidationError('Invalid scheduling values');
     }

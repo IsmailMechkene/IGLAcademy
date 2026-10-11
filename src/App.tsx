@@ -60,14 +60,21 @@ export default function App() {
 
   const refreshAll = useCallback(() => setRefreshKey((k) => k + 1), []);
 
+  // Optimistic: the UI updates at once, the writes happen outside the state
+  // updater (StrictMode runs updaters twice, which doubled every write), and
+  // a rejected write rolls the UI back to what is actually stored.
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      for (const [key, value] of Object.entries(patch)) {
-        void api().settings.set(key, value);
-      }
-      return next;
-    });
+    setSettings((prev) => ({ ...prev, ...patch }));
+    Promise.all(Object.entries(patch).map(([key, value]) => api().settings.set(key, value))).catch(
+      async (err: unknown) => {
+        const stored = await api().settings.getAll().catch(() => null);
+        if (stored) setSettings(stored);
+        void api().app.showError(
+          'Setting not saved',
+          err instanceof Error ? err.message : 'The setting could not be saved.',
+        );
+      },
+    );
   }, []);
 
   // Load settings and apply theme

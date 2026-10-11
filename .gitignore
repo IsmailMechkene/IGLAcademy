@@ -5,3 +5,10 @@ release/
 *.log
 .DS_Store
 Thumbs.db
+
+# Temporary bundle written (and removed) by scripts/register-exam-source.mjs
+scripts/.seed-bundle.cjs
+
+# Downloaded third-party practice tests are user data, not source. Keep them
+# outside the repo (or here, untracked) and register the folder in the app.
+data/practice_exams/

@@ -83,12 +83,6 @@ export function getQuiz(db: Database.Database, id: number): QuizDetail | null {
   return { ...toQuiz(row), questions };
 }
 
-export function getQuizByLessonId(db: Database.Database, lessonId: number): QuizDetail | null {
-  const row = db.prepare(`${SELECT_SQL} WHERE q.source_lesson_id = ?`).get(lessonId) as QuizRow | undefined;
-  if (!row) return null;
-  return getQuiz(db, row.id);
-}
-
 export function insertQuiz(
   db: Database.Database,
   data: { courseId: number; sectionId: number | null; title: string; description: string; sourceLessonId?: number | null },

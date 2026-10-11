@@ -7,6 +7,7 @@ import {
   optionalId,
   requireEnum,
   requirePath,
+  optionalTimestamp,
 } from '../electron/services/validate';
 
 describe('validate helpers', () => {
@@ -48,5 +49,19 @@ describe('validate helpers', () => {
   it('requirePath rejects null bytes', () => {
     expect(requirePath('C:\\courses\\aws', 'p')).toBe('C:\\courses\\aws');
     expect(() => requirePath('a\0b', 'p')).toThrow(ValidationError);
+  });
+});
+
+describe('optionalTimestamp', () => {
+  it('canonicalises to ISO-8601 UTC and falls back when absent', () => {
+    expect(optionalTimestamp('2030-01-01T12:00:00Z', 'f', 'x')).toBe('2030-01-01T12:00:00.000Z');
+    expect(optionalTimestamp('2030-01-01T13:00:00+01:00', 'f', 'x')).toBe('2030-01-01T12:00:00.000Z');
+    expect(optionalTimestamp(undefined, 'f', 'fallback')).toBe('fallback');
+    expect(optionalTimestamp('', 'f', 'fallback')).toBe('fallback');
+  });
+
+  it('rejects non-dates', () => {
+    expect(() => optionalTimestamp('tomorrow-ish', 'f', 'x')).toThrow(ValidationError);
+    expect(() => optionalTimestamp(42, 'f', 'x')).toThrow(ValidationError);
   });
 });

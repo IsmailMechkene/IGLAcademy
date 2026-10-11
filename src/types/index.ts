@@ -236,6 +236,12 @@ export interface PracticeExamContent {
   title: string;
   description: string;
   questions: PracticeExamQuestion[];
+  /**
+   * Fingerprint of the questions as parsed. Sent back on submit so the
+   * attempt is scored against the version the user actually answered, even if
+   * the file changed on disk in the meantime.
+   */
+  contentHash: string;
 }
 
 export interface PracticeExamQuestion {
@@ -269,12 +275,20 @@ export interface QuizAttemptAnswer {
   explanation: string;
   /** Seconds spent on this question (file-based exams only). */
   seconds?: number;
+  /** Source domain as of the attempt (file-based exams only). */
+  topic?: string;
 }
 
 export interface QuizAttemptDetail extends QuizAttemptSummary {
   answers: QuizAttemptAnswer[];
   /** Flagged question ids (file-based exams only). */
   flagged?: number[];
+  /**
+   * Set when the per-question review cannot be shown (file-based exams taken
+   * before snapshots existed, whose file has since changed or gone). The
+   * score is still real; `answers` is empty.
+   */
+  unavailableReason?: string;
 }
 
 export interface LearningStats {
@@ -291,6 +305,12 @@ export interface LessonActivity {
   lessonTitle: string;
   sectionTitle: string;
   updatedAt: string;
+}
+
+/** One lesson plus the bits of its section the player header needs. */
+export interface LessonContext {
+  lesson: LessonWithProgress;
+  sectionTitle: string;
 }
 
 export interface AppSettings {

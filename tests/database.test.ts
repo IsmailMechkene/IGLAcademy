@@ -923,9 +923,7 @@ describe('subtitles', () => {
 
     const tracks = listSubtitleTracks(db, lesson.id);
     expect(tracks.map((t) => t.label)).toEqual(['Subtitles', 'FR']);
-    // The URL shape the renderer gets: media://sub/<lessonId>/<index>. The
-    // protocol handler used to parse "<id>/<index>" as a single id and 400.
-    expect(tracks[0].url).toBe(`media://sub/${lesson.id}/0`);
+    expect(tracks.map((t) => t.index)).toEqual([0, 1]);
     expect(resolveSubtitleFile(db, lesson.id, 0).content).toContain('00:00:01.000 --> 00:00:02.000');
     expect(resolveSubtitleFile(db, lesson.id, 1).content).toContain('Bonjour');
     expect(() => resolveSubtitleFile(db, lesson.id, 5)).toThrow(/not found/i);
@@ -1197,5 +1195,45 @@ describe('unanswered exam attempts', () => {
     const detail = getAttemptDetail(db, attemptId)!;
     expect(detail.answers[0].selectedIndices).toEqual([]);
     expect(detail.answers[0].isCorrect).toBe(false);
+  });
+});
+
+describe('scheduling timestamps (M21)', () => {
+  it('stores new cards in ISO-8601 so string comparison against "now" is exact', () => {
+    const { courseId } = importCourse(db, makeCourseDir()) as { courseId: number };
+    const deckId = insertDeck(db, { courseId, title: 'D', source: 'manual' });
+    insertFlashcard(db, deckId, { front: 'Q', back: 'A', position: 1 });
+    expect(listFlashcards(db, deckId)[0].dueAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
+  it('rewrites legacy SQLite-format due dates on upgrade', () => {
+    const legacyPath = path.join(dbDir, 'legacy-due.db');
+    const legacy = new SqliteDatabase(legacyPath);
+    legacy.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, name TEXT NOT NULL,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+    for (const m of MIGRATIONS.filter((x) => x.version < 7)) {
+      legacy.exec(m.sql);
+      legacy.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)').run(m.version, m.name);
+    }
+    legacy.exec(`
+      INSERT INTO courses (id, title, source_path) VALUES (1, 'C', '/c');
+      INSERT INTO flashcard_decks (id, course_id, title, source) VALUES (1, 1, 'D', 'manual');
+      INSERT INTO flashcards (id, deck_id, front, back, position) VALUES (1, 1, 'Q', 'A', 1);
+      INSERT INTO flashcard_state (card_id, due_at) VALUES (1, '2030-01-01 12:00:00');
+      INSERT INTO review_items (course_id, kind, ref_id, title, due_at)
+        VALUES (1, 'lesson', '1', 'r', '2030-01-01 12:00:00');
+    `);
+    legacy.close();
+
+    const upgraded = createDatabase(legacyPath);
+    expect((upgraded.prepare('SELECT due_at FROM flashcard_state').get() as { due_at: string }).due_at)
+      .toBe('2030-01-01T12:00:00.000Z');
+    expect((upgraded.prepare('SELECT due_at FROM review_items').get() as { due_at: string }).due_at)
+      .toBe('2030-01-01T12:00:00.000Z');
+    // Before the fix, ' ' < 'T' made this card due all day on 2030-01-01.
+    expect(listDueFlashcards(upgraded, 1, '2030-01-01T11:00:00.000Z')).toHaveLength(0);
+    expect(listDueFlashcards(upgraded, 1, '2030-01-01T13:00:00.000Z')).toHaveLength(1);
+    upgraded.close();
   });
 });

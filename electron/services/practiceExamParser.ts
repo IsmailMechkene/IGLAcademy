@@ -171,6 +171,7 @@ function parseQuestionBlob(blob: string): RawQuestion | null {
   // literals and appear in these dumps (e.g. inside <pre> blocks). They can
   // only occur inside strings here, never as structural syntax, so blanking
   // them is safe.
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point
   const raw = blob.replace(/[\x00-\x1F]/g, ' ');
   try {
     const parsed = JSON.parse(raw) as unknown;

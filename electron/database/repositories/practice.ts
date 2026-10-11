@@ -1,6 +1,6 @@
-import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { ExamSource, QuizAttemptSummary } from '../../../src/types';
+import { isInsideDir } from '../../services/pathIdentity';
 
 interface SourceRow {
   id: number;
@@ -59,17 +59,15 @@ export function deleteSource(db: Database.Database, id: number): void {
   } else {
     // JS-side prefix filtering: LIKE + ESCAPE handling of Windows paths is
     // unreliable, and attempt tables are tiny.
-    const prefix = source.path + path.sep;
     const rows = db.prepare('SELECT DISTINCT source_path FROM practice_attempts').all() as Array<{
       source_path: string;
     }>;
     const stmt = db.prepare('DELETE FROM practice_attempts WHERE source_path = ?');
     for (const row of rows) {
-      if (row.source_path === source.path || row.source_path.startsWith(prefix)) {
-        stmt.run(row.source_path);
-      }
+      if (isInsideDir(source.path, row.source_path)) stmt.run(row.source_path);
     }
   }
+  pruneExamSnapshots(db);
 }
 
 export interface PracticeStats {
@@ -96,11 +94,15 @@ export function getPracticeStats(db: Database.Database, filePath: string): Pract
 
 export function insertPracticeAttempt(
   db: Database.Database,
-  data: { sourcePath: string; score: number; total: number; selections: number[][]; durations?: number[]; flags?: number[] },
+  data: {
+    sourcePath: string; score: number; total: number; selections: number[][];
+    durations?: number[]; flags?: number[]; contentHash?: string | null;
+  },
 ): number {
   const info = db
     .prepare(
-      'INSERT INTO practice_attempts (source_path, score, total, selections, durations, flags) VALUES (?, ?, ?, ?, ?, ?)',
+      `INSERT INTO practice_attempts (source_path, score, total, selections, durations, flags, content_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       data.sourcePath,
@@ -109,8 +111,38 @@ export function insertPracticeAttempt(
       JSON.stringify(data.selections),
       JSON.stringify(data.durations ?? []),
       JSON.stringify(data.flags ?? []),
+      data.contentHash ?? null,
     );
   return Number(info.lastInsertRowid);
+}
+
+/** Stores one version of an exam's questions (idempotent per hash). */
+export function saveExamSnapshot(db: Database.Database, contentHash: string, questions: unknown): void {
+  db.prepare('INSERT OR IGNORE INTO practice_exam_snapshots (content_hash, questions) VALUES (?, ?)').run(
+    contentHash,
+    JSON.stringify(questions),
+  );
+}
+
+export function getExamSnapshot(db: Database.Database, contentHash: string): unknown[] | null {
+  const row = db.prepare('SELECT questions FROM practice_exam_snapshots WHERE content_hash = ?').get(contentHash) as
+    | { questions: string }
+    | undefined;
+  if (!row) return null;
+  try {
+    const parsed = JSON.parse(row.questions) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Drops snapshots no attempt refers to any more. */
+export function pruneExamSnapshots(db: Database.Database): void {
+  db.prepare(
+    `DELETE FROM practice_exam_snapshots WHERE content_hash NOT IN
+       (SELECT content_hash FROM practice_attempts WHERE content_hash IS NOT NULL)`,
+  ).run();
 }
 
 export function listPracticeAttempts(db: Database.Database, filePath: string): QuizAttemptSummary[] {
@@ -131,9 +163,15 @@ export function listPracticeAttempts(db: Database.Database, filePath: string): Q
 export function getPracticeAttempt(
   db: Database.Database,
   attemptId: number,
-): { id: number; sourcePath: string; score: number; total: number; selections: number[][]; durations: number[]; flags: number[]; createdAt: string } | null {
+): {
+  id: number; sourcePath: string; score: number; total: number; selections: number[][];
+  durations: number[]; flags: number[]; createdAt: string; contentHash: string | null;
+} | null {
   const row = db.prepare('SELECT * FROM practice_attempts WHERE id = ?').get(attemptId) as
-    | { id: number; source_path: string; score: number; total: number; selections: string; durations: string | null; flags: string | null; created_at: string }
+    | {
+        id: number; source_path: string; score: number; total: number; selections: string;
+        durations: string | null; flags: string | null; created_at: string; content_hash: string | null;
+      }
     | undefined;
   if (!row) return null;
   const parseNumArray = (raw: string | null): number[] => {
@@ -157,6 +195,7 @@ export function getPracticeAttempt(
   return {
     id: row.id,
     sourcePath: row.source_path,
+    contentHash: row.content_hash,
     score: row.score,
     total: row.total,
     selections,

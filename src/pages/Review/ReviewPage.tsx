@@ -9,6 +9,7 @@ import { formatDateTime } from '../../utils/format';
 import FlashSession from '../../components/Flashcards/FlashSession';
 import Modal from '../../components/Modal/Modal';
 import LoadError from '../../components/LoadError/LoadError';
+import ConfirmDialog from '../../components/Modal/ConfirmDialog';
 import styles from './ReviewPage.module.css';
 
 export default function ReviewPage() {
@@ -18,6 +19,11 @@ export default function ReviewPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [due, setDue] = useState<{ itemsDue: number; cardsDue: number }>({ itemsDue: 0, cardsDue: 0 });
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: 'deck'; id: number; title: string; cardCount: number }
+    | { kind: 'card'; id: number; deckId: number; title: string }
+    | null
+  >(null);
   const [loadError, setLoadError] = useState(false);
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [session, setSession] = useState<{ deckId: number; title: string; all: boolean } | null>(null);
@@ -55,8 +61,8 @@ export default function ReviewPage() {
       .finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on refresh only; load() reads current state when it runs
   useEffect(load, [refreshKey]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!newDeckCourse) {
@@ -249,12 +255,9 @@ export default function ReviewPage() {
                         <button
                           className="btn btn-ghost btn-sm"
                           aria-label={`Delete deck ${deck.title}`}
-                          onClick={() => {
-                            void api().flashcards.removeDeck(deck.id).then(() => {
-                              load();
-                              refreshAll();
-                            });
-                          }}
+                          onClick={() =>
+                            setPendingDelete({ kind: 'deck', id: deck.id, title: deck.title, cardCount: deck.cardCount })
+                          }
                         >
                           <Trash2 size={14} />
                         </button>
@@ -268,9 +271,9 @@ export default function ReviewPage() {
                             <button
                               className="btn btn-ghost btn-sm"
                               aria-label="Delete card"
-                              onClick={() => {
-                                void api().flashcards.removeCard(card.id).then(() => openManage(deck.id));
-                              }}
+                              onClick={() =>
+                                setPendingDelete({ kind: 'card', id: card.id, deckId: deck.id, title: card.front })
+                              }
                             >
                               <X size={13} />
                             </button>
@@ -465,6 +468,38 @@ export default function ReviewPage() {
             onClose={() => { setSession(null); load(); refreshAll(); }}
           />
         </Modal>
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title={pendingDelete.kind === 'deck' ? 'Delete deck?' : 'Delete card?'}
+          confirmLabel={pendingDelete.kind === 'deck' ? 'Delete deck' : 'Delete card'}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            if (pendingDelete.kind === 'deck') {
+              await api().flashcards.removeDeck(pendingDelete.id);
+              setPendingDelete(null);
+              load();
+              refreshAll();
+            } else {
+              await api().flashcards.removeCard(pendingDelete.id);
+              setPendingDelete(null);
+              openManage(pendingDelete.deckId);
+            }
+          }}
+        >
+          {pendingDelete.kind === 'deck' ? (
+            <p>
+              <strong>{pendingDelete.title}</strong> and its {pendingDelete.cardCount} card
+              {pendingDelete.cardCount === 1 ? '' : 's'}, including their review schedule, will be
+              deleted. This cannot be undone.
+            </p>
+          ) : (
+            <p>
+              The card <strong>{pendingDelete.title}</strong> and its review schedule will be deleted.
+              This cannot be undone.
+            </p>
+          )}
+        </ConfirmDialog>
       )}
     </div>
   );

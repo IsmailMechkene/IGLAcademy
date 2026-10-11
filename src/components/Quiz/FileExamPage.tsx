@@ -118,7 +118,7 @@ export default function FileExamPage({ filePath }: Props) {
       const selected = order ? normalizeSelected(displaySel, order) : [...displaySel].sort((a, b) => a - b);
       return { questionIndex: q.id, selected, seconds: timings[q.id] ?? 0 };
     });
-    return api().practice.submit(filePath, payload, flagged);
+    return api().practice.submit(filePath, payload, flagged, content?.contentHash);
   };
 
   const startRun = (nextMode: ExamMode) => {

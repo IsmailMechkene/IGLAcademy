@@ -66,7 +66,9 @@ export default function ExamStats({ filePath }: Props) {
           try {
             const detail = await api().practice.attemptDetail(a.id);
             if (cancelled) return;
-            if (detail) map.set(a.id, detail);
+            // Attempts whose questions are gone keep their score in the
+            // trend, but have nothing to analyse per question.
+            if (detail && !detail.unavailableReason) map.set(a.id, detail);
           } catch {
             // one bad attempt must not break the whole page
           }
@@ -90,12 +92,20 @@ export default function ExamStats({ filePath }: Props) {
   }, [attempts, details]);
 
   const topics = useMemo(() => {
-    if (!content || !latest) return [];
+    if (!latest) return [];
+    // The attempt's own questions, not today's file: if the file changed,
+    // matching answers to it by position would mis-attribute every topic.
     return topicScores(
-      content.questions,
+      latest.answers.map((a) => ({
+        question: a.question,
+        options: a.options,
+        correctIndices: a.correctIndices,
+        explanation: a.explanation,
+        topic: a.topic ?? '',
+      })),
       latest.answers.map((a) => a.selectedIndices),
     );
-  }, [content, latest]);
+  }, [latest]);
 
   const timing = useMemo(() => {
     if (!latest) return null;
@@ -109,6 +119,10 @@ export default function ExamStats({ filePath }: Props) {
   const openReview = async (attemptId: number, filter: 'all' | 'incorrect' | 'flagged') => {
     try {
       const detail = details.get(attemptId) ?? (await api().practice.attemptDetail(attemptId));
+      if (detail?.unavailableReason) {
+        await api().app.showError('Review unavailable', detail.unavailableReason);
+        return;
+      }
       if (detail) setReview({ attempt: detail, filter });
     } catch {
       // stay on the page

@@ -285,6 +285,60 @@ export const MIGRATIONS: Migration[] = [
       DELETE FROM app_settings WHERE key IN ('duplicateImportBehavior', 'checkForUpdates');
     `,
   },
+  {
+    version: 7,
+    name: 'iso_due_dates',
+    sql: `
+      -- due_at is compared as a string against an ISO-8601 "now". Rows that
+      -- took the column default were stored as "YYYY-MM-DD HH:MM:SS", and
+      -- because ' ' < 'T' such a row read as due all day long, whatever the
+      -- hour. Rewrite them in the ISO shape the app writes everywhere else.
+      UPDATE review_items
+        SET due_at = strftime('%Y-%m-%dT%H:%M:%fZ', due_at)
+        WHERE due_at NOT LIKE '%T%' AND strftime('%s', due_at) IS NOT NULL;
+      UPDATE flashcard_state
+        SET due_at = strftime('%Y-%m-%dT%H:%M:%fZ', due_at)
+        WHERE due_at NOT LIKE '%T%' AND strftime('%s', due_at) IS NOT NULL;
+    `,
+  },
+  {
+    version: 8,
+    name: 'section_paths',
+    sql: `
+      -- A section's identity is its folder relative to the course root
+      -- ('' = root, NULL = the synthetic "Resources" section or a legacy row
+      -- that rescan backfills from its lessons). Rescan used to match sections
+      -- by title, so sibling folders sharing a name ("Part 1/Videos",
+      -- "Part 2/Videos") were merged into one section.
+      ALTER TABLE sections ADD COLUMN rel_path TEXT;
+    `,
+  },
+  {
+    version: 9,
+    name: 'practice_attempt_snapshots',
+    sql: `
+      -- File-based exam attempts were only reviewable while the HTML file
+      -- still parsed to the same number of questions: editing or re-downloading
+      -- it made every past attempt silently unviewable. Each attempt now
+      -- records which version of the exam it answered (content_hash), and each
+      -- version's questions are stored once, shared by all its attempts.
+      CREATE TABLE practice_exam_snapshots (
+        content_hash TEXT PRIMARY KEY,
+        questions TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      ALTER TABLE practice_attempts ADD COLUMN content_hash TEXT;
+    `,
+  },
+  {
+    version: 10,
+    name: 'flashcard_deck_index',
+    sql: `
+      -- Deck card lists and due counts filter flashcards by deck; without an
+      -- index on the foreign key every lookup scanned the whole table.
+      CREATE INDEX IF NOT EXISTS idx_flashcards_deck ON flashcards(deck_id, position);
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

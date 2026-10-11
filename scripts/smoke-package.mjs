@@ -3,6 +3,7 @@
 // Usage: npm run dist && npm run smoke
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,8 +25,14 @@ console.log('[smoke] unpacked exe exists');
 if (installers.length === 0) fail('no NSIS installer found in release/');
 console.log(`[smoke] installer exists: ${installers[0]}`);
 
+// A throwaway profile: booting the packaged app against the real userData
+// would run any new migrations on the developer's own database.
+const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-smoke-'));
+
 await new Promise((resolve, reject) => {
-  const child = spawn(unpackedExe, ['--smoke-test'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(unpackedExe, ['--smoke-test', `--user-data-dir=${profileDir}`], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -44,6 +51,6 @@ await new Promise((resolve, reject) => {
     else reject(new Error(`smoke test exited with code ${code}. stderr: ${stderr.slice(-500)}`));
   });
   void stdout;
-});
+}).finally(() => fs.rmSync(profileDir, { recursive: true, force: true }));
 
 console.log('[smoke] PASS: packaged app boots (main process + database OK)');

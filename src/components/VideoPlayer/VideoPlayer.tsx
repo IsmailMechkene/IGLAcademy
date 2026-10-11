@@ -11,7 +11,6 @@ import styles from './VideoPlayer.module.css';
 export interface SubtitleTrack {
   index: number;
   label: string;
-  url: string;
 }
 
 export interface VideoPlayerHandle {
@@ -65,6 +64,8 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
   const [controlsVisible, setControlsVisible] = useState(true);
   const [tracks, setTracks] = useState<SubtitleTrack[]>([]);
   const [activeTrack, setActiveTrack] = useState<number | 'off'>('off');
+  // blob: URL of the active track's WebVTT text (see `media:subtitleText`).
+  const [trackUrl, setTrackUrl] = useState<string | null>(null);
   const [ccMenuOpen, setCcMenuOpen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [loopA, setLoopA] = useState<number | null>(null);
@@ -130,6 +131,26 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
       cancelled = true;
     };
   }, [lessonId, src]);
+
+  // Load the selected track's text and expose it as a same-origin blob URL.
+  useEffect(() => {
+    setTrackUrl(null);
+    if (activeTrack === 'off' || lessonId === undefined) return;
+    let cancelled = false;
+    let url: string | null = null;
+    api()
+      .media.subtitleText(lessonId, activeTrack)
+      .then((vtt) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+        setTrackUrl(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [lessonId, activeTrack]);
 
   // Apply default speed when it changes (settings)
   useEffect(() => {
@@ -339,11 +360,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
           setMuted(e.currentTarget.muted);
         }}
       >
-        {tracks
-          .filter((t) => activeTrack === t.index)
-          .map((t) => (
-            <track key={t.url} kind="subtitles" src={t.url} label={t.label} default />
-          ))}
+        {trackUrl &&
+          tracks
+            .filter((t) => activeTrack === t.index)
+            .map((t) => <track key={trackUrl} kind="subtitles" src={trackUrl} label={t.label} default />)}
       </video>
 
       {!playing && (

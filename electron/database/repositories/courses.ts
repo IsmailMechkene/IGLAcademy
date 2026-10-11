@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { Course, CourseDetail, CourseWithProgress, SectionWithLessons, LessonWithProgress } from '../../../src/types';
+import { pathKey } from '../../services/pathIdentity';
 
 interface CourseRow {
   id: number;
@@ -54,7 +55,12 @@ export function getCourse(db: Database.Database, id: number): Course | null {
 }
 
 export function getCourseBySourcePath(db: Database.Database, sourcePath: string): Course | null {
-  const row = db.prepare('SELECT * FROM courses WHERE source_path = ?').get(sourcePath) as CourseRow | undefined;
+  // Compared in JS rather than SQL: on Windows "C:\AWS" and "c:\aws" are the
+  // same folder, and SQLite's NOCASE only folds ASCII.
+  const key = pathKey(sourcePath);
+  const row = (db.prepare('SELECT * FROM courses').all() as CourseRow[]).find(
+    (r) => pathKey(r.source_path) === key,
+  );
   return row ? toCourse(row) : null;
 }
 
@@ -208,11 +214,33 @@ export function getSection(db: Database.Database, sectionId: number) {
     | undefined;
 }
 
-export function insertSection(db: Database.Database, courseId: number, title: string, position: number): number {
+export function insertSection(
+  db: Database.Database,
+  courseId: number,
+  title: string,
+  position: number,
+  relPath: string | null = null,
+): number {
   const info = db
-    .prepare('INSERT INTO sections (course_id, title, position) VALUES (?, ?, ?)')
-    .run(courseId, title, position);
+    .prepare('INSERT INTO sections (course_id, title, position, rel_path) VALUES (?, ?, ?, ?)')
+    .run(courseId, title, position, relPath);
   return Number(info.lastInsertRowid);
+}
+
+/** Folder identity (course-relative path) of each section in a course. */
+export function getSectionRelPaths(db: Database.Database, courseId: number): Map<number, string | null> {
+  const rows = db
+    .prepare('SELECT id, rel_path FROM sections WHERE course_id = ?')
+    .all(courseId) as Array<{ id: number; rel_path: string | null }>;
+  return new Map(rows.map((r) => [r.id, r.rel_path]));
+}
+
+export function setSectionRelPath(db: Database.Database, sectionId: number, relPath: string | null): void {
+  db.prepare('UPDATE sections SET rel_path = ? WHERE id = ?').run(relPath, sectionId);
+}
+
+export function moveLessonToSection(db: Database.Database, lessonId: number, sectionId: number): void {
+  db.prepare('UPDATE lessons SET section_id = ? WHERE id = ?').run(sectionId, lessonId);
 }
 
 export function renameSection(db: Database.Database, sectionId: number, title: string): void {
@@ -292,12 +320,6 @@ export function deleteLesson(db: Database.Database, lessonId: number): void {
 
 export function deleteSection(db: Database.Database, sectionId: number): void {
   db.prepare('DELETE FROM sections WHERE id = ?').run(sectionId);
-}
-
-export function findLessonByPath(db: Database.Database, filePath: string) {
-  return db.prepare('SELECT * FROM lessons WHERE file_path = ?').get(filePath) as
-    | { id: number; section_id: number; title: string; file_path: string; file_type: string; position: number }
-    | undefined;
 }
 
 export function countCourses(db: Database.Database): number {

@@ -4,6 +4,8 @@ import type { Note } from '../../types';
 import { api } from '../../services/api';
 import { formatDateTime, formatTime } from '../../utils/format';
 import { renderMarkdown } from '../../utils/markdown';
+import { useNoteAutosave } from '../../utils/useNoteAutosave';
+import ConfirmDialog from '../Modal/ConfirmDialog';
 import styles from './NotesPanel.module.css';
 
 interface Props {
@@ -18,15 +20,24 @@ interface Props {
 export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTime, onTimestampClick, refreshKey }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<number | null>(null);
-  const [view, setView] = useState<'list' | 'edit' | 'preview'>('list');
+  const [view, setViewState] = useState<'list' | 'edit' | 'preview'>('list');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
   const [listError, setListError] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
   const contentRef = useRef(content);
   contentRef.current = content;
+  const { schedule: scheduleSave, flush, discard, saving, savedFlash, failed: saveFailed } = useNoteAutosave(
+    600,
+    (updated) => setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n))),
+  );
+
+  // Leaving the editor (back to the list, or to the preview, which renders
+  // the saved note) must not wait out the debounce.
+  const setView = (next: 'list' | 'edit' | 'preview') => {
+    if (next !== 'edit') flush();
+    setViewState(next);
+  };
 
   const loadNotes = () => {
     setListError(false);
@@ -37,23 +48,6 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
   };
 
   useEffect(loadNotes, [courseId, refreshKey]);
-
-  // Auto-save with debounce
-  const scheduleSave = (noteId: number, newTitle: string, newContent: string) => {
-    setSaving(true);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      api()
-        .notes.update(noteId, { title: newTitle, content: newContent })
-        .then((updated) => {
-          setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
-          setSaving(false);
-          setSavedFlash(true);
-          setTimeout(() => setSavedFlash(false), 1200);
-        })
-        .catch(() => setSaving(false));
-    }, 600);
-  };
 
   const createNote = () => {
     api()
@@ -71,6 +65,7 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
   };
 
   const openEditor = (note: Note) => {
+    flush();
     setActiveNoteId(note.id);
     setTitle(note.title);
     setContent(note.content);
@@ -78,7 +73,9 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
   };
 
   const deleteNote = async (noteId: number) => {
+    discard(noteId);
     await api().notes.remove(noteId);
+    setConfirmDelete(null);
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
     if (activeNoteId === noteId) {
       setView('list');
@@ -88,7 +85,11 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
 
   const insertTimestamp = () => {
     const ts = `[${formatTime(currentTime)}](t=${Math.floor(currentTime)})`;
-    setContent((prev) => (prev ? `${prev}\n${ts}` : ts));
+    const next = contentRef.current ? `${contentRef.current}\n${ts}` : ts;
+    setContent(next);
+    // Inserting a timestamp is an edit like any other: it used to change the
+    // text without ever saving it.
+    if (activeNoteId !== null) scheduleSave(activeNoteId, title, next);
   };
 
   const activeNote = notes.find((n) => n.id === activeNoteId) ?? null;
@@ -167,6 +168,7 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
               {lessonTitle && <span>Re: {lessonTitle}</span>}
               <span>Edited {formatDateTime(activeNote.updatedAt)}</span>
               {saving && <span style={{ color: 'var(--warning)' }}>Saving...</span>}
+              {saveFailed && !saving && <span style={{ color: 'var(--danger)' }}>Not saved</span>}
               {savedFlash && !saving && (
                 <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                   <Check size={11} /> Saved
@@ -186,7 +188,7 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
               </button>
               <button
                 className="btn btn-danger btn-sm"
-                onClick={() => deleteNote(activeNote.id)}
+                onClick={() => setConfirmDelete(activeNote)}
                 title="Delete note"
                 aria-label="Delete note"
               >
@@ -228,6 +230,18 @@ export default function NotesPanel({ courseId, lessonId, lessonTitle, currentTim
             </div>
           </div>
         </div>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete note?"
+          confirmLabel="Delete note"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => deleteNote(confirmDelete.id)}
+        >
+          <p>
+            <strong>{confirmDelete.title || 'Untitled note'}</strong> will be deleted. This cannot be undone.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   );

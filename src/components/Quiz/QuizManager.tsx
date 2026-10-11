@@ -7,6 +7,7 @@ import QuizEditor from './QuizEditor';
 import QuizTaker from './QuizTaker';
 import QuizHistory from './QuizHistory';
 import LoadError from '../LoadError/LoadError';
+import ConfirmDialog from '../Modal/ConfirmDialog';
 import styles from './Quiz.module.css';
 
 interface Props {
@@ -23,6 +24,7 @@ export default function QuizManager({ courseId }: Props) {
   const [takingQuiz, setTakingQuiz] = useState<QuizDetail | null>(null);
   const [historyQuiz, setHistoryQuiz] = useState<Quiz | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Quiz | null>(null);
 
   const loadQuizzes = () => {
     setLoadError(false);
@@ -178,10 +180,7 @@ export default function QuizManager({ courseId }: Props) {
                 <button
                   className="btn btn-danger btn-sm"
                   title="Delete quiz"
-                  onClick={async () => {
-                    await api().quizzes.remove(quiz.id);
-                    refresh();
-                  }}
+                  onClick={() => setConfirmDelete(quiz)}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -197,6 +196,23 @@ export default function QuizManager({ courseId }: Props) {
             </button>
           </div>
         </>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete quiz?"
+          confirmLabel="Delete quiz"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            await api().quizzes.remove(confirmDelete.id);
+            setConfirmDelete(null);
+            refresh();
+          }}
+        >
+          <p>
+            <strong>{confirmDelete.title}</strong> and its whole attempt history will be deleted.
+            This cannot be undone.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   );

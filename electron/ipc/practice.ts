@@ -10,7 +10,7 @@ import {
   listExamAttempts,
   getExamAttemptDetail,
 } from '../services/practiceLibraryService';
-import { requireId, requireString } from '../services/validate';
+import { requireId, requirePath } from '../services/validate';
 
 export function registerPracticeIpc(): void {
   const db = getDb();
@@ -40,11 +40,11 @@ export function registerPracticeIpc(): void {
 
   // Direct-path variants (scripting/tests; the dialogs above cover the UI).
   ipcMain.handle('practice:addFolderPath', (_e, dirPath: unknown) => {
-    return registerSource(db, requireString(dirPath, 'dirPath', 4096), 'dir');
+    return registerSource(db, requirePath(dirPath, 'dirPath'), 'dir');
   });
 
   ipcMain.handle('practice:addFilePath', (_e, filePath: unknown) => {
-    return registerSource(db, requireString(filePath, 'filePath', 4096), 'file');
+    return registerSource(db, requirePath(filePath, 'filePath'), 'file');
   });
 
   ipcMain.handle('practice:removeSource', (_e, sourceId: unknown) => {
@@ -56,15 +56,15 @@ export function registerPracticeIpc(): void {
   });
 
   ipcMain.handle('practice:load', (_e, filePath: unknown) => {
-    return loadExamFile(db, requireString(filePath, 'filePath', 4096));
+    return loadExamFile(db, requirePath(filePath, 'filePath'));
   });
 
-  ipcMain.handle('practice:submit', (_e, filePath: unknown, answers: unknown, flagged?: unknown) => {
-    return submitExamAttempt(db, requireString(filePath, 'filePath', 4096), answers, flagged);
+  ipcMain.handle('practice:submit', (_e, filePath: unknown, answers: unknown, flagged?: unknown, contentHash?: unknown) => {
+    return submitExamAttempt(db, requirePath(filePath, 'filePath'), answers, flagged, contentHash);
   });
 
   ipcMain.handle('practice:history', (_e, filePath: unknown) => {
-    return listExamAttempts(db, requireString(filePath, 'filePath', 4096));
+    return listExamAttempts(db, requirePath(filePath, 'filePath'));
   });
 
   ipcMain.handle('practice:attemptDetail', (_e, attemptId: unknown) => {

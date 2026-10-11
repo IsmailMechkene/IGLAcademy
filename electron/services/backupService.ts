@@ -22,6 +22,7 @@ export const BACKUP_FORMAT = 'ismalearn-backup/1';
 const TABLES_IN_DELETE_ORDER = [
   'quiz_attempt_answers',
   'practice_attempts',
+  'practice_exam_snapshots',
   'flashcard_state',
   'quiz_attempts',
   'quiz_questions',

@@ -5,6 +5,7 @@ import type Database from 'better-sqlite3';
 import { getCourse, getLesson } from '../database/repositories/courses';
 import { getResource } from '../database/repositories/resources';
 import { findSubtitleFiles, srtToVtt } from './subtitles';
+import { isInsideDir } from './pathIdentity';
 
 /**
  * Media access control: the renderer never receives raw filesystem paths.
@@ -30,7 +31,7 @@ export function resolveLessonFile(db: Database.Database, lessonId: number): stri
   const resolved = path.resolve(lesson.filePath);
   const courseRoot = path.resolve(course.sourcePath);
   // The file must live inside the course's registered directory
-  if (resolved !== courseRoot && !resolved.startsWith(courseRoot + path.sep)) {
+  if (!isInsideDir(courseRoot, resolved)) {
     throw new Error('Access denied: file is outside the course directory');
   }
   if (!fs.existsSync(resolved)) {
@@ -42,6 +43,11 @@ export function resolveLessonFile(db: Database.Database, lessonId: number): stri
 export function resolveThumbnailFile(db: Database.Database, courseId: number): string {
   const course = getCourse(db, courseId);
   if (!course?.thumbnailPath) throw new Error('No thumbnail for this course');
+  // Same containment rule as lessons and resources: the media scheme never
+  // serves a file from outside the course's own folder.
+  if (!isInsideDir(course.sourcePath, course.thumbnailPath)) {
+    throw new Error('Access denied: file is outside the course directory');
+  }
   if (!fs.existsSync(course.thumbnailPath)) throw new Error('Thumbnail file not found');
   return path.resolve(course.thumbnailPath);
 }
@@ -59,7 +65,7 @@ export function resolveResourceFile(db: Database.Database, resourceId: number): 
 
   const resolved = path.resolve(resource.filePath);
   const courseRoot = path.resolve(course.sourcePath);
-  if (resolved !== courseRoot && !resolved.startsWith(courseRoot + path.sep)) {
+  if (!isInsideDir(courseRoot, resolved)) {
     throw new Error('Access denied: file is outside the course directory');
   }
   if (!fs.existsSync(resolved)) {
@@ -99,14 +105,10 @@ export function resolveSubtitleFile(
 export function listSubtitleTracks(
   db: Database.Database,
   lessonId: number,
-): Array<{ index: number; label: string; url: string }> {
+): Array<{ index: number; label: string }> {
   // Throws when the lesson itself is unavailable/missing.
   const mediaPath = resolveLessonFile(db, lessonId);
-  return findSubtitleFiles(mediaPath).map((track, index) => ({
-    index,
-    label: track.label,
-    url: `media://sub/${lessonId}/${index}`,
-  }));
+  return findSubtitleFiles(mediaPath).map((track, index) => ({ index, label: track.label }));
 }
 
 /** Validates availability and returns an opaque protocol URL for the lesson. */

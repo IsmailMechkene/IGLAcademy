@@ -50,15 +50,15 @@ tracking, notes with video timestamps, and self-made quizzes.
 
 | Layer    | Technology                                                              |
 | -------- | ----------------------------------------------------------------------- |
-| Runtime  | Electron 33 (context isolation, sandbox, preload-only bridge)           |
+| Runtime  | Electron 44 (context isolation, sandbox, preload-only bridge)           |
 | UI       | React 18 + TypeScript (strict) + Vite 5 + CSS Modules + Lucide icons    |
 | Database | SQLite via better-sqlite3, WAL mode, migrations in `schema_migrations` |
 | Media    | HTML5 video served through a `media://` custom protocol (no raw paths)  |
-| Tests    | Vitest (unit/integration) + CDP end-to-end (`npm run test:e2e`)      |
+| Tests    | Vitest (unit/integration) + CDP end-to-end (`npm run test:e2e`) + ESLint |
 
 ## Getting started
 
-Prerequisites: **Node.js 20+** and npm. Windows build tools are needed once to
+Prerequisites: **Node.js 22+** and npm. Windows build tools are needed once to
 compile the native SQLite module (`npm install` pulls what it needs via
 prebuilt tooling where possible; otherwise install the VS Build Tools).
 
@@ -71,8 +71,10 @@ Useful commands:
 
 ```bash
 npm run typecheck   # strict TypeScript check (tsc --noEmit)
+npm run lint        # ESLint (hook rules, dead code, suspicious constructs)
 npm test            # run the Vitest suite (auto-selects the Node ABI)
-npm run test:e2e    # Electron end-to-end checks via DevTools protocol
+npm run test:e2e    # Electron end-to-end checks via DevTools protocol (local only:
+                    # downloads sample videos, reads a local practice-exam folder)
 npm run build       # production build → dist/ + dist-electron/
 npm run dist        # package a Windows NSIS installer → release/
 npm run smoke       # verify packaged artifacts + boot the installed exe

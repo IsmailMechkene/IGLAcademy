@@ -5,7 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
-  LocateFileResult,
+  LocateFileResult, LessonContext,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -15,6 +15,8 @@ const api = {
   courses: {
     list: (): Promise<CourseWithProgress[]> => ipcRenderer.invoke('courses:list'),
     get: (courseId: number): Promise<CourseDetail | null> => ipcRenderer.invoke('courses:get', courseId),
+    getLesson: (courseId: number, lessonId: number): Promise<LessonContext | null> =>
+      ipcRenderer.invoke('courses:getLesson', courseId, lessonId),
     import: (): Promise<ImportResult> => ipcRenderer.invoke('courses:import'),
     importPath: (dirPath: string): Promise<ImportResult> => ipcRenderer.invoke('courses:importPath', dirPath),
     rename: (courseId: number, title: string): Promise<void> => ipcRenderer.invoke('courses:rename', courseId, title),
@@ -91,7 +93,9 @@ const api = {
       // runner shuffles, since scoring places answers by it.
       answers: Array<{ questionIndex?: number; selected: number[]; seconds: number }>,
       flagged?: number[],
-    ): Promise<QuizAttemptDetail> => ipcRenderer.invoke('practice:submit', filePath, answers, flagged),
+      // PracticeExamContent.contentHash of the version that was answered.
+      contentHash?: string,
+    ): Promise<QuizAttemptDetail> => ipcRenderer.invoke('practice:submit', filePath, answers, flagged, contentHash),
     history: (filePath: string): Promise<QuizAttemptSummary[]> =>
       ipcRenderer.invoke('practice:history', filePath),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
@@ -146,14 +150,17 @@ const api = {
     checkFile: (lessonId: number): Promise<boolean> => ipcRenderer.invoke('media:checkFile', lessonId),
     locateFile: (lessonId: number): Promise<LocateFileResult> => ipcRenderer.invoke('media:locateFile', lessonId),
     openExternal: (lessonId: number): Promise<void> => ipcRenderer.invoke('media:openExternal', lessonId),
-    subtitles: (lessonId: number): Promise<Array<{ index: number; label: string; url: string }>> =>
+    subtitles: (lessonId: number): Promise<Array<{ index: number; label: string }>> =>
       ipcRenderer.invoke('media:subtitles', lessonId),
+    subtitleText: (lessonId: number, index: number): Promise<string> =>
+      ipcRenderer.invoke('media:subtitleText', lessonId, index),
   },
   resources: {
     listForCourse: (courseId: number): Promise<CourseResource[]> =>
       ipcRenderer.invoke('resources:listForCourse', courseId),
     previewUrl: (resourceId: number): Promise<string> =>
       ipcRenderer.invoke('resources:previewUrl', resourceId),
+    readText: (resourceId: number): Promise<string> => ipcRenderer.invoke('resources:readText', resourceId),
     search: (courseId: number, query: string): Promise<ResourceSearchHit[]> =>
       ipcRenderer.invoke('resources:search', courseId, query),
     open: (resourceId: number): Promise<void> => ipcRenderer.invoke('resources:open', resourceId),

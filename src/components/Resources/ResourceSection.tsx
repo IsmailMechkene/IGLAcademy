@@ -69,11 +69,9 @@ export default function ResourceSection({ courseId }: Props) {
     setPreviewText(null);
     try {
       const url = await api().resources.previewUrl(resource.id);
-      // Text-based resources render from fetched text (theme-friendly).
+      // Text-based resources render from their text (theme-friendly).
       if (resource.kind === 'text' || resource.kind === 'markdown' || resource.kind === 'subtitle') {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('unavailable');
-        setPreviewText(await res.text());
+        setPreviewText(await api().resources.readText(resource.id));
       }
       setPreviewUrl(url);
     } catch {

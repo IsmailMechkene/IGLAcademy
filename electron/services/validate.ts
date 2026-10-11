@@ -53,3 +53,19 @@ export function requirePath(value: unknown, field: string): string {
   if (s.includes('\0')) throw new ValidationError(`${field} contains invalid characters`);
   return s;
 }
+
+/**
+ * Scheduling timestamps are compared as strings in SQL (`due_at <= ?`), which
+ * is only correct when every value has the same shape. Anything the renderer
+ * sends is therefore re-emitted as canonical ISO-8601 UTC
+ * ("2026-10-11T17:13:30.000Z"); `fallback` is used when the value is absent.
+ */
+export function optionalTimestamp(value: unknown, field: string, fallback: string): string {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value !== 'string' || value.length > 64) {
+    throw new ValidationError(`${field} must be an ISO-8601 timestamp`);
+  }
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) throw new ValidationError(`${field} must be an ISO-8601 timestamp`);
+  return new Date(ms).toISOString();
+}

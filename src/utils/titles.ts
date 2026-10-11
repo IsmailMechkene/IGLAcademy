@@ -10,13 +10,13 @@ export function cleanTitle(raw: string): string {
   t = t.replace(/\s*[-–—:|]\s*(udemy|skillshare|coursera|pluralsight|linkedin learning|udacity)$/i, '');
 
   // Resolution tags: "1080p", "(1080)", "4K", "[2K]", trailing bare "1080"
-  t = t.replace(/[\s\(\[]\b(\d{3,4}p|[24]K)\b[\)\]]?/gi, '');
+  t = t.replace(/[\s([]\b(\d{3,4}p|[24]K)\b[)\]]?/gi, '');
   t = t.replace(/\s+\(?\b(1080|720|2160)\b\)?$/i, '');
 
   // Date suffixes: " - 2026-6", "2026-6", " (2024_12)", " [2023-01-15]"
   t = t.replace(/\s*[-–—]\s*\d{4}[-_.]\d{1,2}([-_.]\d{1,2})?\s*$/i, '');
   t = t.replace(/\s+\d{4}[-_.]\d{1,2}([-_.]\d{1,2})?\s*$/i, '');
-  t = t.replace(/\s*[\(\[]\d{4}[-_.]\d{1,2}([-_.]\d{1,2})?[\)\]]\s*$/i, '');
+  t = t.replace(/\s*[([]\d{4}[-_.]\d{1,2}([-_.]\d{1,2})?[)\]]\s*$/i, '');
 
   // Leftover trailing separators and doubled whitespace
   t = t.replace(/\s*[-–—:|]\s*$/, '').replace(/\s{2,}/g, ' ').trim();

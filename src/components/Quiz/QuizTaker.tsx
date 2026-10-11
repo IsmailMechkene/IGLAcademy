@@ -72,7 +72,6 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
   useEffect(() => {
     flushTiming();
     activeRef.current = { id: question.id, start: Date.now() };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question.id]);
 
   const submit = async () => {
@@ -141,7 +140,6 @@ export default function QuizTaker({ quiz, onClose, timeLimitSeconds, submitAnswe
       clearInterval(id);
       document.removeEventListener('visibilitychange', tick);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timed, timeLimitSeconds, quiz.id]);
 
   const toggleFlag = () => {

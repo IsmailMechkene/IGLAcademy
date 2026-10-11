@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { naturalSort } from './naturalSort';
+import { canonicalDir } from './pathIdentity';
 
 // Supported media / resource formats
 export const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mkv'] as const;
@@ -27,6 +28,12 @@ export interface ScannedLesson {
 
 export interface ScannedSection {
   title: string;
+  /**
+   * The section's identity: its folder relative to the course root, with
+   * forward slashes ('' = the root's default section). Null only for the
+   * synthetic "Resources" section, which has no folder of its own.
+   */
+  relPath: string | null;
   lessons: ScannedLesson[];
   resources: ScannedResource[];
   position: number;
@@ -84,6 +91,19 @@ export function titleFromFolderName(folderName: string): string {
   return folderName.replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim() || folderName;
 }
 
+/**
+ * Section titles a scan can generate for a folder: the leaf name, and the
+ * "Parent / Leaf" form used when sibling trees share a leaf name. Rescan uses
+ * this to tell a scanner-made title (safe to update) from a user's rename.
+ */
+export function generatedSectionTitles(rel: string): string[] {
+  const parts = rel.split('/').filter(Boolean);
+  if (parts.length === 0) return [];
+  const leaf = titleFromFolderName(parts[parts.length - 1]);
+  if (parts.length === 1) return [leaf];
+  return [leaf, `${titleFromFolderName(parts[parts.length - 2])} / ${leaf}`];
+}
+
 interface DirEntry {
   dir: string; // absolute path
   rel: string; // relative path from course root ('' for root)
@@ -98,7 +118,7 @@ interface DirEntry {
  * - everything is sorted naturally and deterministically
  */
 export function scanCourseDirectory(rootPath: string): ScannedCourse {
-  const root = path.resolve(rootPath);
+  const root = canonicalDir(rootPath);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     throw new Error(`Course directory not found: ${root}`);
   }
@@ -190,6 +210,7 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     if (!content || !hasLessons(content)) continue;
     const section: ScannedSection = {
       title: titleFromFolderName(path.posix.basename(rel)),
+      relPath: rel,
       lessons: buildLessons(content.videos, content.practice),
       resources: naturalSort(content.resources, (r) => r.fileName),
       position: sections.length + 1,
@@ -198,10 +219,22 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     sectionByRel.set(rel, section);
   }
 
+  // Sibling trees often reuse leaf names ("Part 1/Videos", "Part 2/Videos").
+  // Give those the parent's name too, so the sidebar does not show two
+  // indistinguishable "Videos" sections.
+  const leafCounts = new Map<string, number>();
+  for (const s of sections) leafCounts.set(s.title.toLowerCase(), (leafCounts.get(s.title.toLowerCase()) ?? 0) + 1);
+  for (const s of sections) {
+    if ((leafCounts.get(s.title.toLowerCase()) ?? 0) < 2 || !s.relPath) continue;
+    const candidates = generatedSectionTitles(s.relPath);
+    if (candidates.length > 1) s.title = candidates[1];
+  }
+
   // Root-level lessons go into a default section
   if (hasLessons(rootContent)) {
     const defaultSection: ScannedSection = {
       title: DEFAULT_SECTION_TITLE,
+      relPath: '',
       lessons: buildLessons(rootContent.videos, rootContent.practice),
       resources: naturalSort(rootContent.resources, (r) => r.fileName),
       position: 0,
@@ -240,6 +273,7 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
   if (leftover.length > 0) {
     sections.push({
       title: 'Resources',
+      relPath: null,
       lessons: [],
       resources: naturalSort(leftover, (r) => r.fileName),
       position: sections.length + 1,

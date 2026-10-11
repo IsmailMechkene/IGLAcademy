@@ -197,7 +197,9 @@ export function insertFlashcard(
       .prepare('INSERT INTO flashcards (deck_id, front, back, position) VALUES (?, ?, ?, ?)')
       .run(deckId, data.front, data.back, data.position);
     const cardId = Number(info.lastInsertRowid);
-    db.prepare("INSERT INTO flashcard_state (card_id, due_at) VALUES (?, datetime('now'))").run(cardId);
+    // Explicit ISO-8601 rather than the column default (datetime('now')):
+    // due_at is compared as a string, so every row must share one format.
+    db.prepare('INSERT INTO flashcard_state (card_id, due_at) VALUES (?, ?)').run(cardId, new Date().toISOString());
     return cardId;
   });
   return tx();

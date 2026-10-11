@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { AppSettings } from '../../../src/types';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { isValidSetting } from '../../services/settingsSchema';
 
 export function getSetting<T>(db: Database.Database, key: string): T | undefined {
   const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as
@@ -26,7 +27,10 @@ export function getAllSettings(db: Database.Database): AppSettings {
   const settings: Record<string, unknown> = {};
   for (const row of rows) {
     try {
-      settings[row.key] = JSON.parse(row.value);
+      const value: unknown = JSON.parse(row.value);
+      // Unknown keys and out-of-range values (old builds, hand-edited or
+      // restored databases) fall back to the default instead of leaking out.
+      if (isValidSetting(row.key, value)) settings[row.key] = value;
     } catch {
       // ignore malformed values
     }

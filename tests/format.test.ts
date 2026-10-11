@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timeAgo, parseDbTime, formatCountdown } from '../src/utils/format';
+import { timeAgo, parseDbTime, formatCountdown, formatDateTime, formatDate } from '../src/utils/format';
 
 const NOW = new Date('2026-10-03T20:00:00Z').getTime();
 
@@ -33,5 +33,18 @@ describe('formatCountdown', () => {
     expect(formatCountdown(3600)).toBe('1:00:00');
     expect(formatCountdown(65 * 120)).toBe('2:10:00');
     expect(formatCountdown(-5)).toBe('0:00');
+  });
+});
+
+describe('formatDate / formatDateTime (M2)', () => {
+  it('reads SQLite timestamps as UTC, exactly like ISO ones', () => {
+    // Same instant, two storage formats: both must render identically.
+    expect(formatDateTime('2026-10-11 17:13:29')).toBe(formatDateTime('2026-10-11T17:13:29Z'));
+    expect(formatDate('2026-10-11 23:30:00')).toBe(formatDate('2026-10-11T23:30:00Z'));
+  });
+
+  it('handles missing or invalid input', () => {
+    expect(formatDateTime(null)).toBe('—');
+    expect(formatDate('garbage')).toBe('—');
   });
 });

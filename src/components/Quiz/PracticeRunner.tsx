@@ -96,7 +96,6 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
   useEffect(() => {
     flushTiming();
     activeRef.current = { id: question.id, start: Date.now() };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question.id]);
 
   const submit = async () => {

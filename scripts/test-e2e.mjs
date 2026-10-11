@@ -35,16 +35,13 @@ const scripts = ['verify-playback.mjs', 'verify-exam-ui.mjs'];
 let failed = false;
 for (const name of scripts) {
   console.log(`[test:e2e] running ${name}...`);
-  let code = 1;
-  // First launches are occasionally flaky (stale debugger targets, slow
-  // first paint), so each script gets one retry before it counts as failed.
-  for (let attempt = 1; attempt <= 2 && code !== 0; attempt++) {
-    if (attempt > 1) console.log(`[test:e2e] retrying ${name} (attempt ${attempt})...`);
-    killStrays();
-    await new Promise((r) => setTimeout(r, 2000));
-    code = await runScript(name);
-    killStrays();
-  }
+  // No retries: the scripts wait for real conditions (debugger target, UI
+  // text) rather than sleeping, so a failure is a failure, not a flake to
+  // re-roll until it passes.
+  killStrays();
+  await new Promise((r) => setTimeout(r, 2000));
+  const code = await runScript(name);
+  killStrays();
   if (code !== 0) {
     console.error(`[test:e2e] ${name} FAILED (exit ${code})`);
     failed = true;

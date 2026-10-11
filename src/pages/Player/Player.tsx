@@ -125,49 +125,45 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
     setCourseError(false);
 
     api()
-      .courses.get(courseId)
-      .then((c) => {
+      .courses.getLesson(courseId, currentLessonId)
+      .then((ctx) => {
         if (cancelled) return;
-        if (!c) {
+        if (!ctx) {
           setCourseError(true);
           return;
         }
-        for (const section of c.sections) {
-          const lesson = section.lessons.find((l) => l.id === currentLessonId);
-          if (!lesson) continue;
-          setCompleted(lesson.completed);
-          completedRef.current = lesson.completed;
-          setLessonTitle(lesson.title);
-          setSectionTitle(section.title);
-          const kind = lesson.fileType === 'practice' ? 'practice' : 'video';
-          setLessonKind(kind);
+        const { lesson } = ctx;
+        setCompleted(lesson.completed);
+        completedRef.current = lesson.completed;
+        setLessonTitle(lesson.title);
+        setSectionTitle(ctx.sectionTitle);
+        const kind = lesson.fileType === 'practice' ? 'practice' : 'video';
+        setLessonKind(kind);
 
-          api()
-            .media.getUrl(currentLessonId)
-            .then((url) => {
-              if (cancelled) return;
-              setMediaUrl(url);
-              // Check saved position for resume prompt (videos only)
-              if (kind !== 'video') return;
-              const pos = lesson.positionSeconds;
-              const dur = lesson.duration ?? 0;
-              if (pos > 10 && (dur === 0 || pos < dur * COMPLETION_THRESHOLD)) {
-                if (settings.resumePlayback === 'always') {
-                  setTimeout(() => playerRef.current?.seek(pos), 300);
-                } else if (settings.resumePlayback === 'ask') {
-                  setResumePosition(pos);
-                  setShowResumePrompt(true);
-                }
+        api()
+          .media.getUrl(currentLessonId)
+          .then((url) => {
+            if (cancelled) return;
+            setMediaUrl(url);
+            // Check saved position for resume prompt (videos only)
+            if (kind !== 'video') return;
+            const pos = lesson.positionSeconds;
+            const dur = lesson.duration ?? 0;
+            if (pos > 10 && (dur === 0 || pos < dur * COMPLETION_THRESHOLD)) {
+              if (settings.resumePlayback === 'always') {
+                setTimeout(() => playerRef.current?.seek(pos), 300);
+              } else if (settings.resumePlayback === 'ask') {
+                setResumePosition(pos);
+                setShowResumePrompt(true);
               }
-            })
-            .catch(async () => {
-              if (cancelled) return;
-              setFileMissing(true);
-              const stillMissing = await api().media.checkFile(currentLessonId).catch(() => false);
-              if (!stillMissing) setFileMissing(true);
-            });
-          break;
-        }
+            }
+          })
+          .catch(async () => {
+            if (cancelled) return;
+            setFileMissing(true);
+            const stillMissing = await api().media.checkFile(currentLessonId).catch(() => false);
+            if (!stillMissing) setFileMissing(true);
+          });
       })
       .catch(() => {
         if (!cancelled) setCourseError(true);

@@ -77,7 +77,12 @@ esbuild.buildSync({
 });
 
 process.env.SEED_ARGS = JSON.stringify([dbPath, ...dirs]);
-await import(pathToFileURL(outFile).href);
-fs.rmSync(workDir, { recursive: true, force: true });
-fs.rmSync(outFile, { force: true });
+try {
+  await import(pathToFileURL(outFile).href);
+} finally {
+  // Always clean up: a failed run used to leave the bundle behind, and it
+  // ended up committed. It is also gitignored now.
+  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(outFile, { force: true });
+}
 console.log('done');

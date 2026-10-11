@@ -5,10 +5,13 @@ import { pathToFileURL } from 'node:url';
 import type Database from 'better-sqlite3';
 import type { Course, LocateFileResult } from '../../src/types';
 import { getDb } from '../database/connection';
-import { getMediaUrl, checkFileExists, listSubtitleTracks, resolveLessonFile } from '../services/fileService';
+import {
+  getMediaUrl, checkFileExists, listSubtitleTracks, resolveLessonFile, resolveSubtitleFile,
+} from '../services/fileService';
 import { updateLessonFilePath, getLesson, getCourse } from '../database/repositories/courses';
 import { VIDEO_EXTENSIONS, PRACTICE_EXTENSIONS } from '../services/courseScanner';
-import { requireId } from '../services/validate';
+import { requireId, ValidationError } from '../services/validate';
+import { isInsideDir } from '../services/pathIdentity';
 
 /** The course a lesson belongs to (lessons reach courses through sections). */
 function getCourseForLesson(db: Database.Database, lessonId: number): Course | null {
@@ -31,6 +34,15 @@ export function registerMediaIpc(): void {
 
   ipcMain.handle('media:subtitles', (_e, lessonId: unknown) => {
     return listSubtitleTracks(db, requireId(lessonId, 'lessonId'));
+  });
+
+  // Subtitle text (SRT converted to WebVTT). The player turns it into a
+  // same-origin blob: URL: <track> loads in CORS mode, and the media://
+  // scheme deliberately has no fetch/CORS support (see main.ts).
+  ipcMain.handle('media:subtitleText', (_e, lessonId: unknown, index: unknown) => {
+    const i = typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : -1;
+    if (i < 0) throw new ValidationError('index must be a non-negative integer');
+    return resolveSubtitleFile(db, requireId(lessonId, 'lessonId'), i).content;
   });
 
   // Opens a lesson file (e.g. an HTML practice test) in the system browser
@@ -61,7 +73,7 @@ export function registerMediaIpc(): void {
 
     const picked = path.resolve(result.filePaths[0]);
     const courseRoot = path.resolve(course.sourcePath);
-    if (picked !== courseRoot && !picked.startsWith(courseRoot + path.sep)) {
+    if (!isInsideDir(courseRoot, picked)) {
       // Refuse rather than store a path the media protocol will always deny.
       return { status: 'outside-course', courseTitle: course.title };
     }

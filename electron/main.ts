@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, shell, protocol } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type Database from 'better-sqlite3';
 import { getDb, quarantineDatabase } from './database/connection';
-import { resolveLessonFile, resolveThumbnailFile, resolveResourceFile, resolveSubtitleFile, serveMediaFile } from './services/fileService';
+import { resolveLessonFile, resolveThumbnailFile, resolveResourceFile, serveMediaFile } from './services/fileService';
 import { registerCourseIpc } from './ipc/courses';
 import { registerProgressIpc } from './ipc/progress';
 import { registerNotesIpc } from './ipc/notes';
@@ -14,7 +15,7 @@ import { registerStudyIpc } from './ipc/study';
 import { registerBackupIpc } from './ipc/backup';
 import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
-import { initLogger, installCrashHandlers, log } from './services/logger';
+import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
 import { createAutoBackup } from './services/backupService';
 import { getAllSettings } from './database/repositories/settings';
 
@@ -23,13 +24,20 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 // Custom schemes must be registered as privileged BEFORE the app is ready.
 // Without standard+secure privileges, Chromium silently refuses to load
 // media:// URLs in <video>/<img> tags (black player, no error surfaced).
+//
+// Deliberately NO `supportFetchAPI`: nothing in the app fetch()es media://
+// (text previews go through `resources:readText`, subtitles through
+// `media:subtitleText`), and a fetch-enabled scheme without CORS is the
+// precondition of GHSA-v3j7-r9gq-3gjw (cross-origin reads of local files).
+// Without it, script can't read media:// responses at all — only <video>,
+// <img> and <iframe> can load them. (<track> can't either: it loads in CORS
+// mode, which is why subtitles arrive as blob: URLs.)
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'media',
     privileges: {
       standard: true,
       secure: true,
-      supportFetchAPI: true,
       stream: true,
     },
   },
@@ -46,23 +54,6 @@ function registerMediaProtocol(): void {
     try {
       const url = new URL(request.url);
       const db = getDb();
-
-      // Subtitles come first: their path is <lessonId>/<index>, so the
-      // single-id parse below would read it as NaN and 400 every request.
-      if (url.host === 'sub') {
-        // media://sub/<lessonId>/<index> — converted to VTT on the fly
-        const parts = url.pathname.replace(/^\//, '').split('/');
-        const lessonId = Number(parts[0]);
-        const index = Number(parts[1]);
-        if (!Number.isInteger(lessonId) || lessonId <= 0 || !Number.isInteger(index) || index < 0) {
-          return new Response('Bad request', { status: 400 });
-        }
-        const { content } = resolveSubtitleFile(db, lessonId, index);
-        return new Response(content, {
-          status: 200,
-          headers: { 'Content-Type': 'text/vtt; charset=utf-8' },
-        });
-      }
 
       const id = Number(url.pathname.replace(/^\//, ''));
       if (!Number.isInteger(id) || id <= 0) {
@@ -115,9 +106,26 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
+  // The window only ever shows the app bundle. Anything that would navigate
+  // it elsewhere (a dropped file, a link that slipped past the handler above)
+  // is refused rather than loaded with the preload bridge attached.
+  const appEntry = isDev
+    ? new URL(process.env.VITE_DEV_SERVER_URL!).origin
+    : pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
+  win.webContents.on('will-navigate', (event) => {
+    const target = event.url;
+    const allowed = isDev ? new URL(target).origin === appEntry : target.split(/[?#]/)[0] === appEntry;
+    if (!allowed) {
+      event.preventDefault();
+      log('warn', 'blocked navigation away from the app', target.slice(0, 300));
+    }
+  });
+
   // Capture renderer console errors/warnings into the log file.
-  win.webContents.on('console-message', (_e, _level, message, line, sourceId) => {
-    log('warn', `renderer console: ${message.slice(0, 500)}`, `${sourceId}:${line}`);
+  // Only warnings and errors: info/debug chatter would just churn the log.
+  win.webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
+    if (level !== 'warning' && level !== 'error') return;
+    log(level === 'error' ? 'error' : 'warn', `renderer console: ${message.slice(0, 500)}`, `${sourceId}:${lineNumber}`);
   });
 
   if (isDev) {
@@ -180,9 +188,11 @@ app.whenReady().then(() => {
       const settings = getAllSettings(smokeDb);
       log('info', 'smoke test ok');
       console.log(JSON.stringify({ ok: true, version: app.getVersion(), theme: settings.theme }));
+      flushLogSync();
       app.exit(0);
     } catch (err) {
       log('error', 'smoke test failed', err instanceof Error ? err.message : String(err));
+      flushLogSync();
       app.exit(1);
     }
     return;
@@ -191,6 +201,7 @@ app.whenReady().then(() => {
   // Initialize database (runs migrations) before any IPC handler fires
   const db = openDatabaseOrRecover();
   if (!db) {
+    flushLogSync();
     app.exit(1);
     return;
   }

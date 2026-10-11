@@ -7,12 +7,14 @@ import {
   insertCourse, getCourseBySourcePath, getCourse, insertSection, insertLesson,
   deleteLesson, deleteSection, updateLessonFilePath, getLesson,
   markLessonMissing, clearLessonMissing,
-  getCourseDetail, updateCourse,
+  getCourseDetail, updateCourse, renameSection,
+  getSectionRelPaths, setSectionRelPath, moveLessonToSection,
 } from '../database/repositories/courses';
 import {
   insertResource, deleteResource,
 } from '../database/repositories/resources';
-import { titleFromFileName, resourceKindFor } from './courseScanner';
+import { titleFromFileName, resourceKindFor, generatedSectionTitles } from './courseScanner';
+import { pathKey, relKey, relDirOf } from './pathIdentity';
 
 /**
  * Imports a scanned course into the database. Original files are never moved,
@@ -41,7 +43,7 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
     });
 
     for (const section of scanned.sections) {
-      const sectionId = insertSection(db, course.id, section.title, section.position);
+      const sectionId = insertSection(db, course.id, section.title, section.position, section.relPath);
       for (const lesson of section.lessons) {
         insertLesson(db, sectionId, {
           title: lesson.title,
@@ -104,28 +106,53 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
 
   const tx = db.transaction(() => {
     const scanned = scanCourseDirectory(course.sourcePath);
+    const root = scanned.rootPath;
     const detail = getCourseDetail(db, courseId);
     if (!detail) throw new Error('Course not found');
 
-    // Index existing lessons by file path and by (sectionTitle, lessonTitle)
-    const existingByPath = new Map<string, { id: number; sectionId: number; title: string }>();
-    const existingByTitle = new Map<string, { id: number; sectionId: number; title: string }>();
-    const existingSectionIds = new Set<number>();
+    // Section identity is the folder path relative to the course root. Legacy
+    // sections (imported before rel_path existed) get it backfilled from the
+    // folder their lessons live in.
+    const relPaths = getSectionRelPaths(db, courseId);
+    const sectionByRel = new Map<string, number>();
+    for (const section of detail.sections) {
+      let rel = relPaths.get(section.id) ?? null;
+      if (rel === null && section.lessons.length > 0) {
+        rel = relDirOf(root, section.lessons[0].filePath);
+        if (rel !== null) {
+          setSectionRelPath(db, section.id, rel);
+          relPaths.set(section.id, rel);
+        }
+      }
+      if (rel !== null && !sectionByRel.has(relKey(rel))) sectionByRel.set(relKey(rel), section.id);
+    }
+    const scannedRels = new Set(
+      scanned.sections.flatMap((s) => (s.relPath === null ? [] : [relKey(s.relPath)])),
+    );
+
     // Lessons already flagged missing before this rescan, so "restored" counts
     // only genuine comebacks.
     const missingBefore = new Set<number>(
       detail.sections.flatMap((s) => s.lessons.filter((l) => l.missingSince !== null).map((l) => l.id)),
     );
-    for (const section of detail.sections) {
-      existingSectionIds.add(section.id);
-      for (const lesson of section.lessons) {
-        existingByPath.set(path.resolve(lesson.filePath), { id: lesson.id, sectionId: section.id, title: lesson.title });
-        // A lesson already flagged missing must stay claimable by title so a
-        // renamed/moved file re-links to it (keeping its progress and notes)
-        // instead of being added again as a brand-new lesson.
-        existingByTitle.set(`${section.title}::${lesson.title}`, { id: lesson.id, sectionId: section.id, title: lesson.title });
-      }
-    }
+    const existingLessons = detail.sections.flatMap((s) =>
+      s.lessons.map((l) => ({
+        id: l.id,
+        sectionId: s.id,
+        title: l.title,
+        key: pathKey(l.filePath),
+        relDir: relDirOf(root, l.filePath),
+        nameKey: relKey(path.basename(l.filePath)),
+      })),
+    );
+    const existingByPath = new Map(existingLessons.map((l) => [l.key, l]));
+    const scannedLessonKeys = new Set(
+      scanned.sections.flatMap((s) => s.lessons.map((l) => pathKey(l.filePath))),
+    );
+    // Lessons whose recorded file this scan did not find: the only rows a
+    // moved/renamed file may be re-linked to. Each can be claimed once.
+    const gone = existingLessons.filter((l) => !scannedLessonKeys.has(l.key));
+    const relinked = new Set<number>();
 
     // Paths already registered to a DIFFERENT course must not be poached
     // (e.g. a subfolder imported as its own course).
@@ -137,7 +164,7 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
       )
       .all() as Array<{ file_path: string; course_id: number }>;
     for (const row of allLessons) {
-      if (row.course_id !== courseId) claimedByOther.add(path.resolve(row.file_path));
+      if (row.course_id !== courseId) claimedByOther.add(pathKey(row.file_path));
     }
 
     // Index existing resources by file path for merging.
@@ -151,49 +178,107 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         )
         .all(courseId) as Array<{ id: number; title: string; file_path: string }>;
       for (const row of rows) {
-        existingResourcesByPath.set(path.resolve(row.file_path), { id: row.id, title: row.title });
+        existingResourcesByPath.set(pathKey(row.file_path), { id: row.id, title: row.title });
       }
     }
 
+    /**
+     * Finds the lesson a new-looking file used to be. In order:
+     *  1. same folder, same title (the file was renamed in place);
+     *  2. same file name, when exactly one vanished lesson has it (the file —
+     *     or its whole folder — moved).
+     * Titles are never matched across folders: that is what used to merge
+     * "Part 1/Videos/Intro" into "Part 2/Videos/Intro".
+     */
+    const findMoved = (filePath: string, title: string, rel: string | null) => {
+      const open = gone.filter((l) => !relinked.has(l.id));
+      if (rel !== null) {
+        const inPlace = open.find(
+          (l) => l.relDir !== null && relKey(l.relDir) === relKey(rel) && l.title === title,
+        );
+        if (inPlace) return inPlace;
+      }
+      const nameKey = relKey(path.basename(filePath));
+      const sameName = open.filter((l) => l.nameKey === nameKey);
+      return sameName.length === 1 ? sameName[0] : undefined;
+    };
+
     for (const scannedSection of scanned.sections) {
-      // Partition first so sections are only created when something is new.
+      const rel = scannedSection.relPath;
+      // Existing sections that the recognised lessons of this folder belong to.
+      const homes = new Map<number, number>();
       const newLessons: typeof scannedSection.lessons = [];
+      const movedLessons: Array<{ id: number; sectionId: number }> = [];
       for (const scannedLesson of scannedSection.lessons) {
-        const resolved = path.resolve(scannedLesson.filePath);
-        const unchanged = existingByPath.get(resolved);
+        const key = pathKey(scannedLesson.filePath);
+        const unchanged = existingByPath.get(key);
         if (unchanged) {
           // Unchanged — keep as is (progress preserved). If it had been
           // flagged missing, the file is back.
           if (clearLessonMissing(db, unchanged.id)) restoredLessons++;
+          homes.set(unchanged.sectionId, (homes.get(unchanged.sectionId) ?? 0) + 1);
           continue;
         }
-        const byTitle = existingByTitle.get(`${scannedSection.title}::${scannedLesson.title}`);
-        if (byTitle) {
+        if (claimedByOther.has(key)) continue;
+        const moved = findMoved(scannedLesson.filePath, scannedLesson.title, rel);
+        if (moved) {
           // File moved/renamed — re-link, keep progress (and clear any flag)
-          updateLessonFilePath(db, byTitle.id, scannedLesson.filePath);
-          if (missingBefore.has(byTitle.id)) restoredLessons++;
+          relinked.add(moved.id);
+          updateLessonFilePath(db, moved.id, scannedLesson.filePath);
+          if (missingBefore.has(moved.id)) restoredLessons++;
+          homes.set(moved.sectionId, (homes.get(moved.sectionId) ?? 0) + 1);
+          movedLessons.push({ id: moved.id, sectionId: moved.sectionId });
           continue;
         }
-        if (claimedByOther.has(resolved)) continue;
         newLessons.push(scannedLesson);
       }
       const newResources = scannedSection.resources.filter(
-        (r) => !existingResourcesByPath.has(path.resolve(r.filePath)),
+        (r) => !existingResourcesByPath.has(pathKey(r.filePath)),
       );
-      if (newLessons.length === 0 && newResources.length === 0) continue;
 
-      // Match an existing section by title (case-insensitive)
-      const existingSection = detail.sections.find(
-        (s) => s.title.toLowerCase() === scannedSection.title.toLowerCase(),
-      );
-      const sectionId = existingSection
-        ? existingSection.id
-        : insertSection(db, courseId, scannedSection.title, scannedSection.position);
-      if (!existingSection) addedSections++;
+      let sectionId = rel !== null ? sectionByRel.get(relKey(rel)) : undefined;
+      if (sectionId === undefined && rel === null) {
+        // The synthetic "Resources" section has no folder; match it by title.
+        sectionId = detail.sections.find(
+          (s) =>
+            (relPaths.get(s.id) ?? null) === null &&
+            s.title.toLowerCase() === scannedSection.title.toLowerCase(),
+        )?.id;
+      }
+      if (sectionId === undefined && rel !== null && homes.size === 1) {
+        // Every lesson we recognised lives in one existing section whose own
+        // folder is gone: the folder was renamed. Adopt that section (and its
+        // new name, unless the user renamed it) instead of creating a
+        // duplicate next to a section full of "missing" lessons.
+        const [homeId] = homes.keys();
+        const oldRel = relPaths.get(homeId) ?? null;
+        if (oldRel === null || !scannedRels.has(relKey(oldRel))) {
+          sectionId = homeId;
+          setSectionRelPath(db, homeId, rel);
+          relPaths.set(homeId, rel);
+          sectionByRel.set(relKey(rel), homeId);
+          const home = detail.sections.find((s) => s.id === homeId);
+          if (home && oldRel !== null && generatedSectionTitles(oldRel).includes(home.title)) {
+            renameSection(db, homeId, scannedSection.title);
+          }
+        }
+      }
+
+      const strays = movedLessons.filter((m) => m.sectionId !== sectionId);
+      if (newLessons.length === 0 && newResources.length === 0 && strays.length === 0) continue;
+
+      if (sectionId === undefined) {
+        sectionId = insertSection(db, courseId, scannedSection.title, scannedSection.position, rel);
+        if (rel !== null) sectionByRel.set(relKey(rel), sectionId);
+        addedSections++;
+      }
+      const targetId = sectionId;
+      // A file that moved to a different, still-existing folder follows it.
+      for (const stray of strays) moveLessonToSection(db, stray.id, targetId);
 
       for (const scannedLesson of newLessons) {
         // Brand new lesson
-        insertLesson(db, sectionId, {
+        insertLesson(db, targetId, {
           title: scannedLesson.title,
           filePath: scannedLesson.filePath,
           fileType: scannedLesson.kind,
@@ -202,13 +287,13 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
         addedLessons++;
       }
       newResources.forEach((resource, i) => {
-        const id = insertResource(db, sectionId, {
+        const id = insertResource(db, targetId, {
           title: titleFromFileName(resource.fileName),
           filePath: resource.filePath,
           kind: resourceKindFor(resource.fileName),
           position: i + 1,
         });
-        existingResourcesByPath.set(path.resolve(resource.filePath), { id, title: resource.fileName });
+        existingResourcesByPath.set(pathKey(resource.filePath), { id, title: resource.fileName });
       });
     }
 
@@ -216,45 +301,28 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
     // and therefore their progress, notes and bookmarks — so an unplugged
     // drive or a renamed folder is recoverable (see `forgetLesson` for the
     // explicit, confirmed removal path).
-    const scannedPaths = new Set(
-      scanned.sections.flatMap((s) => s.lessons.map((l) => path.resolve(l.filePath))),
-    );
     const nowIso = new Date().toISOString();
-    for (const section of detail.sections) {
-      for (const lesson of section.lessons) {
-        if (scannedPaths.has(path.resolve(lesson.filePath))) continue;
-        // Skip lessons that were re-linked above: their row now points at a
-        // path the scan did find, so the stale closure value is out of date.
-        const current = db.prepare('SELECT file_path FROM lessons WHERE id = ?').get(lesson.id) as
-          | { file_path: string }
-          | undefined;
-        if (!current || path.resolve(current.file_path) !== path.resolve(lesson.filePath)) continue;
-        if (markLessonMissing(db, lesson.id, nowIso)) missingLessons++;
-      }
+    for (const lesson of gone) {
+      if (relinked.has(lesson.id)) continue;
+      if (markLessonMissing(db, lesson.id, nowIso)) missingLessons++;
     }
 
     // Remove resources whose files no longer exist on disk (no progress at stake)
     const scannedResourcePaths = new Set(
-      scanned.sections.flatMap((s) => s.resources.map((r) => path.resolve(r.filePath))),
+      scanned.sections.flatMap((s) => s.resources.map((r) => pathKey(r.filePath))),
     );
-    for (const [resolved, entry] of existingResourcesByPath) {
-      if (scannedResourcePaths.has(resolved)) continue;
-      const current = db.prepare('SELECT file_path FROM resources WHERE id = ?').get(entry.id) as
-        | { file_path: string }
-        | undefined;
-      if (current && path.resolve(current.file_path) === resolved) {
-        deleteResource(db, entry.id);
-      }
+    for (const [key, entry] of existingResourcesByPath) {
+      if (!scannedResourcePaths.has(key)) deleteResource(db, entry.id);
     }
 
-    // Remove empty sections (no lessons left)
+    // Remove sections that existed before this rescan and are now empty
     const finalDetail = getCourseDetail(db, courseId);
     if (finalDetail) {
       for (const section of finalDetail.sections) {
         const resourceCount = (
           db.prepare('SELECT COUNT(*) AS n FROM resources WHERE section_id = ?').get(section.id) as { n: number }
         ).n;
-        if (section.lessons.length === 0 && resourceCount === 0 && existingSectionIds.has(section.id)) {
+        if (section.lessons.length === 0 && resourceCount === 0 && relPaths.has(section.id)) {
           deleteSection(db, section.id);
         }
       }

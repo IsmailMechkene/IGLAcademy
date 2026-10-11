@@ -78,7 +78,12 @@ export default function PracticeExams() {
   const openReview = async (file: PracticeExamFile, attemptId: number) => {
     try {
       const detail = await api().practice.attemptDetail(attemptId);
-      if (detail) setReview({ attempt: detail, title: file.title });
+      if (!detail) throw new Error('This attempt no longer exists.');
+      if (detail.unavailableReason) {
+        await api().app.showError('Review unavailable', detail.unavailableReason);
+        return;
+      }
+      setReview({ attempt: detail, title: file.title });
     } catch (err) {
       await api().app.showError('Review unavailable', err instanceof Error ? err.message : 'Unknown error');
     }

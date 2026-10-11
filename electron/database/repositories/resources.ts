@@ -19,13 +19,14 @@ export function toResourceKind(kind: string): ResourceKind {
   return 'other';
 }
 
-function toResource(row: ResourceRow): CourseResource {
-  let sizeBytes = 0;
-  try {
-    sizeBytes = fs.statSync(row.file_path).size;
-  } catch {
-    sizeBytes = -1; // missing file
-  }
+/**
+ * A resource row as stored. The file size is not part of it: stat()ing every
+ * file here meant one blocking syscall per row on the main thread. The IPC
+ * layer adds sizes asynchronously where the UI needs them (`withFileSizes`).
+ */
+export type ResourceRecord = Omit<CourseResource, 'sizeBytes'>;
+
+function toResource(row: ResourceRow): ResourceRecord {
   return {
     id: row.id,
     sectionId: row.section_id,
@@ -34,11 +35,20 @@ function toResource(row: ResourceRow): CourseResource {
     filePath: row.file_path,
     kind: toResourceKind(row.kind),
     position: row.position,
-    sizeBytes,
   };
 }
 
-export function listResourcesForCourse(db: Database.Database, courseId: number): CourseResource[] {
+/** Adds on-disk sizes (-1 = missing) without blocking the main thread. */
+export async function withFileSizes(resources: ResourceRecord[]): Promise<CourseResource[]> {
+  return Promise.all(
+    resources.map(async (r) => ({
+      ...r,
+      sizeBytes: await fs.promises.stat(r.filePath).then((st) => st.size, () => -1),
+    })),
+  );
+}
+
+export function listResourcesForCourse(db: Database.Database, courseId: number): ResourceRecord[] {
   const rows = db
     .prepare(
       `SELECT r.*, s.title AS section_title
@@ -51,7 +61,7 @@ export function listResourcesForCourse(db: Database.Database, courseId: number):
   return rows.map(toResource);
 }
 
-export function getResource(db: Database.Database, id: number): CourseResource | null {
+export function getResource(db: Database.Database, id: number): ResourceRecord | null {
   const row = db
     .prepare(
       `SELECT r.*, s.title AS section_title
@@ -76,14 +86,4 @@ export function insertResource(
 
 export function deleteResource(db: Database.Database, id: number): void {
   db.prepare('DELETE FROM resources WHERE id = ?').run(id);
-}
-
-export function findResourceByPath(db: Database.Database, filePath: string) {
-  return db.prepare('SELECT * FROM resources WHERE file_path = ?').get(filePath) as
-    | { id: number; section_id: number; title: string; file_path: string; kind: string; position: number }
-    | undefined;
-}
-
-export function updateResourceFilePath(db: Database.Database, id: number, filePath: string): void {
-  db.prepare('UPDATE resources SET file_path = ? WHERE id = ?').run(filePath, id);
 }

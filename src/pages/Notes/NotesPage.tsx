@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Clock3, FileText, FolderOpen, PlayCircle, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
-import type { Note } from '../../types';
+import type { CourseWithProgress, Note } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatDateTime } from '../../utils/format';
 import { renderMarkdown } from '../../utils/markdown';
 import LoadError from '../../components/LoadError/LoadError';
 import Modal from '../../components/Modal/Modal';
+import ConfirmDialog from '../../components/Modal/ConfirmDialog';
+import { useNoteAutosave } from '../../utils/useNoteAutosave';
 import styles from './NotesPage.module.css';
 
 export default function NotesPage() {
@@ -18,9 +20,20 @@ export default function NotesPage() {
   const [editing, setEditing] = useState<Note | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
+  // Choosing the course for a new note: null = closed.
+  const [newNoteCourses, setNewNoteCourses] = useState<CourseWithProgress[] | null>(null);
+  const [newNoteCourseId, setNewNoteCourseId] = useState<number | null>(null);
+  // Search has its own timer — it used to share one with autosave, so typing
+  // in either cancelled the other's pending work.
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { schedule: saveEdit, flush, discard, saving, savedFlash, failed: saveFailed } = useNoteAutosave(
+    500,
+    (updated) => {
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n)));
+      setEditing((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    },
+  );
 
   const load = (query?: string) => {
     setLoading(true);
@@ -38,9 +51,13 @@ export default function NotesPage() {
 
   const handleSearch = (value: string) => {
     setSearch(value);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => load(value.trim() || undefined), 300);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => load(value.trim() || undefined), 300);
   };
+
+  useEffect(() => () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+  }, []);
 
   const openEditor = (note: Note) => {
     setEditing(note);
@@ -48,24 +65,15 @@ export default function NotesPage() {
     setEditContent(note.content);
   };
 
-  const saveEdit = (noteId: number, title: string, content: string) => {
-    setSaving(true);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      api()
-        .notes.update(noteId, { title, content })
-        .then((updated) => {
-          setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
-          setSaving(false);
-          setSavedFlash(true);
-          setTimeout(() => setSavedFlash(false), 1200);
-        })
-        .catch(() => setSaving(false));
-    }, 500);
+  const closeEditor = () => {
+    flush();
+    setEditing(null);
   };
 
+  // A note belongs to exactly one course. It used to be attached silently to
+  // whichever course sorted first; now the user picks (or, with a single
+  // course, it is unambiguous).
   const createNote = () => {
-    // Notes must belong to a course — use the first available one.
     api()
       .courses.list()
       .then((courses) => {
@@ -73,20 +81,33 @@ export default function NotesPage() {
           void api().app.showError('No courses', 'Import a course first to create notes.');
           return;
         }
-        return api()
-          .notes.create({ courseId: courses[0].id, title: '', content: '' })
-          .then((note) => {
-            setNotes((prev) => [note, ...prev]);
-            openEditor(note);
-          });
+        if (courses.length === 1) {
+          createNoteIn(courses[0].id);
+          return;
+        }
+        setNewNoteCourses(courses);
+        setNewNoteCourseId(courses[0].id);
       })
       .catch(() => undefined);
   };
 
+  const createNoteIn = (courseId: number) => {
+    setNewNoteCourses(null);
+    api()
+      .notes.create({ courseId, title: '', content: '' })
+      .then((note) => {
+        setNotes((prev) => [note, ...prev]);
+        openEditor(note);
+      })
+      .catch(() => void api().app.showError('Note not created', 'The note could not be created. Please try again.'));
+  };
+
   const deleteNote = async (noteId: number) => {
+    discard(noteId);
     await api().notes.remove(noteId);
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
     if (editing?.id === noteId) setEditing(null);
+    setConfirmDelete(null);
   };
 
   const jumpToNote = (note: Note) => {
@@ -208,7 +229,7 @@ export default function NotesPage() {
                   style={{ marginLeft: 'auto' }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    void deleteNote(note.id);
+                    setConfirmDelete(note);
                   }}
                 >
                   <Trash2 size={13} /> Delete
@@ -220,8 +241,19 @@ export default function NotesPage() {
       )}
 
       {editing && (
-        <Modal label="Edit note" onClose={() => setEditing(null)} wide>
+        <Modal label="Edit note" onClose={closeEditor} wide>
           <h2>Edit note</h2>
+          <div className={styles.noteContext} style={{ marginBottom: 10 }}>
+            <FileText size={12} />
+            {editing.courseTitle}
+            {editing.lessonTitle && (
+              <>
+                <span>·</span>
+                <PlayCircle size={12} />
+                {editing.lessonTitle}
+              </>
+            )}
+          </div>
           <input
             className={`input ${styles.editorTitle}`}
             value={editTitle}
@@ -245,13 +277,15 @@ export default function NotesPage() {
           />
           <div className={styles.editorFooter}>
             <div className={styles.left}>
-              <button className="btn btn-danger btn-sm" onClick={() => deleteNote(editing.id)}>
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirmDelete(editing)}>
                 <Trash2 size={13} /> Delete
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className={styles.saveStatus}>
-                {saving ? 'Saving...' : savedFlash ? (
+                {saving ? 'Saving...' : saveFailed ? (
+                  <span style={{ color: 'var(--danger)' }}>Not saved — keep typing to retry</span>
+                ) : savedFlash ? (
                   <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <Check size={12} /> Saved
                   </span>
@@ -259,8 +293,51 @@ export default function NotesPage() {
                   `Edited ${formatDateTime(editing.updatedAt)}`
                 )}
               </span>
-              <button className="btn btn-primary" onClick={() => setEditing(null)}>Done</button>
+              <button className="btn btn-primary" onClick={closeEditor}>Done</button>
             </div>
+          </div>
+        </Modal>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete note?"
+          confirmLabel="Delete note"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => deleteNote(confirmDelete.id)}
+        >
+          <p>
+            <strong>{confirmDelete.title || 'Untitled note'}</strong>
+            {confirmDelete.courseTitle ? ` in ${confirmDelete.courseTitle}` : ''} will be deleted.
+            This cannot be undone.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {newNoteCourses && (
+        <Modal label="New note" onClose={() => setNewNoteCourses(null)}>
+          <h2>New note</h2>
+          <p className="muted">Which course is this note for?</p>
+          <select
+            className="input"
+            aria-label="Course"
+            data-autofocus
+            value={newNoteCourseId ?? ''}
+            onChange={(e) => setNewNoteCourseId(Number(e.target.value))}
+            style={{ marginBottom: 16 }}
+          >
+            {newNoteCourses.map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-ghost" onClick={() => setNewNoteCourses(null)}>Cancel</button>
+            <button
+              className="btn btn-primary"
+              disabled={newNoteCourseId === null}
+              onClick={() => newNoteCourseId !== null && createNoteIn(newNoteCourseId)}
+            >
+              <Plus size={15} /> Create note
+            </button>
           </div>
         </Modal>
       )}

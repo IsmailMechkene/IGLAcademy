@@ -18,14 +18,14 @@ export function formatHours(totalSeconds: number): string {
 
 export function formatDate(iso: string | null): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = new Date(parseDbTime(iso));
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function formatDateTime(iso: string | null): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = new Date(parseDbTime(iso));
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString(undefined, {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
