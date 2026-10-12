@@ -118,6 +118,8 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
   const lastSaveRef = useRef(0);
   const completedRef = useRef(false);
   const startTimeRef = useRef(0);
+  // Real watch time: wall-clock seconds while the video is actually playing.
+  const watchRef = useRef({ seconds: 0, lastMedia: -1, lastWall: 0 });
 
   // Load course data
   useEffect(() => {
@@ -254,9 +256,37 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
     void api().progress.setCompleted(lessonId, next);
   }, []);
 
+  const flushWatchTime = useCallback((lessonId: number) => {
+    const w = watchRef.current;
+    if (w.seconds >= 1) void api().progress.addWatchTime(lessonId, Math.round(w.seconds * 10) / 10);
+    w.seconds = 0;
+  }, []);
+
+  // Flush on lesson change, leaving the player and closing the window.
+  useEffect(() => {
+    watchRef.current.lastMedia = -1;
+    const onClose = () => flushWatchTime(currentLessonId);
+    window.addEventListener('ismalearn:window-closing', onClose);
+    return () => {
+      window.removeEventListener('ismalearn:window-closing', onClose);
+      flushWatchTime(currentLessonId);
+    };
+  }, [currentLessonId, flushWatchTime]);
+
   const handleTimeUpdate = useCallback(
     (time: number, duration: number) => {
       setCurrentTime(time);
+      // Count wall time between consecutive playback ticks. A seek (big or
+      // backwards jump) or a pause (long gap) adds nothing, and 2x speed
+      // still counts real minutes, not content minutes.
+      const w = watchRef.current;
+      const nowWall = performance.now();
+      if (w.lastMedia >= 0 && time > w.lastMedia && time - w.lastMedia < 5 && nowWall - w.lastWall < 3000) {
+        w.seconds += (nowWall - w.lastWall) / 1000;
+        if (w.seconds >= 15) flushWatchTime(currentLessonId);
+      }
+      w.lastMedia = time;
+      w.lastWall = nowWall;
       // Auto-complete at 90%
       if (duration > 0 && time / duration >= COMPLETION_THRESHOLD && !completedRef.current) {
         markCompleted(currentLessonId, true);
@@ -267,7 +297,7 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
         void api().progress.savePosition(currentLessonId, time);
       }
     },
-    [currentLessonId, markCompleted],
+    [currentLessonId, markCompleted, flushWatchTime],
   );
 
   const handleEnded = useCallback(() => {

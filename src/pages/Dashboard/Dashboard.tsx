@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Brain, CheckCircle2, FolderOpen, GraduationCap, LibraryBig, Play } from 'lucide-react';
-import type { CourseWithProgress, LearningStats, LessonActivity } from '../../types';
+import type { CourseWithProgress, LearningStats, LessonActivity, StudyStats } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { timeAgo } from '../../utils/format';
@@ -9,6 +9,7 @@ import CourseCard from '../../components/CourseCard/CourseCard';
 import CourseCover from '../../components/CourseCover/CourseCover';
 import ProgressBar from '../../components/ProgressBar/ProgressBar';
 import LoadError from '../../components/LoadError/LoadError';
+import StudyActivity from './StudyActivity';
 import styles from './Dashboard.module.css';
 
 function ProgressRing({ percent, size = 76 }: { percent: number; size?: number }) {
@@ -61,6 +62,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [due, setDue] = useState<{ itemsDue: number; cardsDue: number }>({ itemsDue: 0, cardsDue: 0 });
+  const [study, setStudy] = useState<StudyStats | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,9 +74,11 @@ export default function Dashboard() {
       api().progress.mostRecentCourseId(),
       api().progress.recentCourseIds(12),
       api().review.dueCounts().catch(() => ({ itemsDue: 0, cardsDue: 0 })),
+      api().progress.studyStats().catch(() => null),
     ])
-      .then(async ([s, c, recentId, recent, dueCounts]) => {
+      .then(async ([s, c, recentId, recent, dueCounts, studyStats]) => {
         if (cancelled) return;
+        setStudy(studyStats);
         setStats(s);
         setCourses(c);
         setContinueCourseId(recentId);
@@ -278,6 +282,8 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {study && <StudyActivity stats={study} />}
 
       <section>
         <div className="sectionHeader">

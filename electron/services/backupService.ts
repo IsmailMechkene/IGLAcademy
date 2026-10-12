@@ -41,6 +41,7 @@ const TABLES_IN_DELETE_ORDER = [
   'sections',
   'courses',
   'exam_sources',
+  'study_days',
   'app_settings',
 ] as const;
 

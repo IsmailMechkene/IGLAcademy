@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, PLAYBACK_SPEEDS } from '../../src/types';
+import { DAILY_GOAL_OPTIONS, DEFAULT_SETTINGS, PLAYBACK_SPEEDS } from '../../src/types';
 import type { AppSettings } from '../../src/types';
 import { requireEnum, ValidationError } from './validate';
 
@@ -43,6 +43,11 @@ export function validateSetting(key: string, value: unknown): void {
       return;
     case 'examPassPercent':
       requireIntIn(value, key, 50, 100, 'must be an integer between 50 and 100');
+      return;
+    case 'dailyGoalMinutes':
+      if (typeof value !== 'number' || !(DAILY_GOAL_OPTIONS as readonly number[]).includes(value)) {
+        throw new ValidationError(`dailyGoalMinutes must be one of ${DAILY_GOAL_OPTIONS.join(', ')}`);
+      }
       return;
     case 'examSecondsPerQuestion':
       requireIntIn(value, key, 30, 600, 'must be 30–600 seconds');

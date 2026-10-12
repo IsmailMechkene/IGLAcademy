@@ -329,6 +329,8 @@ export interface AppSettings {
   examSecondsPerQuestion: number;
   /** Turn wrongly answered practice-exam questions into flashcards. */
   examMistakesToFlashcards: boolean;
+  /** Daily study goal in minutes (video watch time + exam time). */
+  dailyGoalMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -341,7 +343,27 @@ export const DEFAULT_SETTINGS: AppSettings = {
   examPassPercent: 70,
   examSecondsPerQuestion: 120,
   examMistakesToFlashcards: true,
+  dailyGoalMinutes: 20,
 };
+
+export const DAILY_GOAL_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;
+
+/** Today's study, the streak and the last week, for the Home page. */
+export interface StudyStats {
+  today: {
+    studiedSeconds: number;
+    goalSeconds: number;
+    lessonsCompleted: number;
+    questionsAnswered: number;
+    cardsReviewed: number;
+  };
+  activeToday: boolean;
+  currentStreak: number;
+  bestStreak: number;
+  /** Oldest first, ending today. */
+  last7: Array<{ day: string; studiedSeconds: number; active: boolean }>;
+  totalStudiedSeconds: number;
+}
 
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 

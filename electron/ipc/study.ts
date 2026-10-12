@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../database/connection';
+import { recordActivity } from '../database/repositories/activity';
 import {
   listBookmarks, insertBookmark, deleteBookmark,
   listReviewItems, insertReviewItem, setReviewItemDone, deleteReviewItem,
@@ -129,6 +130,7 @@ export function registerStudyIpc(): void {
       throw new ValidationError('Invalid scheduling values');
     }
     updateFlashcardState(db, cardId, { ease, intervalDays, reps, dueAt });
+    recordActivity(db, { cardsReviewed: 1 });
   });
 
   // Generate a deck from a manual quiz's questions (front=question, back=answers).

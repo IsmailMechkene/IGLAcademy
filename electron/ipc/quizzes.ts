@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../database/connection';
+import { recordActivity } from '../database/repositories/activity';
 import {
   listQuizzesForCourse, getQuiz, insertQuiz, updateQuiz, deleteQuiz,
   insertQuestion, updateQuestion, deleteQuestion, listAttempts, getAttemptDetail, insertAttempt,
@@ -165,7 +166,10 @@ export function registerQuizIpc(): void {
     const quiz = getQuiz(db, qid);
     if (!quiz) throw new ValidationError('Quiz not found');
     if (!Array.isArray(answers)) throw new ValidationError('answers must be an array');
-    return insertAttempt(db, qid, scoreAttempt(quiz, answers as unknown[]), quiz.questions.length);
+    const scored = scoreAttempt(quiz, answers as unknown[]);
+    const attemptId = insertAttempt(db, qid, scored, quiz.questions.length);
+    recordActivity(db, { questionsAnswered: scored.filter((a) => a.selectedIndices.length > 0).length });
+    return attemptId;
   });
 
   ipcMain.handle('quizzes:attempts', (_e, quizId: unknown) => {

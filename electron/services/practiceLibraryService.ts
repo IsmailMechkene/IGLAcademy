@@ -32,6 +32,7 @@ import { parsePracticeExamHtml } from './practiceExamParser';
 import { ValidationError } from './validate';
 import { addExamMistakes } from './mistakesService';
 import { getAllSettings } from '../database/repositories/settings';
+import { recordActivity } from '../database/repositories/activity';
 import { isInsideDir, pathKey } from './pathIdentity';
 
 function setsEqual(a: number[], b: number[]): boolean {
@@ -321,6 +322,12 @@ export function submitExamAttempt(
   })();
   const detail = buildDetail(db, attemptId);
   if (!detail) throw new ValidationError('Failed to load the submitted attempt.');
+
+  // Time on questions and questions answered count towards today's study.
+  recordActivity(db, {
+    examSeconds: perQuestion.reduce((n, a) => n + Math.min(a.seconds, 600), 0),
+    questionsAnswered: perQuestion.filter((a) => a.selected.length > 0).length,
+  });
 
   // Wrong answers become flashcards (unless turned off in Settings). This is
   // a convenience on top of a saved attempt, so it must never fail the submit.

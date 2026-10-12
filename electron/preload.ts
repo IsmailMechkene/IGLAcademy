@@ -5,7 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
-  LocateFileResult, LessonContext,
+  LocateFileResult, LessonContext, StudyStats,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -52,6 +52,9 @@ const api = {
     recentCourseIds: (limit?: number): Promise<number[]> => ipcRenderer.invoke('progress:recentCourseIds', limit),
     lastActivity: (courseId: number): Promise<LessonActivity | null> =>
       ipcRenderer.invoke('progress:lastActivity', courseId),
+    addWatchTime: (lessonId: number, seconds: number): Promise<void> =>
+      ipcRenderer.invoke('progress:addWatchTime', lessonId, seconds),
+    studyStats: (): Promise<StudyStats> => ipcRenderer.invoke('progress:studyStats'),
   },
   notes: {
     list: (courseId?: number): Promise<Note[]> => ipcRenderer.invoke('notes:list', courseId),

@@ -72,13 +72,18 @@ export async function run() {
       ['the sidebar collapses to a rail and expands again', async () => {
         const widths = await app.page.run(async () => {
           const aside = document.querySelector('aside');
+          const width = () => aside.getBoundingClientRect().width;
+          const isCollapsed = () => /collapsed/.test(aside.className);
+          // Wait for the width animation to settle (an unfocused window can
+          // run it slowly) rather than sleeping a fixed time.
           await click('aside button[aria-label="Collapse sidebar"]');
-          await sleep(400);
-          const collapsed = aside.getBoundingClientRect().width;
+          await waitFor(() => isCollapsed() && width() < 100, 'collapsed sidebar', 5000).catch(() => null);
+          const collapsed = [isCollapsed(), width()];
           await click('aside button[aria-label="Expand sidebar"]');
-          await sleep(400);
-          return [collapsed, aside.getBoundingClientRect().width];
+          await waitFor(() => !isCollapsed() && width() > 200, 'expanded sidebar', 5000).catch(() => null);
+          return [collapsed[1], width(), collapsed[0], isCollapsed()];
         });
+        assert(widths[2] === true && widths[3] === false, `collapsed state ${JSON.stringify(widths)}`);
         assert(widths[0] < 100 && widths[1] > 200, `widths ${JSON.stringify(widths)}`);
       }],
 
@@ -112,7 +117,10 @@ export async function run() {
           const panel = await waitFor(() => document.querySelector('aside[aria-label="Course content and notes"]'), 'side panel');
           const onRight = panel.getBoundingClientRect().left > innerWidth / 2;
           const appSidebarHidden = !document.querySelector('nav[aria-label="Main"]');
-          const before = document.querySelector('h1').textContent;
+          const before = await waitFor(() => {
+            const t = document.querySelector('h1')?.textContent;
+            return t && !t.startsWith('Loading') ? t : null;
+          }, 'lesson title');
           await click('aside[aria-label="Course content and notes"] button', 'Storage', 'section header');
           await click('aside[aria-label="Course content and notes"] button', 'Versioning', 'lesson in panel');
           await waitFor(() => document.querySelector('h1').textContent === 'Versioning', 'lesson switch');
@@ -128,6 +136,33 @@ export async function run() {
         assert(r.appSidebarHidden, 'app sidebar visible in focus mode');
         assert(r.before === 'How this course works', `first lesson "${r.before}"`);
         assert(r.hidden, 'panel did not hide');
+      }],
+
+      ['real playback time is recorded and shown on Home', async () => {
+        await nav(app.page, 'Courses');
+        const r = await app.page.run(async () => {
+          const before = (await api.progress.studyStats()).today.studiedSeconds;
+          await click('[aria-label^="Open course:"]');
+          await click('main button', 'Welcome', 'lesson row');
+          const video = await waitFor(() => document.querySelector('video'), 'video');
+          // Dismiss a resume prompt if one appears.
+          const startOver = byText('[role="dialog"] button', 'Start over');
+          if (startOver) startOver.click();
+          video.muted = true;
+          video.currentTime = 0;
+          await video.play();
+          await sleep(3200); // the clip is 4 s long
+          video.pause();
+          await click('button[aria-label="Back to course"]'); // leaving the player flushes
+          await sleep(500);
+          const after = (await api.progress.studyStats()).today.studiedSeconds;
+          await click('aside button', 'Home');
+          const card = await waitFor(() => document.querySelector('section[aria-label="Your study"]'), 'study card');
+          return { before, after, card: card.textContent };
+        });
+        const gained = r.after - r.before;
+        assert(gained >= 2 && gained <= 5, `recorded ${gained}s for ~3s of playback`);
+        assert(r.card.includes('Streak') && r.card.includes('Last 7 days'), 'study card incomplete');
       }],
 
       ['practice mode shows a verdict and a structured explanation', async () => {

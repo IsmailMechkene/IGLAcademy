@@ -148,7 +148,17 @@ export async function launch(profileDir) {
   const port = await freePort(9400);
   const child = spawn(
     electronBinary(),
-    [`--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`, '.'],
+    [
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${profileDir}`,
+      // The test window is often behind other windows; without these,
+      // Chromium pauses its timers and animations and checks become
+      // timing-dependent.
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '.',
+    ],
     { cwd: root, stdio: 'ignore', windowsHide: false },
   );
   let exited = false;

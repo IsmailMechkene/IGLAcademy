@@ -384,6 +384,24 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_decks_source ON flashcard_decks(source);
     `,
   },
+  {
+    version: 13,
+    name: 'study_days',
+    sql: `
+      -- Daily study activity by LOCAL calendar day ("YYYY-MM-DD"): real video
+      -- watch time (wall clock while playing), practice-exam time, lessons
+      -- completed, questions answered and flashcards reviewed. Feeds the
+      -- daily goal and the study streak.
+      CREATE TABLE study_days (
+        day TEXT PRIMARY KEY,
+        watch_seconds REAL NOT NULL DEFAULT 0,
+        exam_seconds REAL NOT NULL DEFAULT 0,
+        lessons_completed INTEGER NOT NULL DEFAULT 0,
+        questions_answered INTEGER NOT NULL DEFAULT 0,
+        cards_reviewed INTEGER NOT NULL DEFAULT 0
+      );
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {

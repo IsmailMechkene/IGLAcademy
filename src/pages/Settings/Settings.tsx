@@ -3,7 +3,7 @@ import {
   Database, Download, FileText, FolderOpen, Info, Monitor, Moon,
   RotateCcw, Save, Sun, Upload, ChevronDown,
 } from 'lucide-react';
-import { PLAYBACK_SPEEDS, type AppSettings, type BackupInfo } from '../../types';
+import { DAILY_GOAL_OPTIONS, PLAYBACK_SPEEDS, type AppSettings, type BackupInfo } from '../../types';
 import { api } from '../../services/api';
 import { useApp } from '../../App';
 import { formatBytes, formatDateTime } from '../../utils/format';
@@ -179,6 +179,24 @@ export default function Settings() {
             <option value={120}>2 min / question</option>
             <option value={180}>3 min / question</option>
             <option value={240}>4 min / question</option>
+          </ThemedSelect>
+        </div>
+        <div className={styles.settingRow}>
+          <div className={styles.settingInfo}>
+            <div className={styles.settingLabel}>Daily study goal</div>
+            <div className={styles.settingDesc}>
+              Minutes of real study per day — video actually played plus time on practice-exam
+              questions. Shown on Home with your streak.
+            </div>
+          </div>
+          <ThemedSelect
+            label="Daily study goal"
+            value={String(settings.dailyGoalMinutes)}
+            onChange={(v) => updateSettings({ dailyGoalMinutes: Number(v) })}
+          >
+            {DAILY_GOAL_OPTIONS.map((m) => (
+              <option key={m} value={m}>{m} min / day</option>
+            ))}
           </ThemedSelect>
         </div>
         <div className={styles.settingRow}>
