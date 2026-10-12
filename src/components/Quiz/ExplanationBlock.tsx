@@ -53,16 +53,18 @@ const SECTION_META: Record<Exclude<ExplanationSection['kind'], 'general'>, { tit
  * Answer explanation, laid out by meaning: what is right (green), why each
  * other option is wrong (red), reading material, then anything else.
  */
-export default function ExplanationBlock({ text }: { text: string }) {
+export default function ExplanationBlock({ text, bare }: { text: string; bare?: boolean }) {
   const sections = parseExplanation(text);
   if (sections.length === 0) return null;
 
   return (
-    <div className={styles.explanation}>
-      <div className={styles.header}>
-        <Lightbulb size={15} aria-hidden="true" />
-        <span>Explanation</span>
-      </div>
+    <div className={`${styles.explanation} ${bare ? styles.bare : ''}`}>
+      {!bare && (
+        <div className={styles.header}>
+          <Lightbulb size={15} aria-hidden="true" />
+          <span>Explanation</span>
+        </div>
+      )}
 
       {sections.map((section, si) => {
         if (section.kind === 'general') {

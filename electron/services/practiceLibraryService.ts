@@ -30,6 +30,8 @@ import { isPracticeFile, titleFromFileName } from './courseScanner';
 import { naturalSort } from './naturalSort';
 import { parsePracticeExamHtml } from './practiceExamParser';
 import { ValidationError } from './validate';
+import { addExamMistakes } from './mistakesService';
+import { getAllSettings } from '../database/repositories/settings';
 import { isInsideDir, pathKey } from './pathIdentity';
 
 function setsEqual(a: number[], b: number[]): boolean {
@@ -319,6 +321,19 @@ export function submitExamAttempt(
   })();
   const detail = buildDetail(db, attemptId);
   if (!detail) throw new ValidationError('Failed to load the submitted attempt.');
+
+  // Wrong answers become flashcards (unless turned off in Settings). This is
+  // a convenience on top of a saved attempt, so it must never fail the submit.
+  if (getAllSettings(db).examMistakesToFlashcards) {
+    try {
+      const wrong = perQuestion.flatMap((a, i) => (a.isCorrect ? [] : [i]));
+      const result = addExamMistakes(db, resolved, current.title, exam.questions, wrong);
+      detail.mistakesAdded = result.added;
+      if (result.deckId !== null) detail.mistakesDeckId = result.deckId;
+    } catch {
+      // the attempt itself is already stored
+    }
+  }
   return detail;
 }
 

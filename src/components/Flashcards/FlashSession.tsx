@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import type { Flashcard, FlashGrade } from '../../types';
 import { api } from '../../services/api';
 import { scheduleReview } from '../../utils/sm2';
+import { CardBack, CardFront } from './CardFace';
 import styles from './FlashSession.module.css';
 
 interface Props {
@@ -125,11 +126,14 @@ export default function FlashSession({ deckId, deckTitle, reviewAll, onClose }: 
       >
         {!flipped ? (
           <>
-            <div className={styles.front}>{card.front}</div>
+            <CardFront text={card.front} />
             <div className={styles.hint}>Click or press Enter to reveal</div>
           </>
         ) : (
-          <div className={styles.back}>{card.back}</div>
+          <div className={styles.back}>
+            <CardFront text={card.front} compact />
+            <CardBack text={card.back} />
+          </div>
         )}
       </div>
       {flipped ? (

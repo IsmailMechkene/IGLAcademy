@@ -213,6 +213,43 @@ export async function run() {
         assert(secs(r.timer) <= secs(timerBefore), `timer went back up: ${timerBefore} → ${r.timer}`);
         assert(!r.stillOffered, 'a submitted exam is still offered for resuming');
       }],
+
+      ['wrong exam answers become a flashcard deck you can study', async () => {
+        const submitted = await app.page.run(async (file) => {
+          const exam = await api.practice.load(file);
+          // Q1 and Q4 wrong, the rest right
+          const picks = exam.questions.map((q, i) => (i === 0 || i === 3 ? [q.correctIndices[0] === 0 ? 1 : 0] : q.correctIndices));
+          const attempt = await api.practice.submit(
+            file,
+            picks.map((selected, questionIndex) => ({ questionIndex, selected, seconds: 1 })),
+            [],
+            exam.contentHash,
+          );
+          return { added: attempt.mistakesAdded, percent: attempt.percent };
+        }, ws.examFile);
+        assert(submitted.added === 2 && submitted.percent === 60, `added ${submitted.added}, percent ${submitted.percent}`);
+
+        await nav(app.page, 'Review');
+        const r = await app.page.run(async () => {
+          const row = await waitFor(
+            () => Array.from(document.querySelectorAll('main [class*="row"]')).find((el) => el.textContent.includes('From your exam mistakes')),
+            'mistakes deck row',
+          );
+          const title = row.textContent.includes('Mistakes · Practice Test #1');
+          Array.from(row.querySelectorAll('button')).find((b) => b.textContent.includes('Review')).click();
+          const dialog = await waitFor(() => document.querySelector('[role="dialog"]'), 'study dialog');
+          const options = await waitFor(() => dialog.querySelectorAll('ol li').length || null, 'options on the card front');
+          await click('[role="dialog"] button', 'Show answer');
+          await waitFor(() => dialog.textContent.includes('Correct answer'), 'answer side');
+          const answerShown = dialog.textContent.includes('A. Amazon S3') || dialog.textContent.includes('B. Amazon CloudFront');
+          const explained = dialog.textContent.includes('Why the other options are wrong') || dialog.textContent.includes('WHY THE OTHER OPTIONS ARE WRONG');
+          await click('[role="dialog"] button', 'End session');
+          return { title, options, answerShown, explained };
+        });
+        assert(r.title, 'deck title missing');
+        assert(r.options === 4, `card front shows ${r.options} options`);
+        assert(r.answerShown && r.explained, 'card back missing the answer or the explanation');
+      }],
     ]);
   } finally {
     await app.stop();

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { CheckCircle2, XCircle, ArrowLeft, Clock } from 'lucide-react';
+import { CheckCircle2, XCircle, ArrowLeft, Clock, Layers } from 'lucide-react';
+import { useApp } from '../../App';
 import type { QuizAttemptDetail } from '../../types';
 import ExplanationBlock from './ExplanationBlock';
 import styles from './Quiz.module.css';
@@ -64,6 +65,8 @@ export default function QuizReview({ attempt, quizTitle, onClose, passPercent = 
         </div>
       </div>
 
+      {(attempt.mistakesAdded ?? 0) > 0 && <MistakesNotice count={attempt.mistakesAdded ?? 0} />}
+
       {showFilters && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} role="group" aria-label="Filter reviewed questions">
           {filterBtn('all', 'All', attempt.answers.length)}
@@ -125,6 +128,27 @@ export default function QuizReview({ attempt, quizTitle, onClose, passPercent = 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** After a file exam: wrong answers were turned into flashcards. */
+function MistakesNotice({ count }: { count: number }) {
+  const { navigate } = useApp();
+  return (
+    <div className={`card ${styles.mistakesNotice}`} role="status">
+      <span className={styles.mistakesIcon}><Layers size={20} /></span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className={styles.mistakesTitle}>
+          {count} question{count === 1 ? '' : 's'} added to your mistakes deck
+        </div>
+        <div className={styles.mistakesText}>
+          Spaced repetition will bring {count === 1 ? 'it' : 'them'} back until you know {count === 1 ? 'it' : 'them'}.
+        </div>
+      </div>
+      <button className="btn btn-primary" onClick={() => navigate({ name: 'review' })}>
+        Review now
+      </button>
     </div>
   );
 }

@@ -133,11 +133,11 @@ export function deleteReviewItem(db: Database.Database, id: number): void {
 
 interface DeckRow {
   id: number;
-  course_id: number;
+  course_id: number | null;
   title: string;
   source: string;
   created_at: string;
-  course_title: string;
+  course_title: string | null;
   card_count: number;
   due_count: number;
 }
@@ -156,7 +156,7 @@ export function listDecks(db: Database.Database, courseId?: number): FlashcardDe
           (SELECT COUNT(*) FROM flashcards f JOIN flashcard_state s ON s.card_id = f.id
            WHERE f.deck_id = d.id AND s.due_at <= ?) AS due_count
          FROM flashcard_decks d
-         JOIN courses c ON c.id = d.course_id
+         LEFT JOIN courses c ON c.id = d.course_id
          ${where}
          ORDER BY d.created_at DESC`,
       )
@@ -164,7 +164,7 @@ export function listDecks(db: Database.Database, courseId?: number): FlashcardDe
   ).map((row) => ({
     id: row.id,
     courseId: row.course_id,
-    courseTitle: row.course_title,
+    courseTitle: row.course_title ?? 'Practice exams',
     title: row.title,
     source: row.source,
     cardCount: row.card_count,
@@ -175,12 +175,25 @@ export function listDecks(db: Database.Database, courseId?: number): FlashcardDe
 
 export function insertDeck(
   db: Database.Database,
-  data: { courseId: number; title: string; source?: string },
+  data: { courseId: number | null; title: string; source?: string },
 ): number {
   const info = db
     .prepare('INSERT INTO flashcard_decks (course_id, title, source) VALUES (?, ?, ?)')
     .run(data.courseId, data.title, data.source ?? 'manual');
   return Number(info.lastInsertRowid);
+}
+
+export function findDeckBySource(db: Database.Database, source: string): { id: number; title: string } | null {
+  return (db.prepare('SELECT id, title FROM flashcard_decks WHERE source = ? ORDER BY id LIMIT 1').get(source) as
+    | { id: number; title: string }
+    | undefined) ?? null;
+}
+
+/** Card fronts already in a deck, to avoid adding the same card twice. */
+export function listCardFronts(db: Database.Database, deckId: number): string[] {
+  return (db.prepare('SELECT front FROM flashcards WHERE deck_id = ?').all(deckId) as Array<{ front: string }>).map(
+    (r) => r.front,
+  );
 }
 
 export function deleteDeck(db: Database.Database, id: number): void {

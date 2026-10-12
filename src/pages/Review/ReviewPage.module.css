@@ -220,3 +220,20 @@
   font-weight: 600;
   color: var(--text-secondary);
 }
+
+.mistakesIcon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.mistakesChip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 650;
+}

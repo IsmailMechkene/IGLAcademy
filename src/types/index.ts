@@ -161,7 +161,9 @@ export interface ReviewItem {
 
 export interface FlashcardDeck {
   id: number;
-  courseId: number;
+  /** Null for decks not tied to a course (practice-exam mistakes). */
+  courseId: number | null;
+  /** The course title, or "Practice exams" for course-less decks. */
   courseTitle: string;
   title: string;
   source: string;
@@ -283,6 +285,9 @@ export interface QuizAttemptDetail extends QuizAttemptSummary {
   answers: QuizAttemptAnswer[];
   /** Flagged question ids (file-based exams only). */
   flagged?: number[];
+  /** File exams: wrong answers newly added to the exam's mistakes deck. */
+  mistakesAdded?: number;
+  mistakesDeckId?: number;
   /**
    * Set when the per-question review cannot be shown (file-based exams taken
    * before snapshots existed, whose file has since changed or gone). The
@@ -322,6 +327,8 @@ export interface AppSettings {
   rescanOnStartup: boolean;
   examPassPercent: number;
   examSecondsPerQuestion: number;
+  /** Turn wrongly answered practice-exam questions into flashcards. */
+  examMistakesToFlashcards: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -333,6 +340,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rescanOnStartup: false,
   examPassPercent: 70,
   examSecondsPerQuestion: 120,
+  examMistakesToFlashcards: true,
 };
 
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;

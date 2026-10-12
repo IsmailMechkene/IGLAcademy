@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Bookmark, Brain, CheckCircle2, Clock, Layers, PlayCircle, Plus, StickyNote, Trash2, X,
+  Bookmark, Brain, CheckCircle2, Clock, Layers, PlayCircle, Plus, StickyNote, Trash2, X, Target,
 } from 'lucide-react';
 import type { Bookmark as BookmarkType, CourseWithProgress, FlashcardDeck, Quiz, ReviewItem } from '../../types';
 import { api } from '../../services/api';
@@ -204,13 +204,17 @@ export default function ReviewPage() {
                 {decks.map((deck) => (
                   <div key={deck.id}>
                     <div className={`card ${styles.row}`}>
-                      <span className={styles.resourceIconLike}>
-                        <Layers size={16} />
+                      <span className={`${styles.resourceIconLike} ${deck.courseId === null ? styles.mistakesIcon : ''}`}>
+                        {deck.courseId === null ? <Target size={16} /> : <Layers size={16} />}
                       </span>
                       <div className={styles.rowMain}>
                         <div className={styles.rowTitle}>{deck.title}</div>
                         <div className={styles.rowMeta}>
-                          <span>{deck.courseTitle}</span>
+                          {deck.courseId === null ? (
+                            <span className={styles.mistakesChip}>From your exam mistakes</span>
+                          ) : (
+                            <span>{deck.courseTitle}</span>
+                          )}
                           <span>·</span>
                           <span>{deck.cardCount} cards</span>
                           {deck.dueCount > 0 && (
@@ -514,7 +518,7 @@ export default function ReviewPage() {
       )}
 
       {session && (
-        <Modal label={`Review ${session.title}`} onClose={() => { setSession(null); load(); refreshAll(); }}>
+        <Modal label={`Review ${session.title}`} onClose={() => { setSession(null); load(); refreshAll(); }} wide>
           <FlashSession
             deckId={session.deckId}
             deckTitle={session.title}

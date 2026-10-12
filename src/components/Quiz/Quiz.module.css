@@ -885,3 +885,37 @@
   gap: 8px;
   flex-shrink: 0;
 }
+
+/* ---------- mistakes turned into flashcards ---------- */
+
+.mistakesNotice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  border-color: var(--accent-border);
+  background: linear-gradient(90deg, var(--accent-soft), var(--bg-card) 70%);
+}
+
+.mistakesIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mistakesTitle {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.mistakesText {
+  font-size: 13px;
+  color: var(--text-secondary);
+}

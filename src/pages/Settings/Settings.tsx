@@ -181,6 +181,24 @@ export default function Settings() {
             <option value={240}>4 min / question</option>
           </ThemedSelect>
         </div>
+        <div className={styles.settingRow}>
+          <div className={styles.settingInfo}>
+            <div className={styles.settingLabel}>Turn mistakes into flashcards</div>
+            <div className={styles.settingDesc}>
+              After each practice exam, questions you got wrong are added to that exam's mistakes deck
+              in Review, with the explanation on the back.
+            </div>
+          </div>
+          <SegmentedControl<'on' | 'off'>
+            label="Turn mistakes into flashcards"
+            value={settings.examMistakesToFlashcards ? 'on' : 'off'}
+            onChange={(v) => updateSettings({ examMistakesToFlashcards: v === 'on' })}
+            options={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
+        </div>
       </section>
 
       <section className={`card ${styles.section}`}>
