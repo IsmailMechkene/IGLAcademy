@@ -348,6 +348,28 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export const DAILY_GOAL_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;
 
+/** Ctrl+K palette results, grouped by kind. */
+export interface GlobalSearchResults {
+  courses: Array<{ id: number; title: string; lessonCount: number }>;
+  lessons: Array<{
+    id: number;
+    title: string;
+    kind: 'video' | 'practice';
+    sectionTitle: string;
+    courseId: number;
+    courseTitle: string;
+  }>;
+  notes: Array<{
+    id: number;
+    title: string;
+    snippet: string;
+    courseId: number;
+    courseTitle: string;
+    lessonId: number | null;
+  }>;
+  exams: Array<{ filePath: string; title: string; questionCount: number }>;
+}
+
 /** Today's study, the streak and the last week, for the Home page. */
 export interface StudyStats {
   today: {

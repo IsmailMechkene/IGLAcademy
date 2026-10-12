@@ -5,7 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
-  LocateFileResult, LessonContext, StudyStats,
+  LocateFileResult, LessonContext, StudyStats, GlobalSearchResults,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -175,6 +175,9 @@ const api = {
     reveal: (resourceId: number): Promise<void> => ipcRenderer.invoke('resources:reveal', resourceId),
     download: (resourceId: number): Promise<string | null> =>
       ipcRenderer.invoke('resources:download', resourceId),
+  },
+  search: {
+    global: (query: string): Promise<GlobalSearchResults> => ipcRenderer.invoke('search:global', query),
   },
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),

@@ -15,6 +15,7 @@ import { registerStudyIpc } from './ipc/study';
 import { registerBackupIpc } from './ipc/backup';
 import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
+import { registerSearchIpc } from './ipc/search';
 import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
 import { initThumbnailCache } from './services/thumbnailService';
 import { createAutoBackup } from './services/backupService';
@@ -231,6 +232,7 @@ app.whenReady().then(() => {
   registerBackupIpc();
   registerPracticeIpc();
   registerAppIpc();
+  registerSearchIpc();
 
   createWindow();
 

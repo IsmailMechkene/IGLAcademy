@@ -1,5 +1,4 @@
-import { useEffect, useRef } from 'react';
-import { ChevronRight, Moon, Search, Sun, X } from 'lucide-react';
+import { ChevronRight, Moon, Search, Sun } from 'lucide-react';
 import { useApp } from '../../App';
 import type { Crumb, Route } from '../../App';
 import styles from './Topbar.module.css';
@@ -31,31 +30,8 @@ function defaultCrumbs(route: Route): Crumb[] {
 }
 
 export default function Topbar() {
-  const { route, navigate, searchQuery, setSearchQuery, crumbs, settings, updateSettings } = useApp();
-  const searchRef = useRef<HTMLInputElement>(null);
+  const { route, navigate, crumbs, settings, updateSettings, openSearch } = useApp();
   const trail = crumbs ?? defaultCrumbs(route);
-
-  // Ctrl/Cmd+K focuses search from anywhere.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    // Typing in global search jumps to the library, which filters by it
-    if (value && route.name !== 'library' && route.name !== 'in-progress' && route.name !== 'completed') {
-      navigate({ name: 'library' });
-    }
-  };
-
   const resolvedTheme =
     settings.theme === 'system'
       ? window.matchMedia('(prefers-color-scheme: light)').matches
@@ -85,33 +61,14 @@ export default function Topbar() {
         })}
       </nav>
 
-      <div className={styles.searchWrap}>
+      <button className={styles.searchTrigger} onClick={openSearch} aria-label="Search everything" aria-keyshortcuts="Control+K">
         <Search size={15} className={styles.searchIcon} aria-hidden="true" />
-        <input
-          ref={searchRef}
-          className={styles.searchInput}
-          placeholder="Search courses"
-          aria-label="Search courses"
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setSearchQuery('');
-              e.currentTarget.blur();
-            }
-          }}
-        />
-        {searchQuery ? (
-          <button className={styles.clearBtn} onClick={() => setSearchQuery('')} aria-label="Clear search">
-            <X size={13} />
-          </button>
-        ) : (
-          <span className={styles.shortcut} aria-hidden="true">
-            <kbd>Ctrl</kbd>
-            <kbd>K</kbd>
-          </span>
-        )}
-      </div>
+        <span className={styles.searchPlaceholder}>Search courses, lessons, notes…</span>
+        <span className={styles.shortcut} aria-hidden="true">
+          <kbd>Ctrl</kbd>
+          <kbd>K</kbd>
+        </span>
+      </button>
 
       <button
         className="iconBtn"

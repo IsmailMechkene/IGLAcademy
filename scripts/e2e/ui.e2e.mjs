@@ -60,13 +60,31 @@ export async function run() {
         assert(r.tabs.length === 3, `tabs ${JSON.stringify(r.tabs)}`);
       }],
 
-      ['Ctrl+K focuses the search box', async () => {
-        const label = await app.page.run(async () => {
+      ['Ctrl+K searches lessons, notes and exams and opens the result', async () => {
+        const r = await app.page.run(async () => {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
-          await sleep(100);
-          return document.activeElement?.getAttribute('aria-label');
+          const input = await waitFor(() => document.querySelector('input[aria-label="Search everything"]'), 'palette');
+          const focused = document.activeElement === input;
+          const type = (text) => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          };
+          // An exam title and a lesson title, both found by one box.
+          type('practice test #2');
+          await waitFor(() => byText('[role="option"]', 'Practice Test #2'), 'exam result');
+          type('versioning');
+          const option = await waitFor(() => byText('[role="option"]', 'Versioning'), 'lesson result');
+          const group = option.parentElement.textContent.includes('Lessons') || !!byText('[class*="group"]', 'Lessons');
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          await waitFor(() => document.querySelector('h1')?.textContent === 'Versioning', 'player opened on the lesson');
+          const closed = !document.querySelector('input[aria-label="Search everything"]');
+          await click('button[aria-label="Back to course"]');
+          return { focused, group, closed };
         });
-        assert(label === 'Search courses', `focused: ${label}`);
+        assert(r.focused, 'palette input not focused');
+        assert(r.group, 'results not grouped under Lessons');
+        assert(r.closed, 'palette did not close after opening a result');
+        await nav(app.page, 'Courses');
       }],
 
       ['the sidebar collapses to a rail and expands again', async () => {

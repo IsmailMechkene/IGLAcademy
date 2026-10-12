@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from './types';
 import { api } from './services/api';
 import Sidebar from './components/Sidebar/Sidebar';
 import Topbar from './components/Topbar/Topbar';
+import CommandPalette from './components/CommandPalette/CommandPalette';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Library from './pages/Library/Library';
 import CourseDetail from './pages/CourseDetail/CourseDetail';
@@ -47,6 +48,8 @@ interface AppContextValue {
   /** Page-provided breadcrumb (e.g. Courses › <course title>); null = route default. */
   crumbs: Crumb[] | null;
   setCrumbs: (crumbs: Crumb[] | null) => void;
+  /** Opens the Ctrl+K search palette. */
+  openSearch: () => void;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -73,6 +76,20 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+
+  // Ctrl/Cmd+K opens search from anywhere, including the player.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const navigate = useCallback((r: Route) => {
     setCrumbs(null);
@@ -195,8 +212,12 @@ export default function App() {
 
   return (
     <AppContext.Provider
-      value={{ route, navigate, settings, updateSettings, refreshKey, refreshAll, searchQuery, setSearchQuery, crumbs, setCrumbs }}
+      value={{
+        route, navigate, settings, updateSettings, refreshKey, refreshAll, searchQuery, setSearchQuery,
+        crumbs, setCrumbs, openSearch,
+      }}
     >
+      {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} navigate={navigate} />}
       {focus ? (
         <main className="app-focus" key={pageKey}>
           {renderPage()}

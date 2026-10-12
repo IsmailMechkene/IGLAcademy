@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FolderOpen, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X, MoreVertical, Plus,
+  FolderOpen, RefreshCw, Pencil, Trash2, CheckCircle2, PlayCircle, X, MoreVertical, Plus, Search,
 } from 'lucide-react';
 import type { CourseWithProgress, ImportResult, RescanResult } from '../../types';
 import { api } from '../../services/api';
@@ -26,7 +26,7 @@ export interface RescanAllResult {
 }
 
 export default function Library({ filter = 'all' }: Props) {
-  const { navigate, refreshAll, refreshKey, searchQuery } = useApp();
+  const { navigate, refreshAll, refreshKey, searchQuery, setSearchQuery } = useApp();
   const [courses, setCourses] = useState<CourseWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -178,11 +178,18 @@ export default function Library({ filter = 'all' }: Props) {
               <span className="count">{counts[t.id]}</span>
             </button>
           ))}
-          {searchQuery.trim() && (
-            <span className={styles.filterInfo}>
-              Matching “{searchQuery.trim()}”
-            </span>
-          )}
+          <div className={styles.filterBox}>
+            <Search size={14} aria-hidden="true" />
+            <input
+              placeholder="Filter courses"
+              aria-label="Filter courses"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearchQuery('');
+              }}
+            />
+          </div>
         </div>
       )}
 
