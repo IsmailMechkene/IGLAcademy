@@ -919,7 +919,7 @@ describe('subtitles', () => {
     const { courseId } = importCourse(db, courseRoot) as { courseId: number };
     const lesson = getCourseDetail(db, courseId)!
       .sections.flatMap((s) => s.lessons)
-      .find((l) => l.filePath === videoPath)!;
+      .find((l) => l.filePath === fs.realpathSync.native(videoPath))!;
 
     const tracks = listSubtitleTracks(db, lesson.id);
     expect(tracks.map((t) => t.label)).toEqual(['Subtitles', 'FR']);

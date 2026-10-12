@@ -87,7 +87,9 @@ describe('course folder scanning', () => {
       'Section A': ['lesson.mp4', 'diagram.png'],
     });
     const scanned = scanCourseDirectory(root);
-    expect(scanned.thumbnailPath).toBe(path.join(root, 'cover.jpg'));
+    // Paths come back in their on-disk spelling (CI temp folders are often
+    // 8.3 short names).
+    expect(scanned.thumbnailPath).toBe(path.join(fs.realpathSync.native(root), 'cover.jpg'));
   });
 
   it('detects HTML practice tests as lessons, including practice-only folders', () => {

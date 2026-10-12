@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { Course, CourseDetail, CourseWithProgress, SectionWithLessons, LessonWithProgress } from '../../../src/types';
-import { pathKey } from '../../services/pathIdentity';
+import { canonicalDir, pathKey } from '../../services/pathIdentity';
 
 interface CourseRow {
   id: number;
@@ -56,10 +56,12 @@ export function getCourse(db: Database.Database, id: number): Course | null {
 
 export function getCourseBySourcePath(db: Database.Database, sourcePath: string): Course | null {
   // Compared in JS rather than SQL: on Windows "C:\AWS" and "c:\aws" are the
-  // same folder, and SQLite's NOCASE only folds ASCII.
-  const key = pathKey(sourcePath);
+  // same folder, and SQLite's NOCASE only folds ASCII. Both sides are also
+  // resolved to their on-disk spelling, so an 8.3 short name (as Windows CI
+  // machines report their temp folder) or a junction matches its folder.
+  const key = pathKey(canonicalDir(sourcePath));
   const row = (db.prepare('SELECT * FROM courses').all() as CourseRow[]).find(
-    (r) => pathKey(r.source_path) === key,
+    (r) => pathKey(r.source_path) === key || pathKey(canonicalDir(r.source_path)) === key,
   );
   return row ? toCourse(row) : null;
 }
