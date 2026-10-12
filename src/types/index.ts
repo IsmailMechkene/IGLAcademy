@@ -359,6 +359,15 @@ export interface QuizSubmitResult {
 /** Ctrl+K palette results, grouped by kind. */
 export interface GlobalSearchResults {
   courses: Array<{ id: number; title: string; lessonCount: number }>;
+  /** Sections by name; `lessonId` is where to start (first unfinished lesson). */
+  sections: Array<{
+    id: number;
+    title: string;
+    courseId: number;
+    courseTitle: string;
+    lessonCount: number;
+    lessonId: number | null;
+  }>;
   lessons: Array<{
     id: number;
     title: string;

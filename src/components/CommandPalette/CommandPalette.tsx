@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Brain, FileCheck2, FileText, Home, LibraryBig, PlayCircle, Search, Settings, StickyNote, CornerDownLeft,
+  Brain, FileCheck2, FileText, Home, Layers, LibraryBig, PlayCircle, Search, Settings, StickyNote, CornerDownLeft,
 } from 'lucide-react';
 import type { GlobalSearchResults } from '../../types';
 import type { Route } from '../../App';
@@ -36,6 +36,16 @@ function toItems(r: GlobalSearchResults): Item[] {
       title: cleanTitle(c.title),
       subtitle: `${c.lessonCount} lessons`,
       route: { name: 'course', courseId: c.id } as Route,
+    })),
+    ...r.sections.map((sec) => ({
+      key: `s${sec.id}`,
+      group: 'Sections',
+      icon: <Layers size={16} />,
+      title: splitOrdinal(sec.title).text,
+      subtitle: `${cleanTitle(sec.courseTitle)} · ${sec.lessonCount} lesson${sec.lessonCount === 1 ? '' : 's'}`,
+      route: (sec.lessonId !== null
+        ? { name: 'player', courseId: sec.courseId, lessonId: sec.lessonId }
+        : { name: 'course', courseId: sec.courseId }) as Route,
     })),
     ...r.lessons.map((l) => ({
       key: `l${l.id}`,
@@ -162,7 +172,7 @@ export default function CommandPalette({ onClose, navigate }: { onClose: () => v
           <input
             ref={inputRef}
             className={styles.input}
-            placeholder="Search courses, lessons, notes and practice exams"
+            placeholder="Search courses, sections, lessons, notes and practice exams"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}

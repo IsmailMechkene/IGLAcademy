@@ -40,7 +40,7 @@ function like(q: string): string {
 
 export function globalSearch(db: Database.Database, query: string): GlobalSearchResults {
   const q = query.trim().toLowerCase();
-  if (!q) return { courses: [], lessons: [], notes: [], exams: [] };
+  if (!q) return { courses: [], sections: [], lessons: [], notes: [], exams: [] };
   const pattern = like(q);
 
   const courses = db
@@ -52,18 +52,39 @@ export function globalSearch(db: Database.Database, query: string): GlobalSearch
     )
     .all(pattern) as Array<{ id: number; title: string; lesson_count: number }>;
 
+  const sections = db
+    .prepare(
+      `SELECT s.id, s.title, c.id AS course_id, c.title AS course_title,
+         (SELECT COUNT(*) FROM lessons l WHERE l.section_id = s.id AND l.file_type IN ('video', 'practice')) AS lesson_count,
+         -- where to start: the first unfinished lesson, else the first one
+         (SELECT l.id FROM lessons l LEFT JOIN lesson_progress p ON p.lesson_id = l.id
+          WHERE l.section_id = s.id AND l.file_type IN ('video', 'practice')
+          ORDER BY COALESCE(p.completed, 0), l.position LIMIT 1) AS lesson_id
+       FROM sections s JOIN courses c ON c.id = s.course_id
+       WHERE s.title LIKE ? ESCAPE '\\'
+       ORDER BY c.last_opened_at DESC, s.position
+       LIMIT 50`,
+    )
+    .all(pattern) as Array<{
+    id: number; title: string; course_id: number; course_title: string; lesson_count: number; lesson_id: number | null;
+  }>;
+
+  // Lessons whose own title matches, then lessons inside a matching section.
   const lessons = db
     .prepare(
-      `SELECT l.id, l.title, l.file_type, s.title AS section_title, c.id AS course_id, c.title AS course_title
+      `SELECT l.id, l.title, l.file_type, s.title AS section_title, c.id AS course_id, c.title AS course_title,
+         (l.title LIKE ? ESCAPE '\\') AS title_match
        FROM lessons l
        JOIN sections s ON s.id = l.section_id
        JOIN courses c ON c.id = s.course_id
-       WHERE l.file_type IN ('video', 'practice') AND l.title LIKE ? ESCAPE '\\'
-       ORDER BY c.last_opened_at DESC, s.position, l.position
+       WHERE l.file_type IN ('video', 'practice')
+         AND (l.title LIKE ? ESCAPE '\\' OR s.title LIKE ? ESCAPE '\\')
+       ORDER BY title_match DESC, c.last_opened_at DESC, s.position, l.position
        LIMIT 200`,
     )
-    .all(pattern) as Array<{
+    .all(pattern, pattern, pattern) as Array<{
     id: number; title: string; file_type: string; section_title: string; course_id: number; course_title: string;
+    title_match: number;
   }>;
 
   const notes = searchNotes(db, q).slice(0, 50);
@@ -84,7 +105,20 @@ export function globalSearch(db: Database.Database, query: string): GlobalSearch
       title: c.title,
       lessonCount: c.lesson_count,
     })),
-    lessons: byRank(lessons, (l) => l.title, q, LESSONS).map((l) => ({
+    sections: byRank(sections, (s) => s.title, q, PER_GROUP).map((s) => ({
+      id: s.id,
+      title: s.title,
+      courseId: s.course_id,
+      courseTitle: s.course_title,
+      lessonCount: s.lesson_count,
+      lessonId: s.lesson_id,
+    })),
+    // Title matches rank by match position; section-only matches follow, in
+    // course order.
+    lessons: [
+      ...byRank(lessons.filter((l) => l.title_match), (l) => l.title, q, LESSONS),
+      ...lessons.filter((l) => !l.title_match),
+    ].slice(0, LESSONS).map((l) => ({
       id: l.id,
       title: l.title,
       kind: l.file_type === 'practice' ? 'practice' : 'video',

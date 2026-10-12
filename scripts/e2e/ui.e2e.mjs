@@ -81,6 +81,21 @@ export async function run() {
           await waitFor(() => document.querySelector('h1')?.textContent === 'Versioning', 'player opened on the lesson');
           const closed = !document.querySelector('input[aria-label="Search everything"]');
           await click('button[aria-label="Back to course"]');
+
+          // A section name finds the section, and opening it starts at its
+          // first unfinished lesson.
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+          const input2 = await waitFor(() => document.querySelector('input[aria-label="Search everything"]'), 'palette again');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input2, 'storage');
+          input2.dispatchEvent(new Event('input', { bubbles: true }));
+          await waitFor(() => byText('[class*="group"]', 'Sections'), 'Sections group');
+          const sectionOption = await waitFor(
+            () => Array.from(document.querySelectorAll('[role="option"]')).find((o) => o.textContent.startsWith('Storage')),
+            'Storage section result',
+          );
+          sectionOption.click();
+          await waitFor(() => document.querySelector('h1')?.textContent === 'Buckets', 'player on the first lesson of Storage');
+          await click('button[aria-label="Back to course"]');
           return { focused, group, closed };
         });
         assert(r.focused, 'palette input not focused');

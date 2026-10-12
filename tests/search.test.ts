@@ -7,6 +7,7 @@ import { createDatabase } from '../electron/database/connection';
 import { importCourse } from '../electron/services/courseImportService';
 import { getCourseDetail } from '../electron/database/repositories/courses';
 import { insertNote } from '../electron/database/repositories/notes';
+import { setCompleted } from '../electron/database/repositories/progress';
 import { registerSource } from '../electron/services/practiceLibraryService';
 import { globalSearch, invalidateSearchCache } from '../electron/services/searchService';
 
@@ -78,6 +79,26 @@ describe('globalSearch', () => {
     ]);
     expect(globalSearch(db, '0%').lessons.map((l) => l.title)).toEqual(['03 - 100% coverage']);
     expect(globalSearch(db, '_').lessons).toEqual([]);
-    expect(globalSearch(db, '   ')).toEqual({ courses: [], lessons: [], notes: [], exams: [] });
+    expect(globalSearch(db, '   ')).toEqual({ courses: [], sections: [], lessons: [], notes: [], exams: [] });
+  });
+
+  it('finds sections by name and lists their lessons after title matches', () => {
+    const root = path.join(tmp('ismalearn-course-'), 'Course');
+    touch(path.join(root, '01 - Basics', '01 - Storage overview.mp4'));
+    touch(path.join(root, '02 - Storage', '01 - Buckets.mp4'));
+    touch(path.join(root, '02 - Storage', '02 - Versioning.mp4'));
+    const { courseId } = importCourse(db, root) as { courseId: number };
+    const [buckets, versioning] = getCourseDetail(db, courseId)!.sections[1].lessons;
+
+    const r = globalSearch(db, 'storage');
+    expect(r.sections).toEqual([
+      { id: expect.any(Number), title: '02 - Storage', courseId, courseTitle: 'Course', lessonCount: 2, lessonId: buckets.id },
+    ]);
+    // the lesson named "Storage …" first, then the lessons in the Storage section
+    expect(r.lessons.map((l) => l.title)).toEqual(['01 - Storage overview', '01 - Buckets', '02 - Versioning']);
+
+    // the section opens on the first lesson not yet finished
+    setCompleted(db, buckets.id, true);
+    expect(globalSearch(db, 'storage').sections[0].lessonId).toBe(versioning.id);
   });
 });
