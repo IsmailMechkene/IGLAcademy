@@ -477,3 +477,8 @@
   text-align: center;
   color: var(--text-muted);
 }
+
+.showAll {
+  align-self: center;
+  margin: 8px 0 2px;
+}

@@ -181,6 +181,23 @@ export async function launch(profileDir) {
   if (!target) throw new Error('the app window never appeared');
 
   const page = await Page.connect(target.webSocketDebuggerUrl);
+  // The window can exist before the app page has loaded into it; evaluating
+  // during that navigation fails with "Execution context was destroyed".
+  // Wait until the app itself is up (preload bridge + loaded document).
+  const ready = Date.now() + 30000;
+  for (;;) {
+    try {
+      const r = await page.send('Runtime.evaluate', {
+        expression: "Boolean(window.ismaLearn) && document.readyState === 'complete' && !!document.querySelector('#root > *')",
+        returnByValue: true,
+      });
+      if (r.result?.value === true) break;
+    } catch {
+      // context replaced mid-navigation — try again
+    }
+    if (Date.now() > ready) throw new Error('the app never finished loading');
+    await sleep(200);
+  }
   const stop = async () => {
     page.close();
     if (exited) return;

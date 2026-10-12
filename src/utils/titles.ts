@@ -124,8 +124,11 @@ export function examGroupInfo(title: string): ExamGroup {
  */
 export function splitOrdinal(raw: string): { index: number | null; text: string } {
   const title = (raw ?? '').trim();
-  const m = /^(\d{1,3})(?:\.\d{1,3})?\s*(?:[-–—_:)]|\.(?=\s))\s*(.+)$/.exec(title)
-    ?? /^(\d{1,3})\.\d{1,3}\s+(.+)$/.exec(title);
+  const m = /^(\d{1,4})(?:\.\d{1,3})?\s*(?:[-–—_:)]|\.(?=\s))\s*(.+)$/.exec(title)
+    ?? /^(\d{1,4})\.\d{1,3}\s+(.+)$/.exec(title);
   if (!m || !m[2].trim()) return { index: null, text: title };
+  // Four digits cover big courses ("1500 - …", "0001 - …") but a year is a
+  // title, not a lesson number ("2024 - Year in review").
+  if (m[1].length === 4 && /^(19|20)\d\d$/.test(m[1])) return { index: null, text: title };
   return { index: Number(m[1]), text: m[2].trim() };
 }

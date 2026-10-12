@@ -109,6 +109,13 @@ describe('splitOrdinal', () => {
   it('leaves titles that merely start with a number alone', () => {
     expect(splitOrdinal('3 ways to scale')).toEqual({ index: null, text: '3 ways to scale' });
     expect(splitOrdinal('2024 recap')).toEqual({ index: null, text: '2024 recap' });
+    // years are titles, not lesson numbers
+    expect(splitOrdinal('2024 - Year in review')).toEqual({ index: null, text: '2024 - Year in review' });
+  });
+
+  it('handles lesson numbers in big courses', () => {
+    expect(splitOrdinal('1500 - Topic 1500')).toEqual({ index: 1500, text: 'Topic 1500' });
+    expect(splitOrdinal('0001 - Welcome')).toEqual({ index: 1, text: 'Welcome' });
     expect(splitOrdinal('Introduction')).toEqual({ index: null, text: 'Introduction' });
     expect(splitOrdinal('01 - ')).toEqual({ index: null, text: '01 -' });
   });

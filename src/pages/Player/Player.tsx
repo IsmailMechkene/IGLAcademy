@@ -692,9 +692,12 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
                     <span style={{ width: `${course.progressPercent}%` }} />
                   </span>
                 </div>
-                <div className={styles.panelScroll}>
-                  <LessonSidebar course={course} activeLessonId={currentLessonId} onSelectLesson={goToLesson} />
-                </div>
+                <LessonSidebar
+                  className={styles.panelScroll}
+                  course={course}
+                  activeLessonId={currentLessonId}
+                  onSelectLesson={goToLesson}
+                />
               </>
             ) : (
               <div className={styles.panelNotes}>

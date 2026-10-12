@@ -22,7 +22,7 @@ export function invalidateSearchCache(): void {
 
 function rank(title: string, q: string): number {
   // "02 - Versioning basics" starts with "versioning": ignore lesson numbers.
-  const i = title.replace(/^\d{1,3}\s*[-–—._:)]\s*/, '').toLowerCase().indexOf(q);
+  const i = title.replace(/^\d{1,4}\s*[-–—._:)]\s*/, '').toLowerCase().indexOf(q);
   return i < 0 ? Number.POSITIVE_INFINITY : i;
 }
 

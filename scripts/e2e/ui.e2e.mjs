@@ -1,6 +1,8 @@
 // User flows through the real UI: navigation, search shortcut, sidebar,
 // dialogs, the player's right-hand course panel, practice-mode explanations,
 // and an exam that survives the app being closed and reopened.
+import fs from 'node:fs';
+import path from 'node:path';
 import { assert, launch, runChecks } from './harness.mjs';
 import { makeWorkspace } from './fixtures.mjs';
 
@@ -265,6 +267,38 @@ export async function run() {
         const secs = (t) => t.split(':').map(Number).reduce((a, b) => a * 60 + b, 0);
         assert(secs(r.timer) <= secs(timerBefore), `timer went back up: ${timerBefore} → ${r.timer}`);
         assert(!r.stillOffered, 'a submitted exam is still offered for resuming');
+      }],
+
+      ['a 1,500-lesson course stays light: the player list renders only what is in view', async () => {
+        // Generated here: one section, 1,500 lessons (empty files; only the
+        // list is under test).
+        const big = path.join(ws.dir, 'Huge Course');
+        fs.mkdirSync(path.join(big, '01 - Everything'), { recursive: true });
+        for (let i = 1; i <= 1500; i++) {
+          fs.writeFileSync(path.join(big, '01 - Everything', `${String(i).padStart(4, '0')} - Topic ${i}.mp4`), '');
+        }
+        const r = await app.page.run(async (dir) => {
+          const imp = await api.courses.importPath(dir);
+          const detail = await api.courses.get(imp.courseId);
+          await click('aside button', 'Courses');
+          await click('[aria-label="Open course: Huge Course"]');
+          const showAll = await waitFor(() => byText('main button', 'Show all 1500 lessons'), 'show-all button');
+          const coursePageRows = document.querySelectorAll('main [class*="lessonRow"]').length;
+          showAll.click();
+          await click('main button', 'Topic 1', 'first lesson');
+          const panel = await waitFor(() => document.querySelector('aside[aria-label="Course content and notes"] [data-windowed="true"]'), 'windowed list');
+          const rendered = panel.querySelectorAll('button[title]').length;
+          panel.scrollTop = panel.scrollHeight;
+          const last = await waitFor(() => byText('aside button[title]', 'Topic 1500'), 'last lesson rendered after scrolling');
+          last.click();
+          await waitFor(() => document.querySelector('h1')?.textContent === 'Topic 1500', 'switched to the last lesson');
+          await click('button[aria-label="Back to course"]');
+          await click('aside button', 'Courses');
+          return { lessons: detail.lessonCount, coursePageRows, rendered };
+        }, big);
+        assert(r.lessons === 1500, `imported ${r.lessons} lessons`);
+        assert(r.coursePageRows === 200, `course page rendered ${r.coursePageRows} rows before "Show all"`);
+        assert(r.rendered > 5 && r.rendered < 100, `player list rendered ${r.rendered} rows`);
       }],
 
       ['a course quiz resumes where you left off and turns mistakes into flashcards', async () => {

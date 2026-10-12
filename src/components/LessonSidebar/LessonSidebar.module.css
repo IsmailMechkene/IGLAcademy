@@ -167,3 +167,43 @@
   font-size: 11.5px;
   color: var(--text-muted);
 }
+
+/* The list owns its scroll container (windowing needs the scroll position). */
+.scroller {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ---------- windowed mode (very long courses) ---------- */
+
+.windowSection {
+  height: 78px;
+  border-bottom: 1px solid var(--border);
+}
+
+.windowLesson {
+  height: 58px;
+  padding: 1px 0;
+}
+
+.windowed .lessonRow {
+  height: 56px;
+  align-items: center;
+}
+
+.windowed .status {
+  margin-top: 0;
+}
+
+.windowed .lessonTitle,
+.windowed .sectionTitle,
+.windowed .sectionMeta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.windowed .sectionHeader {
+  height: 76px;
+}

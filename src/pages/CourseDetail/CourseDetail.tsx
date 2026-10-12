@@ -21,6 +21,9 @@ interface Props {
   courseId: number;
 }
 
+/** Lessons rendered per open section before "Show all" (huge flat courses). */
+const LESSONS_SHOWN = 200;
+
 export default function CourseDetail({ courseId }: Props) {
   const { navigate, refreshAll, refreshKey } = useApp();
   const [course, setCourse] = useState<CourseDetailType | null>(null);
@@ -34,6 +37,8 @@ export default function CourseDetail({ courseId }: Props) {
   const [relocating, setRelocating] = useState(false);
   const [forgetting, setForgetting] = useState<{ lessonId: number; title: string } | null>(null);
   const [tab, setTab] = useState<'content' | 'quizzes' | 'resources'>('content');
+  // Very long sections render their first lessons until asked for the rest.
+  const [showAll, setShowAll] = useState<Set<number>>(new Set());
 
   useCrumbs(
     course
@@ -369,7 +374,7 @@ export default function CourseDetail({ courseId }: Props) {
                   </button>
                   {open && (
                     <div className={styles.lessonList}>
-                      {section.lessons.map((lesson, i) => {
+                      {(showAll.has(section.id) ? section.lessons : section.lessons.slice(0, LESSONS_SHOWN)).map((lesson, i) => {
                         const missing = lesson.missingSince !== null;
                         const isNext = continueLesson?.id === lesson.id && course.progressPercent < 100;
                         return (
@@ -409,6 +414,14 @@ export default function CourseDetail({ courseId }: Props) {
                           </button>
                         );
                       })}
+                      {!showAll.has(section.id) && section.lessons.length > LESSONS_SHOWN && (
+                        <button
+                          className={`btn btn-ghost btn-sm ${styles.showAll}`}
+                          onClick={() => setShowAll((prev) => new Set(prev).add(section.id))}
+                        >
+                          Show all {section.lessons.length} lessons
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
