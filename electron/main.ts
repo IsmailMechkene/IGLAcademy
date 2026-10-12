@@ -16,6 +16,7 @@ import { registerBackupIpc } from './ipc/backup';
 import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
 import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
+import { initThumbnailCache } from './services/thumbnailService';
 import { createAutoBackup } from './services/backupService';
 import { getAllSettings } from './database/repositories/settings';
 
@@ -178,6 +179,7 @@ function openDatabaseOrRecover(): Database.Database | null {
 app.whenReady().then(() => {
   const userData = app.getPath('userData');
   initLogger(userData);
+  initThumbnailCache(userData);
   installCrashHandlers();
   log('info', `IsmaLearn starting (v${app.getVersion()})`);
 

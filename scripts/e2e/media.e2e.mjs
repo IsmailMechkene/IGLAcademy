@@ -72,6 +72,25 @@ export async function run() {
         assert(r.cues === 2 && r.first === 'Hello from SRT', `cues ${r.cues} "${r.first}"`);
       }],
 
+      ['renders a real cover from the first video with the OS thumbnailer', async () => {
+        const r = await page.run(async (id) => {
+          const url = await api.courses.thumbnailUrl(id);
+          if (!url) return { url };
+          const img = new Image();
+          img.src = url;
+          await img.decode();
+          return { url, width: img.naturalWidth, height: img.naturalHeight };
+        }, courseId);
+        if (!r.url && process.env.CI) {
+          // Windows Server runners may lack the media codecs the shell
+          // thumbnailer needs; the app then keeps the generated cover.
+          console.log('      (no OS video thumbnailer on this machine — generated cover kept)');
+          return;
+        }
+        assert(r.url === `media://thumb/${courseId}`, `thumbnail url ${r.url}`);
+        assert(r.width > 0 && r.height > 0, `thumbnail ${r.width}x${r.height}`);
+      }],
+
       ['serves the HTML practice lesson to the in-app frame', async () => {
         const r = await page.run(async (id) => {
           const detail = await api.courses.get(id);

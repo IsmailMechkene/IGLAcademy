@@ -6,6 +6,9 @@ import { getCourse, getLesson } from '../database/repositories/courses';
 import { getResource } from '../database/repositories/resources';
 import { findSubtitleFiles, srtToVtt } from './subtitles';
 import { isInsideDir } from './pathIdentity';
+import {
+  ensureGeneratedThumbnail, generatedThumbnailPath, hasGeneratedThumbnail, type ThumbnailGenerator,
+} from './thumbnailService';
 
 /**
  * Media access control: the renderer never receives raw filesystem paths.
@@ -42,7 +45,14 @@ export function resolveLessonFile(db: Database.Database, lessonId: number): stri
 
 export function resolveThumbnailFile(db: Database.Database, courseId: number): string {
   const course = getCourse(db, courseId);
-  if (!course?.thumbnailPath) throw new Error('No thumbnail for this course');
+  if (!course) throw new Error('Course not found');
+  if (!course.thumbnailPath) {
+    // No cover in the folder: serve the frame the app generated, from its own
+    // data folder (a path built from the id, never from stored data).
+    const generated = generatedThumbnailPath(courseId);
+    if (generated && fs.existsSync(generated)) return generated;
+    throw new Error('No thumbnail for this course');
+  }
   // Same containment rule as lessons and resources: the media scheme never
   // serves a file from outside the course's own folder.
   if (!isInsideDir(course.sourcePath, course.thumbnailPath)) {
@@ -117,11 +127,21 @@ export function getMediaUrl(db: Database.Database, lessonId: number): string {
   return `media://lesson/${lessonId}`;
 }
 
-export function getCourseThumbnailUrl(db: Database.Database, courseId: number): string | null {
+/**
+ * The course's cover: an image from its folder when there is one, otherwise a
+ * frame from its first video (generated once by `generate`, then cached).
+ */
+export async function getCourseThumbnailUrl(
+  db: Database.Database,
+  courseId: number,
+  generate?: ThumbnailGenerator,
+): Promise<string | null> {
   const course = getCourse(db, courseId);
-  if (!course?.thumbnailPath) return null;
-  if (!fs.existsSync(course.thumbnailPath)) return null;
-  return `media://thumb/${courseId}`;
+  if (!course) return null;
+  if (course.thumbnailPath) return fs.existsSync(course.thumbnailPath) ? `media://thumb/${courseId}` : null;
+  if (hasGeneratedThumbnail(courseId)) return `media://thumb/${courseId}`;
+  if (!generate) return null;
+  return (await ensureGeneratedThumbnail(db, courseId, generate)) ? `media://thumb/${courseId}` : null;
 }
 
 export function checkFileExists(db: Database.Database, lessonId: number): boolean {

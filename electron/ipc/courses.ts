@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, nativeImage } from 'electron';
+import { clearGeneratedThumbnail } from '../services/thumbnailService';
 import { getDb } from '../database/connection';
 import {
   listCourses, getCourseDetail, updateCourse, markCourseOpened, deleteCourse,
@@ -8,6 +9,15 @@ import type { LessonContext } from '../../src/types';
 import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
 import { requireId, requireString, requirePath, optionalString, ValidationError } from '../services/validate';
+
+/**
+ * The OS thumbnailer (Windows: the shell's, as in File Explorer). Returns
+ * null when it cannot render the file, e.g. no codec on a server install.
+ */
+async function systemThumbnail(filePath: string): Promise<Buffer | null> {
+  const image = await nativeImage.createThumbnailFromPath(filePath, { width: 640, height: 360 });
+  return image.isEmpty() ? null : image.toPNG();
+}
 
 export function registerCourseIpc(): void {
   const db = getDb();
@@ -59,7 +69,9 @@ export function registerCourseIpc(): void {
   });
 
   ipcMain.handle('courses:remove', (_e, courseId: unknown) => {
-    deleteCourse(db, requireId(courseId, 'courseId'));
+    const id = requireId(courseId, 'courseId');
+    deleteCourse(db, id);
+    clearGeneratedThumbnail(id);
   });
 
   ipcMain.handle('courses:markOpened', (_e, courseId: unknown) => {
@@ -84,7 +96,7 @@ export function registerCourseIpc(): void {
   });
 
   ipcMain.handle('courses:thumbnailUrl', (_e, courseId: unknown) => {
-    return getCourseThumbnailUrl(db, requireId(courseId, 'courseId'));
+    return getCourseThumbnailUrl(db, requireId(courseId, 'courseId'), systemThumbnail);
   });
 
   ipcMain.handle('courses:health', (_e, courseId: unknown) => {
