@@ -4,6 +4,13 @@ export interface Migration {
   version: number;
   name: string;
   sql: string;
+  /**
+   * Rebuilds a table that other tables reference. With foreign keys on,
+   * dropping the old table would cascade-delete every child row, so the
+   * runner follows SQLite's documented procedure instead: foreign keys off
+   * around the transaction, and a foreign_key_check before committing.
+   */
+  rebuildsParentTable?: boolean;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -354,6 +361,29 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    version: 12,
+    name: 'decks_without_course',
+    rebuildsParentTable: true,
+    sql: `
+      -- Flashcard decks may now exist without a course: practice-exam files
+      -- are not part of any course, and their "mistakes" decks live here.
+      -- Course decks still cascade away with their course.
+      CREATE TABLE flashcard_decks_v12 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO flashcard_decks_v12 (id, course_id, title, source, created_at)
+        SELECT id, course_id, title, source, created_at FROM flashcard_decks;
+      DROP TABLE flashcard_decks;
+      ALTER TABLE flashcard_decks_v12 RENAME TO flashcard_decks;
+      CREATE INDEX idx_decks_course ON flashcard_decks(course_id);
+      CREATE INDEX idx_decks_source ON flashcard_decks(source);
+    `,
+  },
 ];
 
 export function runMigrations(database: Database.Database): void {
@@ -375,9 +405,19 @@ export function runMigrations(database: Database.Database): void {
 
   for (const migration of MIGRATIONS) {
     if (applied.has(migration.version)) continue;
+    // PRAGMA foreign_keys is a no-op inside a transaction, so it is switched
+    // around BEGIN/COMMIT (https://www.sqlite.org/lang_altertable.html#otheralter).
+    const fkWasOn = migration.rebuildsParentTable && database.pragma('foreign_keys', { simple: true }) === 1;
+    if (fkWasOn) database.pragma('foreign_keys = OFF');
     database.exec('BEGIN');
     try {
       database.exec(migration.sql);
+      if (migration.rebuildsParentTable) {
+        const broken = database.pragma('foreign_key_check') as unknown[];
+        if (broken.length > 0) {
+          throw new Error(`Migration ${migration.version} would break ${broken.length} foreign key reference(s)`);
+        }
+      }
       database.prepare(
         'INSERT INTO schema_migrations (version, name) VALUES (?, ?)',
       ).run(migration.version, migration.name);
@@ -385,6 +425,8 @@ export function runMigrations(database: Database.Database): void {
     } catch (err) {
       database.exec('ROLLBACK');
       throw err;
+    } finally {
+      if (fkWasOn) database.pragma('foreign_keys = ON');
     }
   }
 }
