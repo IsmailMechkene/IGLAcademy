@@ -29,6 +29,15 @@ export function mistakeCardBack(q: PracticeExamQuestion): string {
   return [label, answers, q.explanation].filter((part) => part.trim()).join('\n');
 }
 
+export interface MistakesDeck {
+  /** Stable identity of the deck (e.g. "mistakes:<exam path>"). */
+  source: string;
+  title: string;
+  /** The owning course, or null for practice-exam files. */
+  courseId: number | null;
+}
+
+/** Practice-exam file: one course-less deck per file. */
 export function addExamMistakes(
   db: Database.Database,
   sourcePath: string,
@@ -36,14 +45,28 @@ export function addExamMistakes(
   questions: PracticeExamQuestion[],
   wrongIndices: number[],
 ): { deckId: number | null; added: number } {
+  return addMistakes(
+    db,
+    { source: MISTAKES_SOURCE_PREFIX + sourcePath, title: `Mistakes · ${examTitle}`, courseId: null },
+    questions,
+    wrongIndices,
+  );
+}
+
+export function addMistakes(
+  db: Database.Database,
+  deck: MistakesDeck,
+  questions: PracticeExamQuestion[],
+  wrongIndices: number[],
+): { deckId: number | null; added: number } {
   const wrong = wrongIndices.filter((i) => questions[i]);
-  if (wrong.length === 0) return { deckId: findDeckBySource(db, MISTAKES_SOURCE_PREFIX + sourcePath)?.id ?? null, added: 0 };
+  if (wrong.length === 0) return { deckId: findDeckBySource(db, deck.source)?.id ?? null, added: 0 };
 
   return db.transaction(() => {
-    const source = MISTAKES_SOURCE_PREFIX + sourcePath;
+    const source = deck.source;
     const deckId =
       findDeckBySource(db, source)?.id ??
-      insertDeck(db, { courseId: null, title: `Mistakes · ${examTitle}`, source });
+      insertDeck(db, { courseId: deck.courseId, title: deck.title, source });
     const existing = new Set(listCardFronts(db, deckId));
     let position = existing.size;
     let added = 0;

@@ -348,6 +348,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export const DAILY_GOAL_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;
 
+/** What submitting a course quiz returns. */
+export interface QuizSubmitResult {
+  attemptId: number;
+  /** Wrong answers newly added to the quiz's mistakes deck. */
+  mistakesAdded?: number;
+  mistakesDeckId?: number;
+}
+
 /** Ctrl+K palette results, grouped by kind. */
 export interface GlobalSearchResults {
   courses: Array<{ id: number; title: string; lessonCount: number }>;

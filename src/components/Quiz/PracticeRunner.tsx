@@ -133,7 +133,10 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
         ? await submitAnswers(payload, timings, [])
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
-          .then((attemptId) => api().quizzes.attemptDetail(attemptId));
+          .then(async (r) => {
+            const d = await api().quizzes.attemptDetail(r.attemptId);
+            return d && { ...d, mistakesAdded: r.mistakesAdded, mistakesDeckId: r.mistakesDeckId };
+          });
       if (!detail) {
         setSubmitting(false);
         setSubmitError(true);

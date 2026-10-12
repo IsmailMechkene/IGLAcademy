@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { History, Layers, ListChecks, Pencil, PlayCircle, Plus, Trash2 } from 'lucide-react';
 import type { Quiz, QuizDetail } from '../../types';
 import { api } from '../../services/api';
@@ -8,10 +8,25 @@ import QuizTaker from './QuizTaker';
 import QuizHistory from './QuizHistory';
 import LoadError from '../LoadError/LoadError';
 import ConfirmDialog from '../Modal/ConfirmDialog';
+import Modal from '../Modal/Modal';
+import { answeredCount, EMPTY_SNAPSHOT, parseSession, type ExamSession, type RunSnapshot } from '../../utils/examSession';
+import { timeAgo } from '../../utils/format';
 import styles from './Quiz.module.css';
 
 interface Props {
   courseId: number;
+}
+
+/**
+ * Identifies the exact quiz a saved run was answered against; editing the
+ * quiz changes it (the main process also drops the run on edit).
+ */
+function quizVersion(quiz: QuizDetail): string {
+  return `${quiz.updatedAt}|${quiz.questions.map((q) => q.id).join(',')}`;
+}
+
+function readSession(raw: unknown, quiz: QuizDetail): ExamSession | null {
+  return parseSession(raw, quizVersion(quiz), quiz.questions.length, new Set(quiz.questions.map((q) => q.id)));
 }
 
 type View = 'list' | 'editor' | 'taker' | 'history';
@@ -25,6 +40,12 @@ export default function QuizManager({ courseId }: Props) {
   const [historyQuiz, setHistoryQuiz] = useState<Quiz | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Quiz | null>(null);
+  // Saved, unfinished runs: which quizzes have one, and the one being offered.
+  const [inProgress, setInProgress] = useState<Set<number>>(new Set());
+  const [offer, setOffer] = useState<{ quiz: QuizDetail; session: ExamSession } | null>(null);
+  const [run, setRun] = useState<ExamSession | null>(null);
+  const runRef = useRef<ExamSession | null>(null);
+  runRef.current = run;
 
   const loadQuizzes = () => {
     setLoadError(false);
@@ -35,6 +56,18 @@ export default function QuizManager({ courseId }: Props) {
   };
 
   useEffect(loadQuizzes, [courseId, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      quizzes.map((q) => api().quizzes.sessionGet(q.id).then((raw) => (raw ? q.id : null)).catch(() => null)),
+    ).then((ids) => {
+      if (!cancelled) setInProgress(new Set(ids.filter((id): id is number => id !== null)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [quizzes]);
 
   const refresh = () => {
     setLoadError(false);
@@ -57,12 +90,41 @@ export default function QuizManager({ courseId }: Props) {
     }
   };
 
+  const startQuiz = (detail: QuizDetail, session: ExamSession | null) => {
+    const now = Date.now();
+    const next: ExamSession = session ?? {
+      version: 1,
+      // Course quizzes are untimed: stored as a "practice" run with no deadline.
+      mode: 'practice',
+      seed: null,
+      deadlineAt: null,
+      contentHash: quizVersion(detail),
+      startedAt: now,
+      savedAt: now,
+      ...EMPTY_SNAPSHOT,
+    };
+    setOffer(null);
+    setRun(next);
+    setTakingQuiz(detail);
+    setView('taker');
+  };
+
   const openTaker = async (quiz: Quiz) => {
     const detail = await api().quizzes.get(quiz.id);
-    if (detail) {
-      setTakingQuiz(detail);
-      setView('taker');
-    }
+    if (!detail) return;
+    const raw = await api().quizzes.sessionGet(quiz.id).catch(() => null);
+    const session = raw ? readSession(raw, detail) : null;
+    if (raw && !session) void api().quizzes.sessionClear(quiz.id).catch(() => undefined);
+    if (session && answeredCount(session) > 0) setOffer({ quiz: detail, session });
+    else startQuiz(detail, null);
+  };
+
+  const handleProgress = (snapshot: RunSnapshot) => {
+    const current = runRef.current;
+    if (!current || !takingQuiz) return;
+    void api()
+      .quizzes.sessionSave(takingQuiz.id, { ...current, ...snapshot, savedAt: Date.now() })
+      .catch(() => undefined);
   };
 
   if (view === 'editor') {
@@ -84,8 +146,11 @@ export default function QuizManager({ courseId }: Props) {
       <QuizTaker
         quiz={takingQuiz}
         passPercent={settings.examPassPercent}
+        initial={run ?? undefined}
+        onProgress={handleProgress}
         onClose={() => {
           setTakingQuiz(null);
+          setRun(null);
           setView('list');
           refresh();
         }}
@@ -127,7 +192,10 @@ export default function QuizManager({ courseId }: Props) {
           {quizzes.map((quiz) => (
             <div key={quiz.id} className={`card ${styles.quizRow}`}>
               <div className={styles.quizInfo}>
-                <div className={styles.quizTitle}>{quiz.title}</div>
+                <div className={styles.quizTitle}>
+                  {quiz.title}
+                  {inProgress.has(quiz.id) && <span className="badge" style={{ marginLeft: 8 }}>In progress</span>}
+                </div>
                 <div className={styles.quizMeta}>
                   <span>{quiz.questionCount} questions</span>
                   {quiz.sectionTitle && (
@@ -213,6 +281,29 @@ export default function QuizManager({ courseId }: Props) {
             This cannot be undone.
           </p>
         </ConfirmDialog>
+      )}
+      {offer && (
+        <Modal label="Resume quiz" onClose={() => setOffer(null)}>
+          <h2>Resume this quiz?</h2>
+          <p>
+            You answered {answeredCount(offer.session)} of {offer.quiz.questions.length} questions in{' '}
+            <strong>{offer.quiz.title}</strong> — saved {timeAgo(new Date(offer.session.savedAt).toISOString())}.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                void api().quizzes.sessionClear(offer.quiz.id).catch(() => undefined);
+                startQuiz(offer.quiz, null);
+              }}
+            >
+              Start over
+            </button>
+            <button className="btn btn-primary" data-autofocus onClick={() => startQuiz(offer.quiz, offer.session)}>
+              Resume
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

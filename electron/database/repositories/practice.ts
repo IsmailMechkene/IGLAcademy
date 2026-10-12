@@ -71,6 +71,9 @@ export function deleteSource(db: Database.Database, id: number): void {
   deleteSessionsOutside(db);
 }
 
+/** Session keys for course quizzes; exam files use their resolved path. */
+export const QUIZ_SESSION_PREFIX = 'quiz:';
+
 /** The in-progress run for an exam file, if any (raw JSON, owned by the renderer). */
 export function getExamSession(db: Database.Database, sourcePath: string): { state: string; updatedAt: string } | null {
   const row = db.prepare('SELECT state, updated_at FROM exam_sessions WHERE source_path = ?').get(sourcePath) as
@@ -96,6 +99,8 @@ function deleteSessionsOutside(db: Database.Database): void {
   const rows = db.prepare('SELECT source_path FROM exam_sessions').all() as Array<{ source_path: string }>;
   const stmt = db.prepare('DELETE FROM exam_sessions WHERE source_path = ?');
   for (const row of rows) {
+    // Course-quiz runs ("quiz:<id>") are not exam files; never prune them here.
+    if (row.source_path.startsWith(QUIZ_SESSION_PREFIX)) continue;
     const covered = sources.some((s) =>
       s.kind === 'file' ? s.path === row.source_path : isInsideDir(s.path, row.source_path),
     );

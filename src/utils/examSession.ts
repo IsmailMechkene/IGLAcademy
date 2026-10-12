@@ -38,7 +38,13 @@ const isTime = (n: unknown): n is number => typeof n === 'number' && Number.isFi
  * Returns the session when it is well-formed and belongs to this exact exam
  * version, otherwise null (the caller then discards it).
  */
-export function parseSession(raw: unknown, contentHash: string, questionCount: number): ExamSession | null {
+export function parseSession(
+  raw: unknown,
+  contentHash: string,
+  questionCount: number,
+  /** Valid question ids when they are not 0..count-1 (course quizzes use database ids). */
+  questionIds?: ReadonlySet<number>,
+): ExamSession | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const s = raw as Record<string, unknown>;
   if (s.version !== 1 || (s.mode !== 'exam' && s.mode !== 'practice')) return null;
@@ -49,7 +55,8 @@ export function parseSession(raw: unknown, contentHash: string, questionCount: n
   if (!isTime(s.startedAt) || !isTime(s.savedAt)) return null;
   if (!isInt(s.current) || s.current >= questionCount) return null;
 
-  const validQuestion = (q: unknown): q is number => isInt(q) && q < questionCount;
+  const validQuestion = (q: unknown): q is number =>
+    isInt(q) && (questionIds ? questionIds.has(q) : q < questionCount);
   if (!Array.isArray(s.answers) || !Array.isArray(s.flagged) || !Array.isArray(s.revealed) || !Array.isArray(s.timings)) {
     return null;
   }

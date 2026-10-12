@@ -102,7 +102,10 @@ export default function QuizTaker({
         ? await submitAnswers(payload, timings, flaggedIds)
         : await api()
           .quizzes.submitAttempt(quiz.id, payload)
-          .then((attemptId) => api().quizzes.attemptDetail(attemptId));
+          .then(async (r) => {
+            const d = await api().quizzes.attemptDetail(r.attemptId);
+            return d && { ...d, mistakesAdded: r.mistakesAdded, mistakesDeckId: r.mistakesDeckId };
+          });
       // A null detail is a failure, not a result: leaving it unhandled left
       // the button stuck on "Submitting..." with no way back.
       if (!detail) {

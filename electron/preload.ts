@@ -5,7 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
-  LocateFileResult, LessonContext, StudyStats, GlobalSearchResults,
+  LocateFileResult, LessonContext, StudyStats, GlobalSearchResults, QuizSubmitResult,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -71,8 +71,13 @@ const api = {
     create: (input: QuizInput): Promise<QuizDetail> => ipcRenderer.invoke('quizzes:create', input),
     update: (id: number, input: QuizInput): Promise<QuizDetail> => ipcRenderer.invoke('quizzes:update', id, input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke('quizzes:delete', id),
-    submitAttempt: (quizId: number, answers: AnswerInput[]): Promise<number> =>
+    submitAttempt: (quizId: number, answers: AnswerInput[]): Promise<QuizSubmitResult> =>
       ipcRenderer.invoke('quizzes:submitAttempt', quizId, answers),
+    // In-progress run of a course quiz (shape owned by the renderer).
+    sessionGet: (quizId: number): Promise<unknown> => ipcRenderer.invoke('quizzes:sessionGet', quizId),
+    sessionSave: (quizId: number, state: object): Promise<void> =>
+      ipcRenderer.invoke('quizzes:sessionSave', quizId, state),
+    sessionClear: (quizId: number): Promise<void> => ipcRenderer.invoke('quizzes:sessionClear', quizId),
     attempts: (quizId: number): Promise<QuizAttemptSummary[]> => ipcRenderer.invoke('quizzes:attempts', quizId),
     attemptDetail: (attemptId: number): Promise<QuizAttemptDetail | null> =>
       ipcRenderer.invoke('quizzes:attemptDetail', attemptId),

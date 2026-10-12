@@ -267,6 +267,44 @@ export async function run() {
         assert(!r.stillOffered, 'a submitted exam is still offered for resuming');
       }],
 
+      ['a course quiz resumes where you left off and turns mistakes into flashcards', async () => {
+        await nav(app.page, 'Courses');
+        const r = await app.page.run(async () => {
+          const course = (await api.courses.list())[0];
+          await api.quizzes.create({
+            courseId: course.id,
+            title: 'Storage check',
+            description: '',
+            questions: [
+              { question: 'Which service stores objects?', options: ['Amazon S3', 'Amazon EC2'], correctIndex: 0, correctIndices: [0], explanation: 'S3 is object storage.' },
+              { question: 'Which service is a CDN?', options: ['Amazon SQS', 'Amazon CloudFront'], correctIndex: 1, correctIndices: [1], explanation: '' },
+            ],
+          });
+          await click('[aria-label^="Open course:"]');
+          await click('main [role="tab"]', 'Quizzes');
+          await click('main button', 'Take');
+          await click('main button[aria-pressed]', 'Amazon EC2', 'wrong answer to Q1');
+          await click('main button', 'Exit');
+          const badge = await waitFor(() => byText('main [class*="quizTitle"]', 'In progress'), 'In progress badge');
+          await click('main button', 'Take');
+          await waitFor(() => document.querySelector('[role="dialog"]')?.textContent.includes('Resume this quiz?'), 'resume prompt');
+          await click('[role="dialog"] button', 'Resume');
+          const kept = await waitFor(() => byText('main button[aria-pressed="true"]', 'Amazon EC2'), 'saved answer restored');
+          await click('main button', 'Next');
+          await click('main button[aria-pressed]', 'Amazon CloudFront');
+          await click('main button', 'Submit');
+          const notice = await waitFor(() => byText('main [role="status"]', 'added to your mistakes deck'), 'mistakes notice');
+          const text = notice.textContent;
+          await click('main button', 'Back');
+          await waitFor(() => byText('main button', 'Take'), 'quiz list');
+          await sleep(300);
+          return { badge: !!badge, kept: !!kept, notice: text, stillInProgress: !!byText('main [class*="quizTitle"]', 'In progress') };
+        });
+        assert(r.badge && r.kept, 'saved quiz run was not offered or not restored');
+        assert(r.notice.includes('1 question added'), `notice "${r.notice}"`);
+        assert(!r.stillInProgress, 'a submitted quiz still shows as in progress');
+      }],
+
       ['wrong exam answers become a flashcard deck you can study', async () => {
         const submitted = await app.page.run(async (file) => {
           const exam = await api.practice.load(file);

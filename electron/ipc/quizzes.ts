@@ -1,12 +1,12 @@
 import { ipcMain } from 'electron';
 import { getDb } from '../database/connection';
-import { recordActivity } from '../database/repositories/activity';
 import {
   listQuizzesForCourse, getQuiz, insertQuiz, updateQuiz, deleteQuiz,
-  insertQuestion, updateQuestion, deleteQuestion, listAttempts, getAttemptDetail, insertAttempt,
+  insertQuestion, updateQuestion, deleteQuestion, listAttempts, getAttemptDetail,
 } from '../database/repositories/quizzes';
 import { requireId, requireString, optionalId, optionalString, ValidationError } from '../services/validate';
-import type { QuizDetail, QuizQuestionInput } from '../../src/types';
+import type { QuizQuestionInput } from '../../src/types';
+import { clearQuizSession, getQuizSession, saveQuizSession, submitQuizAttempt } from '../services/quizService';
 
 export function validateQuestionInput(q: unknown, index: number): QuizQuestionInput {
   const data = q as { question?: unknown; options?: unknown; correctIndex?: unknown; correctIndices?: unknown; explanation?: unknown };
@@ -40,61 +40,9 @@ export function validateQuestionInput(q: unknown, index: number): QuizQuestionIn
   };
 }
 
-export interface ScoredAnswer {
-  questionId: number;
-  selectedIndex: number;
-  selectedIndices: number[];
-  isCorrect: boolean;
-}
-
-/**
- * Scores a submission against the QUIZ rather than against the payload: one
- * row per question, in the quiz's own order, regardless of what the client
- * sent. A short or partly-empty submission therefore cannot inflate the
- * percentage (the total used to be `answers.length`) and cannot be rejected
- * outright (a timed auto-submit legitimately contains unanswered questions,
- * which simply count as incorrect).
- */
-export function scoreAttempt(quiz: QuizDetail, answers: unknown[]): ScoredAnswer[] {
-  const submitted = new Map<number, number[]>();
-  answers.forEach((a: unknown, i: number) => {
-    const data = a as { questionId?: unknown; selectedIndex?: unknown; selectedIndices?: unknown };
-    const questionId = requireId(data.questionId, `answer ${i + 1} questionId`);
-    const raw = Array.isArray(data.selectedIndices)
-      ? data.selectedIndices
-      : data.selectedIndex === undefined || data.selectedIndex === null
-        ? []
-        : [data.selectedIndex];
-    const selectedIndices = [...new Set(raw)].filter(
-      (n): n is number => Number.isInteger(n) && (n as number) >= 0,
-    );
-    // Entries for questions that no longer exist are ignored rather than
-    // thrown on: losing the whole attempt would be the worse outcome.
-    if (quiz.questions.some((q) => q.id === questionId)) {
-      submitted.set(questionId, selectedIndices.sort((x, y) => x - y));
-    }
-  });
-
-  return quiz.questions.map((question) => {
-    // Out-of-range options are dropped; an empty set means "unanswered".
-    const selectedIndices = (submitted.get(question.id) ?? []).filter((n) => n < question.options.length);
-    return {
-      questionId: question.id,
-      selectedIndex: selectedIndices[0] ?? -1,
-      selectedIndices,
-      isCorrect: selectedIndices.length > 0 && setsEqual(selectedIndices, question.correctIndices),
-    };
-  });
-}
+export { scoreAttempt, type ScoredAnswer } from '../services/quizService';
 
 /** Exact set match: a multi-select answer is correct only when complete. */
-function setsEqual(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const sortedA = [...a].sort((x, y) => x - y);
-  const sortedB = [...b].sort((x, y) => x - y);
-  return sortedA.every((v, i) => v === sortedB[i]);
-}
-
 export function registerQuizIpc(): void {
   const db = getDb();
 
@@ -154,22 +102,29 @@ export function registerQuizIpc(): void {
       }
     });
     tx();
+    // A saved run was answered against the old questions.
+    clearQuizSession(db, quizId);
     return getQuiz(db, quizId);
   });
 
   ipcMain.handle('quizzes:delete', (_e, id: unknown) => {
-    deleteQuiz(db, requireId(id, 'id'));
+    const quizId = requireId(id, 'id');
+    deleteQuiz(db, quizId);
+    clearQuizSession(db, quizId);
   });
 
   ipcMain.handle('quizzes:submitAttempt', (_e, quizId: unknown, answers: unknown) => {
-    const qid = requireId(quizId, 'quizId');
-    const quiz = getQuiz(db, qid);
-    if (!quiz) throw new ValidationError('Quiz not found');
     if (!Array.isArray(answers)) throw new ValidationError('answers must be an array');
-    const scored = scoreAttempt(quiz, answers as unknown[]);
-    const attemptId = insertAttempt(db, qid, scored, quiz.questions.length);
-    recordActivity(db, { questionsAnswered: scored.filter((a) => a.selectedIndices.length > 0).length });
-    return attemptId;
+    return submitQuizAttempt(db, requireId(quizId, 'quizId'), answers as unknown[]);
+  });
+
+  // In-progress runs, so a quiz survives closing the app.
+  ipcMain.handle('quizzes:sessionGet', (_e, quizId: unknown) => getQuizSession(db, requireId(quizId, 'quizId')));
+  ipcMain.handle('quizzes:sessionSave', (_e, quizId: unknown, state: unknown) => {
+    saveQuizSession(db, requireId(quizId, 'quizId'), state);
+  });
+  ipcMain.handle('quizzes:sessionClear', (_e, quizId: unknown) => {
+    clearQuizSession(db, requireId(quizId, 'quizId'));
   });
 
   ipcMain.handle('quizzes:attempts', (_e, quizId: unknown) => {
