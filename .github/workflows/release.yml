@@ -1,0 +1,75 @@
+name: Release
+
+# Push a tag like v1.1.0 (matching package.json "version") to build, test,
+# package and publish a GitHub Release. Installed copies of IsmaLearn pick it
+# up through the in-app updater (latest.yml in the release).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the release and upload its files
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Tag matches package.json
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:e2e
+
+      # GitHub runners have the symlink privileges the winCodeSign tools need,
+      # so the exe gets its icon and version info here (no brand-exe step), and
+      # is signed when the WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD secrets exist.
+      - name: Package
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$WIN_CSC_LINK" ]; then
+            export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"
+            echo "Signing with the configured certificate"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::warning::No WIN_CSC_LINK secret: the installer is unsigned and Windows SmartScreen will warn on install"
+          fi
+          npx electron-builder --win nsis --publish never -c.win.signAndEditExecutable=true
+
+      - run: npm run smoke
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "release/IsmaLearn-Setup-$VERSION.exe" \
+            "release/IsmaLearn-Setup-$VERSION.exe.blockmap" \
+            release/latest.yml \
+            --title "IsmaLearn $VERSION" \
+            --generate-notes \
+            --verify-tag

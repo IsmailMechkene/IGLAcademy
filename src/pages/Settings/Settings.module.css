@@ -85,3 +85,18 @@
 .dangerZone {
   border-color: var(--danger-soft);
 }
+
+.updateProgress {
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.updateProgress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}

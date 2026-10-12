@@ -16,10 +16,12 @@ import { registerBackupIpc } from './ipc/backup';
 import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
 import { registerSearchIpc } from './ipc/search';
+import { registerUpdatesIpc } from './ipc/updates';
 import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
 import { initThumbnailCache } from './services/thumbnailService';
 import { createAutoBackup } from './services/backupService';
 import { getAllSettings } from './database/repositories/settings';
+import { initUpdates } from './services/updateService';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -233,8 +235,10 @@ app.whenReady().then(() => {
   registerPracticeIpc();
   registerAppIpc();
   registerSearchIpc();
+  registerUpdatesIpc();
 
   createWindow();
+  initUpdates();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

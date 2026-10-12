@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  Brain, ChevronsLeft, ChevronsRight, FileCheck2, GraduationCap, Home, LibraryBig, Play, Settings as SettingsIcon,
-  StickyNote,
+  Brain, ChevronsLeft, ChevronsRight, Download, FileCheck2, GraduationCap, Home, LibraryBig, Play,
+  Settings as SettingsIcon, StickyNote,
 } from 'lucide-react';
 import { useApp } from '../../App';
 import type { Route } from '../../App';
 import type { CourseWithProgress } from '../../types';
 import { api } from '../../services/api';
+import { useUpdateStatus } from '../../services/updates';
 import { cleanTitle } from '../../utils/titles';
 import CourseCover from '../CourseCover/CourseCover';
 import styles from './Sidebar.module.css';
@@ -62,6 +63,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [current, setCurrent] = useState<{ course: CourseWithProgress; lessonId: number | null } | null>(null);
   const [dueCount, setDueCount] = useState(0);
+  const update = useUpdateStatus();
 
   useEffect(() => {
     api()
@@ -184,6 +186,21 @@ export default function Sidebar() {
             <span className={styles.continueMeta}>
               {current.course.completedCount}/{current.course.lessonCount} lessons · {current.course.progressPercent}%
             </span>
+          </button>
+        )}
+        {update.state === 'ready' && (
+          <button
+            className={styles.updateReady}
+            onClick={() => void api().updates.install()}
+            title={`IsmaLearn ${update.version} is ready. Restart to update.`}
+          >
+            <Download size={16} aria-hidden="true" />
+            {!collapsed && (
+              <span className={styles.updateText}>
+                <span className={styles.updateTitle}>Restart to update</span>
+                <span className={styles.updateMeta}>Version {update.version} is ready</span>
+              </span>
+            )}
           </button>
         )}
         {renderItem(SETTINGS)}

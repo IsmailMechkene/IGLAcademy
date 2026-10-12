@@ -35,8 +35,11 @@ tracking, notes with video timestamps, and self-made quizzes.
 - **Backup & safety** — one-click JSON export/import (with safety backup),
   automatic timestamped database backups with pruning (including one taken
   before any schema upgrade), diagnostic logs, and recovery from an unreadable
-  database without losing the old file. There is no auto-update: builds are
-  installed manually.
+  database without losing the old file.
+- **Automatic updates** — installed copies check GitHub Releases on startup and
+  every few hours, download new versions in the background, and install them on
+  "Restart to update" (or the next time the app closes). Can be turned off in
+  Settings → Updates.
 - **Progress tracking** — dashboard stats, continue-learning, recently opened,
   per-course progress bars, all persisted in SQLite.
 - **Notes** — per-course/per-lesson notes with autosave, Markdown preview,
@@ -74,7 +77,8 @@ npm run typecheck   # strict TypeScript check (tsc --noEmit)
 npm run lint        # ESLint (hook rules, dead code, suspicious constructs)
 npm test            # run the Vitest suite (auto-selects the Node ABI)
 npm run test:e2e    # drives the built app (run `npm run build` first); self-contained:
-                    # generated fixtures, throwaway profile, no network
+                    # generated fixtures, throwaway profile, no internet (the
+                    # updater suite serves its feed on 127.0.0.1)
 npm run build       # production build → dist/ + dist-electron/
 npm run dist        # package a Windows NSIS installer → release/
 npm run smoke       # verify packaged artifacts + boot the installed exe
@@ -155,6 +159,45 @@ Attempt history (scores, dates, full answer review) is stored per file, so
 re-taking the same test tracks your progress over time. Removing a source
 deletes its history but never touches your files.
 Supported resources: PDF, TXT, MD, VTT/SRT, PNG/JPG/GIF/WebP/SVG.
+
+## Releasing
+
+Releases are built and published by `.github/workflows/release.yml`:
+
+```bash
+npm version 1.1.0 --no-git-tag-version   # bump package.json + lockfile
+git commit -am "chore: release 1.1.0"
+git tag v1.1.0
+git push origin main v1.1.0
+```
+
+The workflow checks that the tag matches `package.json`, runs the full check
+suite, packages the installer, smoke-tests it, and creates the GitHub Release
+with `IsmaLearn-Setup-<version>.exe`, its `.blockmap`, and `latest.yml`. Installed
+copies see the release on their next check. Releases must not be drafts or
+pre-releases, or the updater ignores them.
+
+### Code signing (removes the "Windows protected your PC" warning)
+
+Unsigned installers work, but SmartScreen warns on install. Signing needs a
+code-signing certificate from a recognized authority; a self-signed certificate
+does not remove the warning.
+
+- **Certificate file (.pfx):** add two repository secrets, `WIN_CSC_LINK` (the
+  .pfx file base64-encoded, e.g. `base64 -w0 cert.pfx`) and
+  `WIN_CSC_KEY_PASSWORD`. The next tagged release is signed automatically; no
+  code changes needed. A standard (OV) certificate builds SmartScreen
+  reputation over time, as installs accumulate.
+- **Azure Trusted Signing** (cheaper, cloud-held keys): configure
+  `win.azureSignOptions` in `electron-builder.yml` and the Azure credentials as
+  secrets; see the electron-builder docs.
+
+Once releases are signed, `app-update.yml` records the publisher name and the
+updater refuses any later update that isn't signed by the same publisher.
+
+Local `npm run dist` builds stay unsigned: the signing tools need symlink
+privileges (admin or Developer Mode), so local builds brand the exe with
+`npm run brand-exe` instead.
 
 ## License
 

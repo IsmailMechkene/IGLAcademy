@@ -18,11 +18,11 @@ win:
       arch:
         - x64
   icon: build/icon.ico
-  # NOTE: executable signing/metadata editing (rcedit) is disabled because the
-  # winCodeSign tools cannot be extracted without Windows symlink privileges
-  # (requires admin or Developer Mode). The app exe keeps default Electron
-  # metadata; the icon is applied afterwards — see "scripts/brand-exe.mjs".
-  # Re-enable by removing this line on a machine with symlink privileges.
+  # Signing and exe metadata (rcedit) need the winCodeSign tools, which can't
+  # be extracted without Windows symlink privileges (admin or Developer Mode).
+  # Local builds skip them and brand the exe afterwards (scripts/brand-exe.mjs).
+  # The release workflow turns this on (CI runners have the privileges) and
+  # signs when a certificate is configured; see README "Releasing".
   signAndEditExecutable: false
 nsis:
   oneClick: false
@@ -32,3 +32,12 @@ nsis:
   uninstallDisplayName: IsmaLearn
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
+  # No spaces: the name is used as-is in latest.yml and as the GitHub asset name.
+  artifactName: ${productName}-Setup-${version}.${ext}
+# Where installed copies look for updates (written into the app as
+# app-update.yml). Releases are uploaded by .github/workflows/release.yml.
+publish:
+  provider: github
+  owner: IsmailMechkene
+  repo: IsmaLearn
+  releaseType: release

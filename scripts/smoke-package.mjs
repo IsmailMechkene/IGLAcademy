@@ -25,6 +25,24 @@ console.log('[smoke] unpacked exe exists');
 if (installers.length === 0) fail('no NSIS installer found in release/');
 console.log(`[smoke] installer exists: ${installers[0]}`);
 
+// Auto-update wiring: the installed app reads app-update.yml to find its feed,
+// and the release needs latest.yml next to the installer.
+const updateConfig = path.join(root, 'release', 'win-unpacked', 'resources', 'app-update.yml');
+if (!fs.existsSync(updateConfig)) fail('resources/app-update.yml is missing (no publish config?)');
+const feed = fs.readFileSync(updateConfig, 'utf8');
+if (!/provider: github/.test(feed) || !/repo: IsmaLearn/.test(feed)) fail(`unexpected app-update.yml:
+${feed}`);
+const latestYml = path.join(root, 'release', 'latest.yml');
+if (!fs.existsSync(latestYml)) fail('release/latest.yml is missing');
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const latest = fs.readFileSync(latestYml, 'utf8');
+if (!latest.includes(`version: ${version}`) || !latest.includes(`IsmaLearn-Setup-${version}.exe`)) {
+  fail(`latest.yml does not describe IsmaLearn-Setup-${version}.exe:
+${latest}`);
+}
+if (!fs.existsSync(path.join(root, 'release', `IsmaLearn-Setup-${version}.exe`))) fail(`IsmaLearn-Setup-${version}.exe is missing`);
+console.log('[smoke] update feed config and latest.yml are in place');
+
 // A throwaway profile: booting the packaged app against the real userData
 // would run any new migrations on the developer's own database.
 const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-smoke-'));

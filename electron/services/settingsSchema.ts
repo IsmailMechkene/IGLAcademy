@@ -36,6 +36,7 @@ export function validateSetting(key: string, value: unknown): void {
     case 'autoBackup':
     case 'rescanOnStartup':
     case 'examMistakesToFlashcards':
+    case 'autoUpdate':
       if (typeof value !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
       return;
     case 'backupKeep':

@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   Database, Download, FileText, FolderOpen, Info, Monitor, Moon,
-  RotateCcw, Save, Sun, Upload, ChevronDown,
+  RefreshCw, RotateCcw, Save, Sun, Upload, ChevronDown,
 } from 'lucide-react';
-import { DAILY_GOAL_OPTIONS, PLAYBACK_SPEEDS, type AppSettings, type BackupInfo } from '../../types';
+import { DAILY_GOAL_OPTIONS, PLAYBACK_SPEEDS, type AppSettings, type BackupInfo, type UpdateStatus } from '../../types';
 import { api } from '../../services/api';
+import { useUpdateStatus } from '../../services/updates';
 import { useApp } from '../../App';
 import { formatBytes, formatDateTime } from '../../utils/format';
 import SegmentedControl, { type SegmentOption } from '../../components/SegmentedControl/SegmentedControl';
@@ -20,6 +21,25 @@ const SPEED_OPTIONS: Array<SegmentOption<number>> = PLAYBACK_SPEEDS.map((s) => (
   value: s,
   label: `${s}×`,
 }));
+
+function updateText(status: UpdateStatus): string {
+  switch (status.state) {
+    case 'unsupported':
+      return 'This is a development build. Installed releases update themselves.';
+    case 'idle':
+      return 'New versions download in the background and install when you restart.';
+    case 'checking':
+      return 'Checking for updates…';
+    case 'up-to-date':
+      return `You have the latest version. Checked ${formatDateTime(new Date(status.checkedAt).toISOString())}.`;
+    case 'downloading':
+      return `Downloading version ${status.version}… ${status.percent}%`;
+    case 'ready':
+      return `Version ${status.version} is ready. Restart IsmaLearn to finish updating, or it installs the next time you close the app.`;
+    case 'error':
+      return status.message;
+  }
+}
 
 function ThemedSelect({
   label,
@@ -53,6 +73,7 @@ export default function Settings() {
   const [paths, setPaths] = useState<{ userData: string; dbPath: string } | null>(null);
   const [libraryInfo, setLibraryInfo] = useState<{ courseCount: number; dbSizeBytes: number; dbPath: string } | null>(null);
   const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const update = useUpdateStatus();
 
   useEffect(() => {
     api().app.getVersion().then(setVersion).catch(() => undefined);
@@ -345,6 +366,57 @@ export default function Settings() {
           <button className="btn btn-ghost btn-sm" onClick={() => void api().app.openLogs()}>
             <FileText size={14} /> Open logs
           </button>
+        </div>
+      </section>
+
+      <section className={`card ${styles.section}`} aria-label="Updates">
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <RefreshCw size={16} />
+          Updates
+        </h2>
+        <div className={styles.settingRow}>
+          <div className={styles.settingInfo}>
+            <div className={styles.settingLabel}>IsmaLearn {version || '—'}</div>
+            <div className={styles.settingDesc} data-testid="update-status" aria-live="polite">
+              {updateText(update)}
+            </div>
+            {update.state === 'downloading' && (
+              <div className={styles.updateProgress} role="progressbar" aria-valuenow={update.percent} aria-valuemin={0} aria-valuemax={100}>
+                <span style={{ width: `${update.percent}%` }} />
+              </div>
+            )}
+          </div>
+          {update.state === 'ready' ? (
+            <button className="btn btn-primary btn-sm" onClick={() => void api().updates.install()}>
+              <RotateCcw size={14} /> Restart to update
+            </button>
+          ) : update.state !== 'unsupported' ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => void api().updates.check().catch(() => undefined)}
+              disabled={update.state === 'checking' || update.state === 'downloading'}
+            >
+              <RefreshCw size={14} /> Check now
+            </button>
+          ) : null}
+        </div>
+        <div className={styles.settingRow}>
+          <div className={styles.settingInfo}>
+            <div className={styles.settingLabel}>Check for updates automatically</div>
+            <div className={styles.settingDesc}>
+              Look for a new version on GitHub when the app starts and every few hours. Nothing about
+              your library is sent.
+            </div>
+          </div>
+          <SegmentedControl<'on' | 'off'>
+            label="Check for updates automatically"
+            value={settings.autoUpdate ? 'on' : 'off'}
+            onChange={(v) => updateSettings({ autoUpdate: v === 'on' })}
+            options={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
         </div>
       </section>
 

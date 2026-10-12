@@ -144,7 +144,7 @@ class Page {
 }
 
 /** Launches the built app on `profileDir`; returns { page, stop }. */
-export async function launch(profileDir) {
+export async function launch(profileDir, { env = {} } = {}) {
   const port = await freePort(9400);
   const child = spawn(
     electronBinary(),
@@ -159,7 +159,7 @@ export async function launch(profileDir) {
       '--disable-renderer-backgrounding',
       '.',
     ],
-    { cwd: root, stdio: 'ignore', windowsHide: false },
+    { cwd: root, stdio: 'ignore', windowsHide: false, env: { ...process.env, ...env } },
   );
   let exited = false;
   child.on('exit', () => {

@@ -5,7 +5,7 @@ import type {
   AnswerInput, LearningStats, AppSettings, ImportResult, RescanResult, AppPaths, LessonActivity,
   ExamSource, PracticeExamFile, PracticeExamContent, CourseResource, ResourceSearchHit,
   Bookmark, ReviewItem, FlashcardDeck, Flashcard, CourseHealth, RelocateResult, BackupInfo,
-  LocateFileResult, LessonContext, StudyStats, GlobalSearchResults, QuizSubmitResult,
+  LocateFileResult, LessonContext, StudyStats, GlobalSearchResults, QuizSubmitResult, UpdateStatus,
 } from '../src/types';
 
 // Narrow, typed API exposed to the renderer via contextBridge.
@@ -191,6 +191,19 @@ const api = {
       ipcRenderer.invoke('app:getLibraryInfo'),
     showError: (title: string, message: string): Promise<void> => ipcRenderer.invoke('app:showError', title, message),
     openLogs: (): Promise<void> => ipcRenderer.invoke('app:openLogs'),
+  },
+  updates: {
+    status: (): Promise<UpdateStatus> => ipcRenderer.invoke('updates:status'),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke('updates:check'),
+    install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
+    /** Calls `listener` on every status change; returns an unsubscribe. */
+    onStatus: (listener: (status: UpdateStatus) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status);
+      ipcRenderer.on('updates:status', handler);
+      return () => {
+        ipcRenderer.removeListener('updates:status', handler);
+      };
+    },
   },
 };
 

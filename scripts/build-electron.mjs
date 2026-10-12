@@ -11,7 +11,9 @@ const options = {
   outdir: 'dist-electron',
   sourcemap: true,
   minify: !isWatch,
-  external: ['electron', 'better-sqlite3'],
+  // electron-updater ships as a runtime dependency (it reads app-update.yml
+  // and spawns the installer); bundling it buys nothing.
+  external: ['electron', 'better-sqlite3', 'electron-updater'],
   logLevel: 'info',
 };
 

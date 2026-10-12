@@ -331,6 +331,8 @@ export interface AppSettings {
   examMistakesToFlashcards: boolean;
   /** Daily study goal in minutes (video watch time + exam time). */
   dailyGoalMinutes: number;
+  /** Look for new versions on startup and every few hours, and download them in the background. */
+  autoUpdate: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -344,7 +346,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   examSecondsPerQuestion: 120,
   examMistakesToFlashcards: true,
   dailyGoalMinutes: 20,
+  autoUpdate: true,
 };
+
+/**
+ * Where the app updater is. Updates come from GitHub Releases and are only
+ * possible in an installed build (`unsupported` in development).
+ */
+export type UpdateStatus =
+  | { state: 'unsupported' }
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'up-to-date'; checkedAt: number }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
 
 export const DAILY_GOAL_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;
 
