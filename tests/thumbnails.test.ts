@@ -4,7 +4,8 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../electron/database/connection';
-import { importCourse } from '../electron/services/courseImportService';
+import { importCourse, rescanCourse } from '../electron/services/courseImportService';
+import { getCourse, updateCourse } from '../electron/database/repositories/courses';
 import { getCourseThumbnailUrl, resolveThumbnailFile } from '../electron/services/fileService';
 import {
   clearGeneratedThumbnail,
@@ -80,6 +81,23 @@ describe('generated course thumbnails', () => {
     });
     expect(url).toBe(`media://thumb/${courseId}`);
     expect(called).toBe(false);
+    expect(resolveThumbnailFile(db, courseId)).toMatch(/cover\.jpg$/);
+  });
+
+  it('ignores a lecture screenshot stored as the cover by older imports', async () => {
+    const courseId = makeCourse();
+    const course = getCourse(db, courseId)!;
+    const screenshot = path.join(course.sourcePath, '01 - Intro', '3. 2019-12-03_04-27-30.PNG');
+    touch(screenshot);
+    updateCourse(db, courseId, { thumbnailPath: screenshot });
+
+    const url = await getCourseThumbnailUrl(db, courseId, async () => PNG);
+    expect(url).toBe(`media://thumb/${courseId}`);
+    expect(resolveThumbnailFile(db, courseId)).toBe(generatedThumbnailPath(courseId));
+
+    // a rescan replaces it with the cover added to the folder since
+    touch(path.join(course.sourcePath, 'cover.jpg'));
+    rescanCourse(db, courseId);
     expect(resolveThumbnailFile(db, courseId)).toMatch(/cover\.jpg$/);
   });
 

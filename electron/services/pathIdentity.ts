@@ -33,6 +33,13 @@ export function canonicalDir(p: string): string {
   }
 }
 
+/** `canonicalDir` off the main thread (the same native realpath, so 8.3 names expand alike). */
+export function canonicalDirAsync(p: string): Promise<string> {
+  return new Promise((resolve) => {
+    fs.realpath.native(p, (err, resolved) => resolve(err ? path.resolve(p) : resolved));
+  });
+}
+
 /** True when `file` is `root` itself or somewhere beneath it. */
 export function isInsideDir(root: string, file: string): boolean {
   const rel = path.relative(path.resolve(root), path.resolve(file));

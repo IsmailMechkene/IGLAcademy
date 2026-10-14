@@ -4,10 +4,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   scanCourseDirectory,
+  scanCourseDirectoryAsync,
   titleFromFileName,
   isVideoFile,
   isPracticeFile,
   isResourceFile,
+  isCoverImage,
 } from '../electron/services/courseScanner';
 
 const tmpRoots: string[] = [];
@@ -92,6 +94,27 @@ describe('course folder scanning', () => {
     expect(scanned.thumbnailPath).toBe(path.join(fs.realpathSync.native(root), 'cover.jpg'));
   });
 
+  it('never uses lecture screenshots as the cover', () => {
+    const root = makeTempCourse({
+      '01. Introduction': ['1. Welcome.mp4', '3. 2019-12-03_04-27-30.PNG'],
+      '02. Basics': ['1. Lesson.mp4', 'Cover-art.jpg'],
+    });
+    const scanned = scanCourseDirectory(root);
+    expect(scanned.thumbnailPath).toBe(path.join(fs.realpathSync.native(root), '02. Basics', 'Cover-art.jpg'));
+
+    const noCover = makeTempCourse({ 'Section A': ['lesson.mp4', 'diagram.png'] });
+    expect(scanCourseDirectory(noCover).thumbnailPath).toBeNull();
+  });
+
+  it('recognises cover images by place and name', () => {
+    const root = path.resolve('/courses/aws');
+    expect(isCoverImage(root, path.join(root, 'anything.png'))).toBe(true);
+    expect(isCoverImage(root, path.join(root, 'Part 1', 'poster.webp'))).toBe(true);
+    expect(isCoverImage(root, path.join(root, 'Part 1', 'diagram.png'))).toBe(false);
+    expect(isCoverImage(root, path.join(root, 'notes.pdf'))).toBe(false);
+    expect(isCoverImage(root, path.resolve('/elsewhere/cover.jpg'))).toBe(false);
+  });
+
   it('detects HTML practice tests as lessons, including practice-only folders', () => {
     const root = makeTempCourse({
       '01. practice-test': [
@@ -149,5 +172,27 @@ describe('file type helpers', () => {
   it('cleans filenames into display titles', () => {
     expect(titleFromFileName('01_-_Welcome_to_AWS.mp4')).toBe('01 - Welcome to AWS');
     expect(titleFromFileName('lesson.webm')).toBe('lesson');
+  });
+});
+
+describe('async course folder scanning', () => {
+  it('produces exactly what the synchronous scan does', async () => {
+    const root = makeTempCourse({
+      '': ['cover.jpg', 'intro.mp4', 'notes.txt'],
+      '01 - Basics': ['02 - Two.mp4', '01 - One.mp4', 'quiz.html'],
+      '01 - Basics/Resources': ['sheet.pdf'],
+      'Part 1/Videos': ['a.mkv'],
+      'Part 2/Videos': ['b.webm'],
+      'Extras': ['diagram.png'],
+      '.hidden': ['secret.mp4'],
+    });
+
+    expect(await scanCourseDirectoryAsync(root)).toEqual(scanCourseDirectory(root));
+  });
+
+  it('rejects a folder that does not exist', async () => {
+    await expect(scanCourseDirectoryAsync(path.join(os.tmpdir(), 'ismalearn-no-such-course'))).rejects.toThrow(
+      /Course directory not found/,
+    );
   });
 });

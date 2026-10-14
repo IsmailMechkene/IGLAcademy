@@ -4,7 +4,7 @@ import { listSources } from '../database/repositories/practice';
 import {
   registerSource,
   unregisterSource,
-  scanLibrary,
+  scanLibraryAsync,
   loadExamFile,
   submitExamAttempt,
   getExamSession,
@@ -55,7 +55,7 @@ export function registerPracticeIpc(): void {
   });
 
   ipcMain.handle('practice:scan', () => {
-    return scanLibrary(db);
+    return scanLibraryAsync(db);
   });
 
   ipcMain.handle('practice:load', (_e, filePath: unknown) => {

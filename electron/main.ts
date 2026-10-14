@@ -19,7 +19,7 @@ import { registerSearchIpc } from './ipc/search';
 import { registerUpdatesIpc } from './ipc/updates';
 import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
 import { initThumbnailCache } from './services/thumbnailService';
-import { createAutoBackup } from './services/backupService';
+import { createAutoBackupAsync } from './services/backupService';
 import { getAllSettings } from './database/repositories/settings';
 import { initUpdates } from './services/updateService';
 
@@ -96,6 +96,8 @@ function createWindow(): void {
     icon: path.join(__dirname, '../assets/icon.png'),
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
+    // Shown on first paint, already maximized: no empty frame that then jumps.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -107,7 +109,10 @@ function createWindow(): void {
   });
 
   // Start maximized so the app fills the screen by default.
-  win.maximize();
+  win.once('ready-to-show', () => {
+    win.maximize();
+    win.show();
+  });
 
   // Open external links in the system browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -219,15 +224,21 @@ app.whenReady().then(() => {
   }
   registerMediaProtocol();
 
-  // Automatic safety backup (before anything else touches the database)
+  // Automatic safety backup. Not awaited: the online backup runs in steps
+  // alongside window creation instead of delaying it, and stays consistent
+  // if the app writes meanwhile.
+  const backupFailed = (err: unknown) =>
+    log('error', 'automatic backup failed', err instanceof Error ? err.message : String(err));
   try {
     const settings = getAllSettings(db);
     if (settings.autoBackup !== false) {
-      const dest = createAutoBackup(db, userData, settings.backupKeep);
-      if (dest) log('info', `automatic backup: ${dest}`);
+      const startedAt = Date.now();
+      createAutoBackupAsync(db, userData, settings.backupKeep)
+        .then((dest) => log('info', `automatic backup: ${dest} (${Date.now() - startedAt} ms)`))
+        .catch(backupFailed);
     }
   } catch (err) {
-    log('error', 'automatic backup failed', err instanceof Error ? err.message : String(err));
+    backupFailed(err);
   }
 
   registerCourseIpc();

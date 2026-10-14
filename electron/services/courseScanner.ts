@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { naturalSort } from './naturalSort';
-import { canonicalDir } from './pathIdentity';
+import { canonicalDir, canonicalDirAsync } from './pathIdentity';
 
 // Supported media / resource formats
 export const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mkv'] as const;
@@ -12,6 +12,20 @@ export const RESOURCE_EXTENSIONS = [
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
 ] as const;
 export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'] as const;
+
+/** File names (without extension) that mark an image as course artwork. */
+const COVER_NAME = /^(cover|thumbnail|thumb|poster|folder|banner|artwork)([\s._-].*)?$/i;
+
+/**
+ * Whether `imagePath` can serve as the cover of the course at `root`: any
+ * image directly in the root, or a cover-named image anywhere below it.
+ */
+export function isCoverImage(root: string, imagePath: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(imagePath));
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  if (!IMAGE_EXTENSIONS.includes(path.extname(rel).toLowerCase() as (typeof IMAGE_EXTENSIONS)[number])) return false;
+  return path.dirname(rel) === '.' || COVER_NAME.test(path.parse(rel).name);
+}
 
 export interface ScannedResource {
   fileName: string;
@@ -109,6 +123,85 @@ interface DirEntry {
   rel: string; // relative path from course root ('' for root)
 }
 
+interface DirContent {
+  videos: string[];
+  practice: string[];
+  resources: ScannedResource[];
+}
+
+/** What one directory read yields: its subfolders and its classified files. */
+function classifyEntries(dir: string, rel: string, entries: fs.Dirent[]): { subdirs: DirEntry[]; content: DirContent } {
+  const subdirs: DirEntry[] = [];
+  const content: DirContent = { videos: [], practice: [], resources: [] };
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue; // skip hidden files and folders
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      subdirs.push({ dir: full, rel: rel ? path.posix.join(rel, entry.name) : entry.name });
+    } else if (!entry.isFile()) {
+      continue;
+    } else if (isVideoFile(entry.name)) {
+      content.videos.push(full);
+    } else if (isPracticeFile(entry.name)) {
+      content.practice.push(full);
+    } else if (isResourceFile(entry.name)) {
+      content.resources.push({
+        fileName: entry.name,
+        filePath: full,
+        kind: isImageFile(entry.name) ? 'image' : 'resource',
+      });
+    }
+  }
+  return { subdirs, content };
+}
+
+interface CollectedTree {
+  /** Every directory, depth-first in listing order (root first). */
+  dirs: DirEntry[];
+  contentByDir: Map<string, DirContent>;
+}
+
+function collectTreeSync(root: string): CollectedTree {
+  const tree: CollectedTree = { dirs: [], contentByDir: new Map() };
+  const visit = (d: DirEntry) => {
+    tree.dirs.push(d);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(d.dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable directory — skip
+    }
+    const { subdirs, content } = classifyEntries(d.dir, d.rel, entries);
+    tree.contentByDir.set(d.rel, content);
+    for (const sub of subdirs) visit(sub);
+  };
+  visit({ dir: root, rel: '' });
+  return tree;
+}
+
+/**
+ * Same walk as `collectTreeSync`, with the directory reads off the main
+ * thread. Folders are read one at a time: the libuv pool also serves video
+ * streaming, and a burst of reads would stall playback during a rescan.
+ */
+async function collectTreeAsync(root: string): Promise<CollectedTree> {
+  const tree: CollectedTree = { dirs: [], contentByDir: new Map() };
+  const visit = async (d: DirEntry) => {
+    tree.dirs.push(d);
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(d.dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable directory — skip
+    }
+    const { subdirs, content } = classifyEntries(d.dir, d.rel, entries);
+    tree.contentByDir.set(d.rel, content);
+    for (const sub of subdirs) await visit(sub);
+  };
+  await visit({ dir: root, rel: '' });
+  return tree;
+}
+
 /**
  * Recursively scans a course directory and produces a structured course:
  * - subfolders become sections
@@ -122,60 +215,21 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     throw new Error(`Course directory not found: ${root}`);
   }
+  return buildCourse(root, collectTreeSync(root));
+}
 
-  // Collect all directories (relative to root)
-  const dirs: DirEntry[] = [{ dir: root, rel: '' }];
-  const walk = (dir: string, rel: string) => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return; // unreadable directory — skip
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name.startsWith('.')) continue; // skip hidden folders
-      const childRel = rel ? path.posix.join(rel, entry.name) : entry.name;
-      dirs.push({ dir: path.join(dir, entry.name), rel: childRel });
-      walk(path.join(dir, entry.name), childRel);
-    }
-  };
-  walk(root, '');
-
-  // Group files by directory
-  interface DirContent {
-    videos: string[];
-    practice: string[];
-    resources: ScannedResource[];
+/** `scanCourseDirectory` without blocking the main process on disk I/O. */
+export async function scanCourseDirectoryAsync(rootPath: string): Promise<ScannedCourse> {
+  const root = await canonicalDirAsync(rootPath);
+  const stat = await fs.promises.stat(root).catch(() => null);
+  if (!stat?.isDirectory()) {
+    throw new Error(`Course directory not found: ${root}`);
   }
-  const contentByDir = new Map<string, DirContent>();
-  for (const { dir, rel } of dirs) {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    const content: DirContent = { videos: [], practice: [], resources: [] };
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (entry.name.startsWith('.')) continue;
-      const filePath = path.join(dir, entry.name);
-      if (isVideoFile(entry.name)) {
-        content.videos.push(filePath);
-      } else if (isPracticeFile(entry.name)) {
-        content.practice.push(filePath);
-      } else if (isResourceFile(entry.name)) {
-        content.resources.push({
-          fileName: entry.name,
-          filePath,
-          kind: isImageFile(entry.name) ? 'image' : 'resource',
-        });
-      }
-    }
-    contentByDir.set(rel, content);
-  }
+  return buildCourse(root, await collectTreeAsync(root));
+}
 
+/** Turns a collected directory tree into sections, lessons and a cover. */
+function buildCourse(root: string, { dirs, contentByDir }: CollectedTree): ScannedCourse {
   /** Merges videos + practice files into one naturally-sorted lesson list. */
   const buildLessons = (videos: string[], practice: string[]): ScannedLesson[] => {
     const files = [
@@ -288,14 +342,18 @@ export function scanCourseDirectory(rootPath: string): ScannedCourse {
     });
   });
 
-  // Thumbnail: prefer an image at the root, else the first image found in natural order
+  // Cover: an image at the root, else one named like a cover in a subfolder.
+  // Any other image deeper down is lecture material (screenshots, diagrams),
+  // not artwork; without a cover the app uses a frame from the first video.
   let thumbnailPath: string | null = null;
   const rootImages = (contentByDir.get('')?.resources ?? []).filter((r) => r.kind === 'image');
   if (rootImages.length > 0) {
     thumbnailPath = rootImages[0].filePath;
   } else {
     outer: for (const { rel } of sortedDirs) {
-      const imgs = (contentByDir.get(rel)?.resources ?? []).filter((r) => r.kind === 'image');
+      const imgs = (contentByDir.get(rel)?.resources ?? []).filter(
+        (r) => r.kind === 'image' && COVER_NAME.test(path.parse(r.fileName).name),
+      );
       if (imgs.length > 0) {
         thumbnailPath = imgs[0].filePath;
         break outer;

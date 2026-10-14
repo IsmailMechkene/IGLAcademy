@@ -6,7 +6,7 @@ import {
   renameSection, renameLesson, updateLessonDuration, getLesson, getSection,
 } from '../database/repositories/courses';
 import type { LessonContext } from '../../src/types';
-import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
+import { importCourseAsync, rescanCourseAsync, getCourseHealth, relocateCourseRoot, forgetLesson } from '../services/courseImportService';
 import { getCourseThumbnailUrl } from '../services/fileService';
 import { requireId, requireString, requirePath, optionalString, ValidationError } from '../services/validate';
 
@@ -49,11 +49,11 @@ export function registerCourseIpc(): void {
     if (result.canceled || result.filePaths.length === 0) {
       return { status: 'cancelled' as const };
     }
-    return importCourse(db, result.filePaths[0]);
+    return importCourseAsync(db, result.filePaths[0]);
   });
 
   ipcMain.handle('courses:importPath', (_e, dirPath: unknown) => {
-    return importCourse(db, requirePath(dirPath, 'dirPath'));
+    return importCourseAsync(db, requirePath(dirPath, 'dirPath'));
   });
 
   ipcMain.handle('courses:rename', (_e, courseId: unknown, title: unknown) => {
@@ -65,7 +65,7 @@ export function registerCourseIpc(): void {
   });
 
   ipcMain.handle('courses:rescan', (_e, courseId: unknown) => {
-    return rescanCourse(db, requireId(courseId, 'courseId'));
+    return rescanCourseAsync(db, requireId(courseId, 'courseId'));
   });
 
   ipcMain.handle('courses:remove', (_e, courseId: unknown) => {
@@ -117,12 +117,12 @@ export function registerCourseIpc(): void {
   });
 
   // Rescans every course (used by the library button and startup setting).
-  ipcMain.handle('courses:rescanAll', () => {
+  ipcMain.handle('courses:rescanAll', async () => {
     const summary = { courses: 0, addedLessons: 0, addedSections: 0, missingLessons: 0, restoredLessons: 0, errors: 0 };
     const ids = (db.prepare('SELECT id FROM courses').all() as Array<{ id: number }>).map((r) => r.id);
     for (const courseId of ids) {
       try {
-        const r = rescanCourse(db, courseId);
+        const r = await rescanCourseAsync(db, courseId);
         summary.courses += 1;
         if (r.status === 'ok') {
           summary.addedLessons += r.addedLessons;

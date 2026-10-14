@@ -94,6 +94,12 @@ export function createDatabase(dbPath: string): Database.Database {
   const database = new Database(dbPath);
   try {
     database.pragma('journal_mode = WAL');
+    // With WAL, NORMAL skips the fsync on every commit. It cannot corrupt the
+    // file; a power cut can at most drop the last commits (a few seconds of
+    // progress), which FULL would have kept.
+    database.pragma('synchronous = NORMAL');
+    database.pragma('temp_store = MEMORY');
+    database.pragma('cache_size = -16000'); // ~16 MB page cache
     database.pragma('foreign_keys = ON');
     runMigrations(database);
   } catch (err) {

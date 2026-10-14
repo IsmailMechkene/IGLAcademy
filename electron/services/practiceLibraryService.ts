@@ -86,6 +86,28 @@ function filesOfSource(source: ExamSource): string[] {
   return naturalSort(files, (f) => f);
 }
 
+/** `filesOfSource` with the directory reads off the main thread, one folder at a time. */
+async function filesOfSourceAsync(source: ExamSource): Promise<string[]> {
+  if (source.kind === 'file') return [source.path];
+  const files: string[] = [];
+  const walk = async (dir: string) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.isFile() && isPracticeFile(entry.name)) files.push(full);
+    }
+  };
+  await walk(source.path);
+  return naturalSort(files, (f) => f);
+}
+
 /** The file must live under a registered source — the renderer never sees raw paths. */
 function requireRegisteredFile(db: Database.Database, filePath: string): string {
   const resolved = path.resolve(filePath);
@@ -107,66 +129,104 @@ type ParsedExam = ReturnType<typeof parsePracticeExamHtml>;
 const parseCache = new Map<string, { stamp: string; parsed: ParsedExam }>();
 const PARSE_CACHE_LIMIT = 64;
 
-function parseExamFile(file: string): ParsedExam {
-  const st = fs.statSync(file);
-  const stamp = `${st.size}:${st.mtimeMs}`;
+function cachedParse(file: string, stamp: string): ParsedExam | undefined {
   const key = pathKey(file);
   const hit = parseCache.get(key);
-  if (hit && hit.stamp === stamp) {
-    parseCache.delete(key); // refresh LRU position
-    parseCache.set(key, hit);
-    return hit.parsed;
-  }
-  const parsed = parsePracticeExamHtml(fs.readFileSync(file, 'utf8'));
-  parseCache.set(key, { stamp, parsed });
+  if (!hit || hit.stamp !== stamp) return undefined;
+  parseCache.delete(key); // refresh LRU position
+  parseCache.set(key, hit);
+  return hit.parsed;
+}
+
+function parseAndCache(file: string, stamp: string, html: string): ParsedExam {
+  const parsed = parsePracticeExamHtml(html);
+  parseCache.set(pathKey(file), { stamp, parsed });
   while (parseCache.size > PARSE_CACHE_LIMIT) parseCache.delete(parseCache.keys().next().value as string);
   return parsed;
 }
 
+function parseExamFile(file: string): ParsedExam {
+  const st = fs.statSync(file);
+  const stamp = `${st.size}:${st.mtimeMs}`;
+  return cachedParse(file, stamp) ?? parseAndCache(file, stamp, fs.readFileSync(file, 'utf8'));
+}
+
+/** `parseExamFile` with the stat and read off the main thread (parsing itself stays here). */
+async function parseExamFileAsync(file: string): Promise<ParsedExam> {
+  const st = await fs.promises.stat(file);
+  const stamp = `${st.size}:${st.mtimeMs}`;
+  return cachedParse(file, stamp) ?? parseAndCache(file, stamp, await fs.promises.readFile(file, 'utf8'));
+}
+
 /** Scans all sources and summarizes every practice test found. */
 export function scanLibrary(db: Database.Database): PracticeExamFile[] {
+  const files = uniqueFiles(listSources(db).map(filesOfSource));
+  return summarizeLibrary(db, files, parseExamFile);
+}
+
+/** `scanLibrary` with the folder walks and file reads off the main thread (used by IPC). */
+export async function scanLibraryAsync(db: Database.Database): Promise<PracticeExamFile[]> {
+  const files = uniqueFiles(await Promise.all(listSources(db).map(filesOfSourceAsync)));
+  const parsed = new Map<string, { exam?: ParsedExam; error?: unknown }>();
+  for (const file of files) {
+    try {
+      parsed.set(file, { exam: await parseExamFileAsync(file) });
+    } catch (error) {
+      parsed.set(file, { error });
+    }
+  }
+  return summarizeLibrary(db, files, (file) => {
+    const entry = parsed.get(file)!;
+    if (entry.error !== undefined) throw entry.error;
+    return entry.exam!;
+  });
+}
+
+/** Overlapping sources (e.g. a file inside a registered folder) list each test only once. */
+function uniqueFiles(filesBySource: string[][]): string[] {
+  return [...new Set(filesBySource.flat())];
+}
+
+function summarizeLibrary(
+  db: Database.Database,
+  files: string[],
+  parse: (file: string) => ParsedExam,
+): PracticeExamFile[] {
   const out: PracticeExamFile[] = [];
-  const seen = new Set<string>();
-  for (const source of listSources(db)) {
-    for (const file of filesOfSource(source)) {
-      // Overlapping sources (e.g. a file inside a registered folder) list
-      // each test only once.
-      if (seen.has(file)) continue;
-      seen.add(file);
-      const stats = getPracticeStats(db, file);
-      try {
-        const parsed = parseExamFile(file);
-        if (!parsed || parsed.questions.length === 0) {
-          out.push({
-            filePath: file,
-            title: titleFromFileName(file),
-            questionCount: 0,
-            multiCount: 0,
-            skipped: parsed?.skipped ?? 0,
-            error: 'No usable questions found in this file.',
-            ...stats,
-          });
-          continue;
-        }
-        out.push({
-          filePath: file,
-          title: parsed.title || titleFromFileName(file),
-          questionCount: parsed.questions.length,
-          multiCount: parsed.questions.filter((q) => q.correctIndices.length > 1).length,
-          skipped: parsed.skipped,
-          ...stats,
-        });
-      } catch {
+  for (const file of files) {
+    const stats = getPracticeStats(db, file);
+    try {
+      const parsed = parse(file);
+      if (!parsed || parsed.questions.length === 0) {
         out.push({
           filePath: file,
           title: titleFromFileName(file),
           questionCount: 0,
           multiCount: 0,
-          skipped: 0,
-          error: 'Could not read this file.',
+          skipped: parsed?.skipped ?? 0,
+          error: 'No usable questions found in this file.',
           ...stats,
         });
+        continue;
       }
+      out.push({
+        filePath: file,
+        title: parsed.title || titleFromFileName(file),
+        questionCount: parsed.questions.length,
+        multiCount: parsed.questions.filter((q) => q.correctIndices.length > 1).length,
+        skipped: parsed.skipped,
+        ...stats,
+      });
+    } catch {
+      out.push({
+        filePath: file,
+        title: titleFromFileName(file),
+        questionCount: 0,
+        multiCount: 0,
+        skipped: 0,
+        error: 'Could not read this file.',
+        ...stats,
+      });
     }
   }
   return naturalSort(out, (f) => f.title);

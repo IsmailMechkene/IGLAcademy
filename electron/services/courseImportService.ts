@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { CourseHealth, ImportResult, RelocateResult, RescanResult } from '../../src/types';
-import { scanCourseDirectory } from './courseScanner';
+import { scanCourseDirectory, scanCourseDirectoryAsync, type ScannedCourse } from './courseScanner';
 import {
   insertCourse, getCourseBySourcePath, getCourse, insertSection, insertLesson,
   deleteLesson, deleteSection, updateLessonFilePath, getLesson,
@@ -21,8 +21,15 @@ import { pathKey, relKey, relDirOf } from './pathIdentity';
  * renamed or deleted — only references (absolute paths) are stored.
  */
 export function importCourse(db: Database.Database, rootPath: string): ImportResult {
-  const scanned = scanCourseDirectory(rootPath);
+  return importScannedCourse(db, scanCourseDirectory(rootPath));
+}
 
+/** `importCourse` with the folder scan off the main thread (used by IPC). */
+export async function importCourseAsync(db: Database.Database, rootPath: string): Promise<ImportResult> {
+  return importScannedCourse(db, await scanCourseDirectoryAsync(rootPath));
+}
+
+function importScannedCourse(db: Database.Database, scanned: ScannedCourse): ImportResult {
   if (scanned.lessonCount === 0) {
     return {
       status: 'error',
@@ -88,16 +95,40 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
  */
 export function rescanCourse(db: Database.Database, courseId: number): RescanResult {
   const course = getCourse(db, courseId);
-  if (!course) {
-    return {
-      status: 'error',
-      addedLessons: 0,
-      addedSections: 0,
-      missingLessons: 0,
-      restoredLessons: 0,
-      error: 'Course not found',
-    };
+  if (!course) return rescanFailed('Course not found');
+  let scanned: ScannedCourse;
+  try {
+    scanned = scanCourseDirectory(course.sourcePath);
+  } catch (err) {
+    return rescanFailed(err instanceof Error ? err.message : 'Rescan failed');
   }
+  return applyRescan(db, courseId, course.sourcePath, scanned);
+}
+
+/** `rescanCourse` with the folder scan off the main thread (used by IPC). */
+export async function rescanCourseAsync(db: Database.Database, courseId: number): Promise<RescanResult> {
+  const course = getCourse(db, courseId);
+  if (!course) return rescanFailed('Course not found');
+  let scanned: ScannedCourse;
+  try {
+    scanned = await scanCourseDirectoryAsync(course.sourcePath);
+  } catch (err) {
+    return rescanFailed(err instanceof Error ? err.message : 'Rescan failed');
+  }
+  return applyRescan(db, courseId, course.sourcePath, scanned);
+}
+
+function rescanFailed(error: string): RescanResult {
+  return { status: 'error', addedLessons: 0, addedSections: 0, missingLessons: 0, restoredLessons: 0, error };
+}
+
+/** Merges a scan of `scannedFrom` into the course (see `rescanCourse`). */
+function applyRescan(db: Database.Database, courseId: number, scannedFrom: string, scanned: ScannedCourse): RescanResult {
+  // An async scan leaves a window for the course to be removed or relocated;
+  // merging a scan of the old folder would flag every lesson missing.
+  const course = getCourse(db, courseId);
+  if (!course) return rescanFailed('Course not found');
+  if (course.sourcePath !== scannedFrom) return rescanFailed('The course folder changed during the rescan. Try again.');
 
   let addedLessons = 0;
   let addedSections = 0;
@@ -105,7 +136,6 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
   let restoredLessons = 0;
 
   const tx = db.transaction(() => {
-    const scanned = scanCourseDirectory(course.sourcePath);
     const root = scanned.rootPath;
     const detail = getCourseDetail(db, courseId);
     if (!detail) throw new Error('Course not found');
@@ -326,6 +356,11 @@ export function rescanCourse(db: Database.Database, courseId: number): RescanRes
           deleteSection(db, section.id);
         }
       }
+    }
+
+    // Pick up a cover added to the folder since import (or drop a removed one)
+    if (scanned.thumbnailPath !== course.thumbnailPath) {
+      updateCourse(db, courseId, { thumbnailPath: scanned.thumbnailPath });
     }
   });
 

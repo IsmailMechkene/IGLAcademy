@@ -6,6 +6,7 @@ import { getCourse, getLesson } from '../database/repositories/courses';
 import { getResource } from '../database/repositories/resources';
 import { findSubtitleFiles, srtToVtt } from './subtitles';
 import { isInsideDir } from './pathIdentity';
+import { isCoverImage } from './courseScanner';
 import {
   ensureGeneratedThumbnail, generatedThumbnailPath, hasGeneratedThumbnail, type ThumbnailGenerator,
 } from './thumbnailService';
@@ -46,20 +47,24 @@ export function resolveLessonFile(db: Database.Database, lessonId: number): stri
 export function resolveThumbnailFile(db: Database.Database, courseId: number): string {
   const course = getCourse(db, courseId);
   if (!course) throw new Error('Course not found');
-  if (!course.thumbnailPath) {
-    // No cover in the folder: serve the frame the app generated, from its own
-    // data folder (a path built from the id, never from stored data).
-    const generated = generatedThumbnailPath(courseId);
-    if (generated && fs.existsSync(generated)) return generated;
-    throw new Error('No thumbnail for this course');
+  if (course.thumbnailPath) {
+    // Same containment rule as lessons and resources: the media scheme never
+    // serves a file from outside the course's own folder.
+    if (!isInsideDir(course.sourcePath, course.thumbnailPath)) {
+      throw new Error('Access denied: file is outside the course directory');
+    }
+    // Older imports stored lecture screenshots as covers; those fall through
+    // to the generated frame.
+    if (isCoverImage(course.sourcePath, course.thumbnailPath)) {
+      if (!fs.existsSync(course.thumbnailPath)) throw new Error('Thumbnail file not found');
+      return path.resolve(course.thumbnailPath);
+    }
   }
-  // Same containment rule as lessons and resources: the media scheme never
-  // serves a file from outside the course's own folder.
-  if (!isInsideDir(course.sourcePath, course.thumbnailPath)) {
-    throw new Error('Access denied: file is outside the course directory');
-  }
-  if (!fs.existsSync(course.thumbnailPath)) throw new Error('Thumbnail file not found');
-  return path.resolve(course.thumbnailPath);
+  // No cover in the folder: serve the frame the app generated, from its own
+  // data folder (a path built from the id, never from stored data).
+  const generated = generatedThumbnailPath(courseId);
+  if (generated && fs.existsSync(generated)) return generated;
+  throw new Error('No thumbnail for this course');
 }
 
 /** Resolves a resource file, enforcing the same course containment as lessons. */
@@ -138,7 +143,8 @@ export async function getCourseThumbnailUrl(
 ): Promise<string | null> {
   const course = getCourse(db, courseId);
   if (!course) return null;
-  if (course.thumbnailPath) return fs.existsSync(course.thumbnailPath) ? `media://thumb/${courseId}` : null;
+  // Older imports stored lecture screenshots as covers; those are ignored.
+  if (course.thumbnailPath && isCoverImage(course.sourcePath, course.thumbnailPath)) return fs.existsSync(course.thumbnailPath) ? `media://thumb/${courseId}` : null;
   if (hasGeneratedThumbnail(courseId)) return `media://thumb/${courseId}`;
   if (!generate) return null;
   return (await ensureGeneratedThumbnail(db, courseId, generate)) ? `media://thumb/${courseId}` : null;

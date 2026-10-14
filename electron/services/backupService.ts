@@ -176,7 +176,25 @@ export function createAutoBackup(db: Database.Database, userDataDir: string, kee
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const dest = path.join(backupDir(userDataDir), `ismalearn-${stamp}.db`);
   fs.copyFileSync(live, dest);
+  pruneBackups(userDataDir, keepCount);
+  return dest;
+}
 
+/**
+ * `createAutoBackup` for startup, which must not hold up the window. SQLite's
+ * online backup copies the database in small steps between event-loop turns
+ * and yields a consistent snapshot even if the app writes meanwhile, so no
+ * checkpoint is needed.
+ */
+export async function createAutoBackupAsync(db: Database.Database, userDataDir: string, keepCount: number): Promise<string> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const dest = path.join(backupDir(userDataDir), `ismalearn-${stamp}.db`);
+  await db.backup(dest);
+  pruneBackups(userDataDir, keepCount);
+  return dest;
+}
+
+function pruneBackups(userDataDir: string, keepCount: number): void {
   const keep = Math.max(1, Math.min(30, Math.floor(keepCount) || 7));
   const existing = listBackups(userDataDir);
   for (const old of existing.slice(keep)) {
@@ -186,5 +204,4 @@ export function createAutoBackup(db: Database.Database, userDataDir: string, kee
       // best effort
     }
   }
-  return dest;
 }

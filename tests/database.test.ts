@@ -6,7 +6,7 @@ import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, quarantineDatabase } from '../electron/database/connection';
 import { MIGRATIONS } from '../electron/database/migrations';
-import { importCourse, rescanCourse, getCourseHealth, relocateCourseRoot, forgetLesson } from '../electron/services/courseImportService';
+import { importCourse, importCourseAsync, rescanCourse, rescanCourseAsync, getCourseHealth, relocateCourseRoot, forgetLesson } from '../electron/services/courseImportService';
 import {
   listCourses,
   getCourse,
@@ -43,6 +43,7 @@ import {
 import {
   registerSource,
   scanLibrary,
+  scanLibraryAsync,
   loadExamFile,
   submitExamAttempt,
   listExamAttempts,
@@ -71,7 +72,7 @@ import {
   updateFlashcardState,
   listDecks,
 } from '../electron/database/repositories/study';
-import { exportData, importData } from '../electron/services/backupService';
+import { exportData, importData, createAutoBackupAsync } from '../electron/services/backupService';
 import { getAllSettings, setSetting } from '../electron/database/repositories/settings';
 import {
   checkFileExists,
@@ -298,7 +299,7 @@ describe('course import', () => {
     expect(listCourses(db)[0].lessonCount).toBe(3);
   });
 
-  it('registers exam sources and scans them live from disk', () => {
+  it('registers exam sources and scans them live from disk', async () => {
     const root = trackTemp(fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-lib-')));
     const examPayload = (title: string) => ({
       quiz_title: title,
@@ -335,6 +336,7 @@ describe('course import', () => {
     expect(() => registerSource(db, path.join(root, 'missing-dir'), 'dir')).toThrow();
 
     const scanned = scanLibrary(db);
+    expect(await scanLibraryAsync(db)).toEqual(scanned);
     // folder scan + single-file source overlap on Exam One: listed once
     expect(scanned.filter((f) => !f.error)).toHaveLength(2);
     expect(scanned.filter((f) => f.error)).toHaveLength(1);
@@ -1235,5 +1237,53 @@ describe('scheduling timestamps (M21)', () => {
     expect(listDueFlashcards(upgraded, 1, '2030-01-01T11:00:00.000Z')).toHaveLength(0);
     expect(listDueFlashcards(upgraded, 1, '2030-01-01T13:00:00.000Z')).toHaveLength(1);
     upgraded.close();
+  });
+});
+
+describe('async import, rescan and backup', () => {
+  it('imports and rescans like the synchronous versions', async () => {
+    const courseRoot = makeCourseDir();
+    const imported = await importCourseAsync(db, courseRoot);
+    expect(imported).toMatchObject({ status: 'imported', lessonCount: 3, sectionCount: 2 });
+    expect(await importCourseAsync(db, courseRoot)).toMatchObject({ status: 'duplicate' });
+
+    const { courseId } = imported as { courseId: number };
+    fs.writeFileSync(path.join(courseRoot, '02 - EC2', '02 - Volumes.mp4'), '');
+    fs.rmSync(path.join(courseRoot, '01 - Introduction', '02 - Overview.mp4'));
+    expect(await rescanCourseAsync(db, courseId)).toEqual({
+      status: 'ok', addedLessons: 1, addedSections: 0, missingLessons: 1, restoredLessons: 0,
+    });
+    expect(rescanCourse(db, courseId)).toEqual({
+      status: 'ok', addedLessons: 0, addedSections: 0, missingLessons: 0, restoredLessons: 0,
+    });
+  });
+
+  it('drops a rescan whose course was relocated while the folder was being read', async () => {
+    const courseRoot = makeCourseDir();
+    const { courseId } = (await importCourseAsync(db, courseRoot)) as { courseId: number };
+    const pending = rescanCourseAsync(db, courseId);
+    db.prepare('UPDATE courses SET source_path = ? WHERE id = ?').run(path.join(courseRoot, '..', 'moved'), courseId);
+    expect(await pending).toMatchObject({ status: 'error', missingLessons: 0 });
+    expect(getCourseDetail(db, courseId)!.sections.flatMap((s) => s.lessons).every((l) => !l.missingSince)).toBe(true);
+  });
+
+  it('writes a readable backup without blocking and prunes old ones', async () => {
+    setSetting(db, 'theme', 'light');
+    const backupsDir = path.join(dbDir, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
+    for (let i = 0; i < 3; i++) {
+      const old = path.join(backupsDir, `ismalearn-old-${i}.db`);
+      fs.writeFileSync(old, '');
+      fs.utimesSync(old, new Date(2020, 0, i + 1), new Date(2020, 0, i + 1));
+    }
+
+    const dest = await createAutoBackupAsync(db, dbDir, 2);
+    expect(fs.readdirSync(backupsDir).sort()).toEqual([path.basename(dest), 'ismalearn-old-2.db'].sort());
+    const copy = new SqliteDatabase(dest, { readonly: true });
+    try {
+      expect(getAllSettings(copy).theme).toBe('light');
+    } finally {
+      copy.close();
+    }
   });
 });
