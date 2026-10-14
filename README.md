@@ -39,7 +39,7 @@ npm test            # unit tests
 npm run test:e2e    # end-to-end tests (run `npm run build` first)
 npm run typecheck   # TypeScript check
 npm run lint        # ESLint
-npm run dist        # build the Windows installer into release/
+npm run installer   # build the Windows installer into release/
 ```
 
 ## Data

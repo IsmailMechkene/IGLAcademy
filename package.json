@@ -19,6 +19,7 @@
     "rebuild:node": "npm rebuild better-sqlite3",
     "dist": "npm run build && electron-builder --win nsis --publish never",
     "dist:prepackaged": "electron-builder --win nsis --publish never --prepackaged release/win-unpacked",
+    "installer": "npm run dist && npm run brand-exe && npm run dist:prepackaged",
     "brand-exe": "node scripts/brand-exe.mjs",
     "icon": "node scripts/generate-icon.mjs",
     "postinstall": "node scripts/ensure-abi.mjs electron"

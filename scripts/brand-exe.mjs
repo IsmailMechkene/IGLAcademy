@@ -24,9 +24,24 @@ if (!fs.existsSync(exePath)) {
 }
 
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ismalearn-rcedit-'));
-const sevenZip = path.join(
-  root, 'node_modules', '7zip-bin', 'win', 'x64', '7za.exe',
-);
+const builderCache = path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), 'electron-builder', 'Cache');
+
+/** Files named `name` one level below `dir` (electron-builder's cache layout). */
+function inSubdirs(dir, ...name) {
+  try {
+    return fs.readdirSync(dir).map((d) => path.join(dir, d, ...name)).filter((p) => fs.existsSync(p));
+  } catch {
+    return [];
+  }
+}
+
+// electron-builder 26 dropped the 7zip-bin package; it downloads 7-Zip into
+// its cache instead. Check the old location, that cache, then electron-winstaller's copy.
+const sevenZip = [
+  path.join(root, 'node_modules', '7zip-bin', 'win', 'x64', '7za.exe'),
+  ...inSubdirs(path.join(builderCache, '7zip@1.0.0'), 'bin', '7za.exe'),
+  path.join(root, 'node_modules', 'electron-winstaller', 'vendor', '7z.exe'),
+].find((p) => fs.existsSync(p));
 
 async function download(url, dest) {
   const res = await fetch(url);
@@ -37,10 +52,16 @@ async function download(url, dest) {
 
 let rcedit;
 const cached = path.join(workDir, 'rcedit-x64.exe');
+// A previous electron-builder run may already have unpacked winCodeSign.
+const fromBuilderCache = inSubdirs(path.join(builderCache, 'winCodeSign'), 'rcedit-x64.exe')[0];
 if (process.env.RCEDIT_PATH && fs.existsSync(process.env.RCEDIT_PATH)) {
   rcedit = process.env.RCEDIT_PATH;
   console.log(`[brand-exe] using provided rcedit: ${rcedit}`);
+} else if (fromBuilderCache) {
+  rcedit = fromBuilderCache;
+  console.log(`[brand-exe] using cached rcedit: ${rcedit}`);
 } else {
+  if (!sevenZip) throw new Error('7-Zip not found; set RCEDIT_PATH to an rcedit-x64.exe instead');
   // Extract only rcedit from the winCodeSign bundle (single-file extraction
   // avoids the macOS symlinks that break full extraction without privileges).
   const url =

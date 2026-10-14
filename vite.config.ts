@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Packaging output. A watch handle on these folders makes Windows refuse
+      // electron-builder's rename (EPERM) while `npm run dev` is running.
+      ignored: ['**/release/**', '**/release-*/**', '**/dist-electron/**'],
+    },
   },
   build: {
     outDir: 'dist',
