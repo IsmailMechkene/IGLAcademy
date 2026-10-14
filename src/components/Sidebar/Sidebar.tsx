@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Brain, ChevronsLeft, ChevronsRight, Download, FileCheck2, GraduationCap, Home, LibraryBig, Play,
+  Brain, ChevronsLeft, Download, FileCheck2, Home, LibraryBig, Play,
   Settings as SettingsIcon, StickyNote,
 } from 'lucide-react';
 import { useApp } from '../../App';
@@ -10,6 +10,7 @@ import { api } from '../../services/api';
 import { useUpdateStatus } from '../../services/updates';
 import { cleanTitle } from '../../utils/titles';
 import CourseCover from '../CourseCover/CourseCover';
+import logo from '../../../assets/icon.png';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
@@ -133,7 +134,7 @@ export default function Sidebar() {
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
       <div className={styles.brand}>
         <div className={styles.logoMark}>
-          <GraduationCap size={18} strokeWidth={2.2} />
+          <img src={logo} alt="" draggable={false} />
         </div>
         <span className={styles.logoName}>IGLAcademy</span>
         <button
@@ -142,7 +143,7 @@ export default function Sidebar() {
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+          <ChevronsLeft size={16} className={styles.collapseIcon} />
         </button>
       </div>
 
@@ -158,35 +159,41 @@ export default function Sidebar() {
       </nav>
 
       <div className={styles.footer}>
-        {current && !collapsed && (
-          <button
-            className={styles.continueCard}
-            onClick={() =>
-              navigate(
-                current.lessonId !== null
-                  ? { name: 'player', courseId: current.course.id, lessonId: current.lessonId }
-                  : { name: 'course', courseId: current.course.id },
-              )
-            }
-            title={`Continue ${cleanTitle(current.course.title)}`}
-          >
-            <span className={styles.continueEyebrow}>Continue learning</span>
-            <span className={styles.continueRow}>
-              <span className={styles.continueThumb}>
-                <CourseCover courseId={current.course.id} title={current.course.title} compact />
-              </span>
-              <span className={styles.continueTitle}>{cleanTitle(current.course.title)}</span>
-              <span className={styles.continuePlay} aria-hidden="true">
-                <Play size={12} fill="currentColor" />
-              </span>
-            </span>
-            <span className={styles.continueProgress}>
-              <span style={{ width: `${current.course.progressPercent}%` }} />
-            </span>
-            <span className={styles.continueMeta}>
-              {current.course.completedCount}/{current.course.lessonCount} lessons · {current.course.progressPercent}%
-            </span>
-          </button>
+        {current && (
+          // Stays mounted while collapsed so it can fold away instead of vanishing.
+          <div className={styles.reveal} aria-hidden={collapsed || undefined}>
+            <div className={styles.revealInner}>
+              <button
+                className={styles.continueCard}
+                tabIndex={collapsed ? -1 : undefined}
+                onClick={() =>
+                  navigate(
+                    current.lessonId !== null
+                      ? { name: 'player', courseId: current.course.id, lessonId: current.lessonId }
+                      : { name: 'course', courseId: current.course.id },
+                  )
+                }
+                title={`Continue ${cleanTitle(current.course.title)}`}
+              >
+                <span className={styles.continueEyebrow}>Continue learning</span>
+                <span className={styles.continueRow}>
+                  <span className={styles.continueThumb}>
+                    <CourseCover courseId={current.course.id} title={current.course.title} compact />
+                  </span>
+                  <span className={styles.continueTitle}>{cleanTitle(current.course.title)}</span>
+                  <span className={styles.continuePlay} aria-hidden="true">
+                    <Play size={12} fill="currentColor" />
+                  </span>
+                </span>
+                <span className={styles.continueProgress}>
+                  <span style={{ width: `${current.course.progressPercent}%` }} />
+                </span>
+                <span className={styles.continueMeta}>
+                  {current.course.completedCount}/{current.course.lessonCount} lessons · {current.course.progressPercent}%
+                </span>
+              </button>
+            </div>
+          </div>
         )}
         {update.state === 'ready' && (
           <button
@@ -195,16 +202,20 @@ export default function Sidebar() {
             title={`IGLAcademy ${update.version} is ready. Restart to update.`}
           >
             <Download size={16} aria-hidden="true" />
-            {!collapsed && (
-              <span className={styles.updateText}>
-                <span className={styles.updateTitle}>Restart to update</span>
-                <span className={styles.updateMeta}>Version {update.version} is ready</span>
-              </span>
-            )}
+            <span className={styles.updateText}>
+              <span className={styles.updateTitle}>Restart to update</span>
+              <span className={styles.updateMeta}>Version {update.version} is ready</span>
+            </span>
           </button>
         )}
         {renderItem(SETTINGS)}
-        {version && !collapsed && <div className={styles.version}>Version {version} · stored on this device</div>}
+        {version && (
+          <div className={styles.reveal} aria-hidden={collapsed || undefined}>
+            <div className={styles.revealInner}>
+              <div className={styles.version}>Version {version} · stored on this device</div>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

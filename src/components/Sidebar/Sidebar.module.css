@@ -1,4 +1,7 @@
 .sidebar {
+  /* One curve for every part of the collapse, so they move as one. */
+  --sb-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --sb-duration: 0.32s;
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100%;
@@ -7,25 +10,31 @@
   display: flex;
   flex-direction: column;
   padding: 0 12px 14px;
-  transition: width var(--transition-base), min-width var(--transition-base), padding var(--transition-base);
+  transition: width var(--sb-duration) var(--sb-ease), min-width var(--sb-duration) var(--sb-ease),
+    padding var(--sb-duration) var(--sb-ease);
   overflow: hidden;
 }
 
+/* Icons keep their place in both states: 14px of padding centres the 20px
+   icons (inside 10px item padding) in the 68px rail, so collapsing slides
+   them 2px instead of re-laying them out. */
 .collapsed {
   width: var(--sidebar-rail);
   min-width: var(--sidebar-rail);
-  padding: 0 10px 14px;
+  padding: 0 14px 14px;
 }
 
 /* ---------- brand ---------- */
 
 .brand {
+  position: relative;
   height: var(--topbar-height);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 4px 0 6px;
   flex-shrink: 0;
+  transition: padding var(--sb-duration) var(--sb-ease);
 }
 
 .logoMark {
@@ -36,9 +45,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  background: linear-gradient(145deg, #a99dfb 0%, var(--accent) 45%, #5a47d9 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px -6px var(--accent-glow);
+  transition: opacity var(--transition-fast), transform var(--sb-duration) var(--sb-ease);
+}
+
+.logoMark img {
+  width: 100%;
+  height: 100%;
+  user-select: none;
 }
 
 .logoName {
@@ -46,7 +59,10 @@
   font-weight: 700;
   letter-spacing: -0.02em;
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.2s var(--sb-ease) 0.08s, transform var(--sb-duration) var(--sb-ease);
 }
 
 .collapseBtn {
@@ -65,6 +81,14 @@
   flex-shrink: 0;
 }
 
+.collapseIcon {
+  transition: transform var(--sb-duration) var(--sb-ease);
+}
+
+.collapsed .collapseIcon {
+  transform: rotate(180deg);
+}
+
 .sidebar:hover .collapseBtn,
 .collapseBtn:focus-visible {
   opacity: 1;
@@ -76,23 +100,41 @@
 }
 
 .collapsed .brand {
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 0 0;
-  height: auto;
-  min-height: var(--topbar-height);
+  padding-left: 5px;
 }
 
+/* Text fades and slides out quickly on collapse, and back in a beat after
+   the rail starts opening, so it never shows squashed. */
 .collapsed .logoName,
 .collapsed .navLabel,
 .collapsed .groupLabel,
-.collapsed .navBadge {
-  display: none;
+.collapsed .updateText {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition-duration: 0.12s;
+  transition-delay: 0s;
 }
 
+/* In the rail the expand button sits on the logo and swaps with it on hover. */
 .collapsed .collapseBtn {
-  opacity: 1;
+  position: absolute;
+  left: 5px;
+  top: calc(50% - 15px);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.collapsed .brand:hover .logoMark,
+.collapsed .brand:focus-within .logoMark {
+  opacity: 0;
+  transform: scale(0.85);
+}
+
+.collapsed .brand:not(:hover):not(:focus-within) .collapseBtn {
+  opacity: 0;
+  /* Hide at once: right after collapsing it would otherwise fade out over the logo. */
+  transition: none;
 }
 
 /* ---------- navigation ---------- */
@@ -108,6 +150,7 @@
 }
 
 .group {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -121,6 +164,26 @@
   color: var(--text-muted);
   padding: 0 10px 6px;
   opacity: 0.85;
+  white-space: nowrap;
+  transition: opacity 0.2s var(--sb-ease) 0.08s, transform var(--sb-duration) var(--sb-ease);
+}
+
+/* Keeps each group's place in the rail with a short rule. */
+.group::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  width: 20px;
+  height: 1px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 0.12s var(--sb-ease);
+}
+
+.collapsed .group::before {
+  opacity: 1;
+  transition: opacity 0.2s var(--sb-ease) 0.12s;
 }
 
 .navItem {
@@ -143,11 +206,6 @@
   white-space: nowrap;
 }
 
-.collapsed .navItem {
-  justify-content: center;
-  padding: 0;
-}
-
 .navItem:hover {
   background: var(--bg-hover);
   color: var(--text);
@@ -164,6 +222,7 @@
   position: absolute;
   left: -12px;
   top: 9px;
+  transition: left var(--sb-duration) var(--sb-ease);
   bottom: 9px;
   width: 3px;
   border-radius: 0 3px 3px 0;
@@ -172,7 +231,7 @@
 }
 
 .collapsed .navItem.active::before {
-  left: -10px;
+  left: -14px;
 }
 
 .navItem.active .navIcon {
@@ -192,6 +251,7 @@
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.2s var(--sb-ease) 0.08s, transform var(--sb-duration) var(--sb-ease);
 }
 
 .navBadge {
@@ -206,6 +266,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--sb-duration) var(--sb-ease);
+}
+
+/* In the rail the count shrinks to a dot on the icon, so it isn't lost. */
+.collapsed .navBadge {
+  position: absolute;
+  top: 7px;
+  left: 25px;
+  min-width: 0;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  font-size: 0;
+  box-shadow: 0 0 0 2px var(--bg-sidebar);
+  animation: badgeDot 0.24s var(--sb-ease);
+}
+
+@keyframes badgeDot {
+  from {
+    transform: scale(0);
+  }
 }
 
 /* ---------- footer ---------- */
@@ -213,12 +295,35 @@
 .footer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
+/* Folds its content to zero height (and fades it) in the rail. */
+.reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows var(--sb-duration) var(--sb-ease), opacity 0.2s var(--sb-ease) 0.1s;
+}
+
+.revealInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.collapsed .reveal {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition: grid-template-rows var(--sb-duration) var(--sb-ease), opacity 0.12s var(--sb-ease);
+}
+
 .continueCard {
+  width: 100%;
+  min-width: calc(var(--sidebar-width) - 24px);
+  margin-bottom: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -307,7 +412,8 @@
 .version {
   font-size: 10.5px;
   color: var(--text-muted);
-  padding: 2px 10px 0;
+  white-space: nowrap;
+  padding: 10px 10px 0;
   opacity: 0.8;
 }
 
@@ -316,6 +422,9 @@
   align-items: center;
   gap: 10px;
   width: 100%;
+  margin-bottom: 8px;
+  overflow: hidden;
+  white-space: nowrap;
   padding: 9px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--accent-border);
@@ -323,7 +432,12 @@
   color: var(--accent);
   cursor: pointer;
   text-align: left;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    padding var(--sb-duration) var(--sb-ease);
+}
+
+.updateReady > svg {
+  flex-shrink: 0;
 }
 
 .updateReady:hover {
@@ -331,14 +445,14 @@
 }
 
 .collapsed .updateReady {
-  justify-content: center;
-  padding: 9px 0;
+  padding: 9px 11px;
 }
 
 .updateText {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  transition: opacity 0.2s var(--sb-ease) 0.08s, transform var(--sb-duration) var(--sb-ease);
 }
 
 .updateTitle {
