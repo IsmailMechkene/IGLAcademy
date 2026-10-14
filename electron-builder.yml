@@ -39,5 +39,5 @@ nsis:
 publish:
   provider: github
   owner: IsmailMechkene
-  repo: IsmaLearn
+  repo: IGLAcademy
   releaseType: release

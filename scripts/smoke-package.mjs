@@ -30,7 +30,7 @@ console.log(`[smoke] installer exists: ${installers[0]}`);
 const updateConfig = path.join(root, 'release', 'win-unpacked', 'resources', 'app-update.yml');
 if (!fs.existsSync(updateConfig)) fail('resources/app-update.yml is missing (no publish config?)');
 const feed = fs.readFileSync(updateConfig, 'utf8');
-if (!/provider: github/.test(feed) || !/repo: IsmaLearn/.test(feed)) fail(`unexpected app-update.yml:
+if (!/provider: github/.test(feed) || !/repo: IGLAcademy/.test(feed)) fail(`unexpected app-update.yml:
 ${feed}`);
 const latestYml = path.join(root, 'release', 'latest.yml');
 if (!fs.existsSync(latestYml)) fail('release/latest.yml is missing');
