@@ -1,7 +1,8 @@
 /* IGLAcademy design system
  *
  * Near-black zinc surfaces layered by lightness, hairline translucent borders,
- * one violet accent used sparingly, Inter (bundled) with tight display type.
+ * brand colours from the logo (coral accent, teal for progress) used sparingly,
+ * Inter (bundled) with tight display type.
  * Every page lays out inside `.page` + `.page-header`; component modules only
  * style their own internals.
  */
@@ -9,26 +10,31 @@
 :root,
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg: #09090c;
-  --bg-sidebar: #0c0c10;
-  --bg-elevated: #111116;
-  --bg-card: #131318;
-  --bg-card-hover: #17171d;
+  --bg: #0a0e0f;
+  --bg-sidebar: #0c1112;
+  --bg-elevated: #111718;
+  --bg-card: #131a1b;
+  --bg-card-hover: #172021;
   --bg-hover: rgba(255, 255, 255, 0.045);
   --bg-active: rgba(255, 255, 255, 0.075);
   --bg-inset: rgba(0, 0, 0, 0.25);
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.13);
-  --text: #f2f2f5;
-  --text-secondary: #a4a4b0;
-  --text-muted: #7c7c89;
-  --accent: #8d7ff8;
-  --accent-hover: #a094fa;
-  --accent-strong: #7262f0;
-  --accent-soft: rgba(141, 127, 248, 0.12);
-  --accent-border: rgba(141, 127, 248, 0.38);
-  --accent-glow: rgba(141, 127, 248, 0.28);
+  --text: #eef3f2;
+  --text-secondary: #a2aeac;
+  --text-muted: #788685;
+  /* Coral, from the logo's cap */
+  --accent: #f76440;
+  --accent-hover: #ff7a59;
+  --accent-strong: #e4512d;
+  --accent-soft: rgba(247, 100, 64, 0.12);
+  --accent-border: rgba(247, 100, 64, 0.4);
+  --accent-glow: rgba(247, 100, 64, 0.28);
   --on-accent: #ffffff;
+  /* Teal, from the logo's books: progress and learning */
+  --brand-teal: #2ba89c;
+  --brand-teal-strong: #1b8a80;
+  --brand-teal-soft: rgba(43, 168, 156, 0.14);
   --success: #3ccf91;
   --success-soft: rgba(60, 207, 145, 0.12);
   --danger: #f2686b;
@@ -46,25 +52,29 @@
 
 [data-theme='light'] {
   color-scheme: light;
-  --bg: #f6f6f8;
-  --bg-sidebar: #fbfbfc;
+  /* Warm off-white, like the logo's background */
+  --bg: #f7f6f2;
+  --bg-sidebar: #fbfaf7;
   --bg-elevated: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: #fcfcfd;
-  --bg-hover: rgba(20, 20, 40, 0.045);
-  --bg-active: rgba(20, 20, 40, 0.075);
-  --bg-inset: rgba(20, 20, 40, 0.035);
-  --border: rgba(20, 20, 40, 0.09);
-  --border-strong: rgba(20, 20, 40, 0.16);
-  --text: #15151c;
-  --text-secondary: #52525e;
-  --text-muted: #6c6c79;
-  --accent: #6a56e6;
-  --accent-hover: #5a46d8;
-  --accent-strong: #5a46d8;
-  --accent-soft: rgba(106, 86, 230, 0.09);
-  --accent-border: rgba(106, 86, 230, 0.32);
-  --accent-glow: rgba(106, 86, 230, 0.2);
+  --bg-card-hover: #fdfcfa;
+  --bg-hover: rgba(15, 37, 38, 0.045);
+  --bg-active: rgba(15, 37, 38, 0.075);
+  --bg-inset: rgba(15, 37, 38, 0.035);
+  --border: rgba(15, 37, 38, 0.1);
+  --border-strong: rgba(15, 37, 38, 0.17);
+  --text: #0f2526;
+  --text-secondary: #4a5c5c;
+  --text-muted: #657473;
+  --accent: #d64a24;
+  --accent-hover: #c2401b;
+  --accent-strong: #c2401b;
+  --accent-soft: rgba(214, 74, 36, 0.09);
+  --accent-border: rgba(214, 74, 36, 0.32);
+  --accent-glow: rgba(214, 74, 36, 0.2);
+  --brand-teal: #0b6364;
+  --brand-teal-strong: #084d4e;
+  --brand-teal-soft: rgba(11, 99, 100, 0.1);
   --success: #0e9a68;
   --success-soft: rgba(14, 154, 104, 0.1);
   --danger: #d6393c;
@@ -193,12 +203,12 @@ textarea {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ada3fb, var(--accent-hover));
+  background: linear-gradient(180deg, #ff8d70, var(--accent-hover));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 22px -6px var(--accent-glow);
 }
 
 [data-theme='light'] .btn-primary {
-  background: linear-gradient(180deg, #7764ec, var(--accent));
+  background: linear-gradient(180deg, #e2552f, var(--accent));
 }
 
 [data-theme='light'] .btn-primary:hover:not(:disabled) {

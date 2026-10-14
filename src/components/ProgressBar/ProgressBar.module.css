@@ -13,8 +13,9 @@
 .bar {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-strong), var(--accent-hover));
-  box-shadow: 0 0 10px var(--accent-glow);
+  /* Teal, like the books in the logo */
+  background: linear-gradient(90deg, var(--brand-teal-strong), var(--brand-teal));
+  box-shadow: 0 0 10px var(--brand-teal-soft);
   transition: width 0.45s var(--ease);
 }
 

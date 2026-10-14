@@ -95,7 +95,7 @@ function createWindow(): void {
     minHeight: 680,
     title: 'IGLAcademy',
     icon: path.join(__dirname, '../assets/icon.png'),
-    backgroundColor: '#0f1117',
+    backgroundColor: '#0a0e0f',
     autoHideMenuBar: true,
     // No native title bar: the app draws its own (Topbar / player header).
     frame: false,

@@ -21,8 +21,8 @@ function ProgressRing({ percent, size = 76 }: { percent: number; size?: number }
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" className={styles.ring}>
       <defs>
         <linearGradient id="ringGradient" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent-hover)" />
-          <stop offset="100%" stopColor="var(--accent-strong)" />
+          <stop offset="0%" stopColor="var(--brand-teal)" />
+          <stop offset="100%" stopColor="var(--brand-teal-strong)" />
         </linearGradient>
       </defs>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-active)" strokeWidth={stroke} />
@@ -269,7 +269,7 @@ export default function Dashboard() {
             className={`card card-interactive ${styles.stat} ${styles.statButton}`}
             onClick={() => navigate({ name: 'review' })}
           >
-            <span className={`${styles.statIcon} ${styles.iconViolet}`}>
+            <span className={`${styles.statIcon} ${styles.iconAccent}`}>
               <Brain size={17} />
             </span>
             <div style={{ flex: 1 }}>

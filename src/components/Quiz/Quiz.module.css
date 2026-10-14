@@ -230,7 +230,7 @@
 .progressFill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-strong), var(--accent-hover));
+  background: linear-gradient(90deg, var(--brand-teal-strong), var(--brand-teal));
   transition: width 0.3s var(--ease);
 }
 
