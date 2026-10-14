@@ -333,6 +333,8 @@ export interface AppSettings {
   dailyGoalMinutes: number;
   /** Look for new versions on startup and every few hours, and download them in the background. */
   autoUpdate: boolean;
+  /** Last app version whose "What's new" notes were shown (empty: none yet). */
+  lastSeenVersion: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -347,6 +349,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   examMistakesToFlashcards: true,
   dailyGoalMinutes: 20,
   autoUpdate: true,
+  lastSeenVersion: '',
 };
 
 /**

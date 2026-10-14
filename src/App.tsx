@@ -5,6 +5,9 @@ import { api } from './services/api';
 import Sidebar from './components/Sidebar/Sidebar';
 import Topbar from './components/Topbar/Topbar';
 import CommandPalette from './components/CommandPalette/CommandPalette';
+import WhatsNew from './components/WhatsNew/WhatsNew';
+import { entriesSince, parseChangelog, type ChangelogEntry } from './utils/changelog';
+import changelogText from '../CHANGELOG.md?raw';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Library from './pages/Library/Library';
 import CourseDetail from './pages/CourseDetail/CourseDetail';
@@ -123,6 +126,37 @@ export default function App() {
       .catch(() => undefined);
   }, []);
 
+  // "What's new" once after an update. A fresh install (no courses yet) just
+  // records its version. 1.0.0 never recorded one, so an existing library with
+  // no recorded version is an upgrade: it gets the current version's notes.
+  const [whatsNew, setWhatsNew] = useState<{ version: string; entries: ChangelogEntry[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [version, lastSeen, library] = await Promise.all([
+        api().app.getVersion(),
+        api().settings.get<string>('lastSeenVersion'),
+        api().app.getLibraryInfo(),
+      ]);
+      if (cancelled || !version || lastSeen === version) return;
+      const entries = parseChangelog(changelogText);
+      const unseen = lastSeen
+        ? entriesSince(entries, lastSeen, version)
+        : library.courseCount > 0
+          ? entries.filter((e) => e.version === version)
+          : [];
+      if (unseen.length > 0) setWhatsNew({ version, entries: unseen });
+      else void api().settings.set('lastSeenVersion', version);
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const closeWhatsNew = useCallback(() => {
+    if (whatsNew) updateSettings({ lastSeenVersion: whatsNew.version });
+    setWhatsNew(null);
+  }, [whatsNew, updateSettings]);
+
   // Apply theme; 'system' follows the OS color scheme and tracks changes
   useEffect(() => {
     const resolveTheme = () => {
@@ -218,6 +252,7 @@ export default function App() {
       }}
     >
       {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} navigate={navigate} />}
+      {whatsNew && <WhatsNew entries={whatsNew.entries} onClose={closeWhatsNew} />}
       {focus ? (
         <main className="app-focus" key={pageKey}>
           {renderPage()}

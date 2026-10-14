@@ -53,6 +53,11 @@ export function validateSetting(key: string, value: unknown): void {
     case 'examSecondsPerQuestion':
       requireIntIn(value, key, 30, 600, 'must be 30–600 seconds');
       return;
+    case 'lastSeenVersion':
+      if (typeof value !== 'string' || !/^(\d+\.\d+\.\d+[\w.-]*)?$/.test(value) || value.length > 32) {
+        throw new ValidationError('lastSeenVersion must be a version like 1.2.3');
+      }
+      return;
     default: {
       // Adding a setting to AppSettings without a rule here is a compile error.
       const unhandled: never = key;

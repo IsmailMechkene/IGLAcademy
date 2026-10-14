@@ -24,6 +24,8 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle('settings:reset', () => {
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+      // Not a preference: resetting it would show "What's new" again.
+      if (key === 'lastSeenVersion') continue;
       setSetting(db, key, value);
     }
     return getAllSettings(db);

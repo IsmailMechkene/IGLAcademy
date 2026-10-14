@@ -34,6 +34,12 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      # Fails fast when CHANGELOG.md has no entry for this version. The same
+      # text is shown in the app's "What's new" dialog after the update.
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -71,5 +77,5 @@ jobs:
             "release/IGLAcademy-Setup-$VERSION.exe.blockmap" \
             release/latest.yml \
             --title "IGLAcademy $VERSION" \
-            --generate-notes \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --verify-tag
