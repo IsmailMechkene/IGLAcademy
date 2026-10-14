@@ -17,7 +17,7 @@ export function describeUpdateError(err: unknown): string {
     return 'The downloaded update was damaged. It will be downloaded again on the next check.';
   }
   if (/not signed by the application owner/i.test(text)) {
-    return 'The downloaded update is not signed by IsmaLearn, so it was not installed.';
+    return 'The downloaded update is not signed by IGLAcademy, so it was not installed.';
   }
   return 'The update check failed. Details are in the logs.';
 }

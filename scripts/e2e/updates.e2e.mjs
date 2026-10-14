@@ -17,10 +17,10 @@ const CACHE_DIR = path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), 'ismalearn-
 /** A feed whose latest.yml can be swapped between checks. */
 function startFeed() {
   const installer = crypto.randomBytes(256 * 1024);
-  const name = `IsmaLearn-Setup-${NEXT}.exe`;
+  const name = `IGLAcademy-Setup-${NEXT}.exe`;
   const sha512 = crypto.createHash('sha512').update(installer).digest('base64');
   const manifests = {
-    current: `version: ${CURRENT}\nfiles:\n  - url: IsmaLearn-Setup-${CURRENT}.exe\n    sha512: ${sha512}\n    size: ${installer.length}\npath: IsmaLearn-Setup-${CURRENT}.exe\nsha512: ${sha512}\nreleaseDate: '2026-01-01T00:00:00.000Z'\n`,
+    current: `version: ${CURRENT}\nfiles:\n  - url: IGLAcademy-Setup-${CURRENT}.exe\n    sha512: ${sha512}\n    size: ${installer.length}\npath: IGLAcademy-Setup-${CURRENT}.exe\nsha512: ${sha512}\nreleaseDate: '2026-01-01T00:00:00.000Z'\n`,
     // Same file, but the published checksum doesn't match it (a tampered or
     // truncated download).
     tampered: `version: ${NEXT}

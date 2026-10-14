@@ -135,7 +135,7 @@ export default function Sidebar() {
         <div className={styles.logoMark}>
           <GraduationCap size={18} strokeWidth={2.2} />
         </div>
-        <span className={styles.logoName}>IsmaLearn</span>
+        <span className={styles.logoName}>IGLAcademy</span>
         <button
           className={styles.collapseBtn}
           onClick={toggle}
@@ -192,7 +192,7 @@ export default function Sidebar() {
           <button
             className={styles.updateReady}
             onClick={() => void api().updates.install()}
-            title={`IsmaLearn ${update.version} is ready. Restart to update.`}
+            title={`IGLAcademy ${update.version} is ready. Restart to update.`}
           >
             <Download size={16} aria-hidden="true" />
             {!collapsed && (

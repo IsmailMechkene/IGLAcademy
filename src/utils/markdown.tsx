@@ -4,7 +4,7 @@ import { formatTime } from './format';
 /**
  * Minimal, safe Markdown renderer (no dangerouslySetInnerHTML).
  * Supports: headings, bold, italic, inline code, code blocks, links,
- * unordered/ordered lists, paragraphs, and IsmaLearn timestamps [mm:ss](t=seconds).
+ * unordered/ordered lists, paragraphs, and IGLAcademy timestamps [mm:ss](t=seconds).
  */
 
 export interface MarkdownRenderOptions {

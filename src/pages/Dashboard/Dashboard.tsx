@@ -112,7 +112,7 @@ export default function Dashboard() {
     <div className="page-header">
       <div>
         <div className="eyebrow">{today}</div>
-        <h1 style={{ marginTop: 6 }}>{courses.length === 0 && !loading ? 'Welcome to IsmaLearn' : greeting()}</h1>
+        <h1 style={{ marginTop: 6 }}>{courses.length === 0 && !loading ? 'Welcome to IGLAcademy' : greeting()}</h1>
         <p>
           {courses.length === 0 && !loading
             ? 'Your courses. Your pace. Your progress — all on this device.'
@@ -162,12 +162,12 @@ export default function Dashboard() {
           </div>
           <h2>Bring your first course in</h2>
           <p>
-            Point IsmaLearn at a folder of downloaded videos. Sections and lessons are organised
+            Point IGLAcademy at a folder of downloaded videos. Sections and lessons are organised
             automatically, and your files are never moved or changed.
           </p>
           <ol className={styles.steps}>
             <li><span>1</span>Choose a course folder</li>
-            <li><span>2</span>IsmaLearn builds sections and lessons</li>
+            <li><span>2</span>IGLAcademy builds sections and lessons</li>
             <li><span>3</span>Learn — progress is saved locally</li>
           </ol>
           <button className="btn btn-primary btn-lg" onClick={() => navigate({ name: 'library' })}>

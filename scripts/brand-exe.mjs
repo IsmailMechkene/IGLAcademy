@@ -1,9 +1,9 @@
-// Applies the IsmaLearn icon and version metadata to the packaged Windows
+// Applies the IGLAcademy icon and version metadata to the packaged Windows
 // executable using rcedit (normally done by electron-builder, which cannot run
 // here because the winCodeSign tools need symlink privileges to extract).
 //
 // Usage: node scripts/brand-exe.mjs [path-to-exe]
-// Defaults to release/win-unpacked/IsmaLearn.exe
+// Defaults to release/win-unpacked/IGLAcademy.exe
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
 const exePath =
-  process.argv[2] ?? path.join(root, 'release', 'win-unpacked', 'IsmaLearn.exe');
+  process.argv[2] ?? path.join(root, 'release', 'win-unpacked', 'IGLAcademy.exe');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 if (!fs.existsSync(exePath)) {
@@ -62,9 +62,9 @@ execFileSync(
     '--set-icon', path.join(root, 'build', 'icon.ico'),
     '--set-file-version', pkg.version,
     '--set-product-version', pkg.version,
-    '--set-version-string', 'CompanyName', 'IsmaLearn',
-    '--set-version-string', 'FileDescription', 'IsmaLearn — Your courses. Your pace. Your progress.',
-    '--set-version-string', 'ProductName', 'IsmaLearn',
+    '--set-version-string', 'CompanyName', 'IGLAcademy',
+    '--set-version-string', 'FileDescription', 'IGLAcademy — Your courses. Your pace. Your progress.',
+    '--set-version-string', 'ProductName', 'IGLAcademy',
   ],
   { stdio: 'inherit' },
 );

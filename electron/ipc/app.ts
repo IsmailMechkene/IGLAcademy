@@ -31,7 +31,7 @@ export function registerAppIpc(): void {
 
   ipcMain.handle('app:showError', (_e, title: unknown, message: unknown) => {
     dialog.showErrorBox(
-      typeof title === 'string' ? title : 'IsmaLearn',
+      typeof title === 'string' ? title : 'IGLAcademy',
       typeof message === 'string' ? message : 'An unexpected error occurred.',
     );
   });

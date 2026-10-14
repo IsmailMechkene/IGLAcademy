@@ -35,7 +35,7 @@ function updateText(status: UpdateStatus): string {
     case 'downloading':
       return `Downloading version ${status.version}… ${status.percent}%`;
     case 'ready':
-      return `Version ${status.version} is ready. Restart IsmaLearn to finish updating, or it installs the next time you close the app.`;
+      return `Version ${status.version} is ready. Restart IGLAcademy to finish updating, or it installs the next time you close the app.`;
     case 'error':
       return status.message;
   }
@@ -376,7 +376,7 @@ export default function Settings() {
         </h2>
         <div className={styles.settingRow}>
           <div className={styles.settingInfo}>
-            <div className={styles.settingLabel}>IsmaLearn {version || '—'}</div>
+            <div className={styles.settingLabel}>IGLAcademy {version || '—'}</div>
             <div className={styles.settingDesc} data-testid="update-status" aria-live="polite">
               {updateText(update)}
             </div>
@@ -449,7 +449,7 @@ export default function Settings() {
           About
         </h2>
         <p className="secondary" style={{ margin: 0, fontSize: 13 }}>
-          <strong>IsmaLearn</strong> — Your courses. Your pace. Your progress.
+          <strong>IGLAcademy</strong> — Your courses. Your pace. Your progress.
           A local-first learning platform for studying downloaded courses offline.
         </p>
       </section>

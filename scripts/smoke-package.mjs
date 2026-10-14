@@ -15,12 +15,12 @@ function fail(message) {
   process.exit(1);
 }
 
-const unpackedExe = path.join(root, 'release', 'win-unpacked', 'IsmaLearn.exe');
+const unpackedExe = path.join(root, 'release', 'win-unpacked', 'IGLAcademy.exe');
 const installers = fs.existsSync(path.join(root, 'release'))
-  ? fs.readdirSync(path.join(root, 'release')).filter((f) => f.endsWith('.exe') && f !== 'IsmaLearn.exe')
+  ? fs.readdirSync(path.join(root, 'release')).filter((f) => f.endsWith('.exe') && f !== 'IGLAcademy.exe')
   : [];
 
-if (!fs.existsSync(unpackedExe)) fail('release/win-unpacked/IsmaLearn.exe is missing (run npm run dist first)');
+if (!fs.existsSync(unpackedExe)) fail('release/win-unpacked/IGLAcademy.exe is missing (run npm run dist first)');
 console.log('[smoke] unpacked exe exists');
 if (installers.length === 0) fail('no NSIS installer found in release/');
 console.log(`[smoke] installer exists: ${installers[0]}`);
@@ -36,11 +36,11 @@ const latestYml = path.join(root, 'release', 'latest.yml');
 if (!fs.existsSync(latestYml)) fail('release/latest.yml is missing');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const latest = fs.readFileSync(latestYml, 'utf8');
-if (!latest.includes(`version: ${version}`) || !latest.includes(`IsmaLearn-Setup-${version}.exe`)) {
-  fail(`latest.yml does not describe IsmaLearn-Setup-${version}.exe:
+if (!latest.includes(`version: ${version}`) || !latest.includes(`IGLAcademy-Setup-${version}.exe`)) {
+  fail(`latest.yml does not describe IGLAcademy-Setup-${version}.exe:
 ${latest}`);
 }
-if (!fs.existsSync(path.join(root, 'release', `IsmaLearn-Setup-${version}.exe`))) fail(`IsmaLearn-Setup-${version}.exe is missing`);
+if (!fs.existsSync(path.join(root, 'release', `IGLAcademy-Setup-${version}.exe`))) fail(`IGLAcademy-Setup-${version}.exe is missing`);
 console.log('[smoke] update feed config and latest.yml are in place');
 
 // A throwaway profile: booting the packaged app against the real userData

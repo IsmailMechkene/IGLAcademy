@@ -26,7 +26,7 @@ export function importCourse(db: Database.Database, rootPath: string): ImportRes
   if (scanned.lessonCount === 0) {
     return {
       status: 'error',
-      error: 'No videos or practice tests were found in the selected folder. IsmaLearn imports courses that contain MP4, WebM, MKV or HTML practice-test files.',
+      error: 'No videos or practice tests were found in the selected folder. IGLAcademy imports courses that contain MP4, WebM, MKV or HTML practice-test files.',
     };
   }
 

@@ -11,9 +11,9 @@ export function registerBackupIpc(): void {
 
   ipcMain.handle('backup:export', async () => {
     const result = await dialog.showSaveDialog({
-      title: 'Export IsmaLearn data',
+      title: 'Export IGLAcademy data',
       defaultPath: `ismalearn-backup-${new Date().toISOString().slice(0, 10)}.json`,
-      filters: [{ name: 'IsmaLearn backup', extensions: ['json'] }],
+      filters: [{ name: 'IGLAcademy backup', extensions: ['json'] }],
     });
     if (result.canceled || !result.filePath) return null;
     const data = exportData(db, app.getVersion());
@@ -25,9 +25,9 @@ export function registerBackupIpc(): void {
   // Replaces ALL data with the backup file, after an automatic safety backup.
   ipcMain.handle('backup:import', async () => {
     const picked = await dialog.showOpenDialog({
-      title: 'Import IsmaLearn backup (replaces all data)',
+      title: 'Import IGLAcademy backup (replaces all data)',
       properties: ['openFile'],
-      filters: [{ name: 'IsmaLearn backup', extensions: ['json'] }],
+      filters: [{ name: 'IGLAcademy backup', extensions: ['json'] }],
     });
     if (picked.canceled || picked.filePaths.length === 0) return { status: 'cancelled' as const };
 

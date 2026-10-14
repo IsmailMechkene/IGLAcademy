@@ -1,5 +1,5 @@
 // Parses single-file HTML practice exams (ダウンロード-style dumps that embed
-// a `const quizData = {...}` JSON blob) into native IsmaLearn quiz content.
+// a `const quizData = {...}` JSON blob) into native IGLAcademy quiz content.
 // Pure logic — no Electron, filesystem, or database access, fully testable.
 
 export interface ParsedPracticeQuestion {

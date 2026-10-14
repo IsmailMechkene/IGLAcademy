@@ -1,5 +1,5 @@
 appId: com.ismalearn.app
-productName: IsmaLearn
+productName: IGLAcademy
 directories:
   output: release
   buildResources: build
@@ -28,8 +28,8 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  shortcutName: IsmaLearn
-  uninstallDisplayName: IsmaLearn
+  shortcutName: IGLAcademy
+  uninstallDisplayName: IGLAcademy
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   # No spaces: the name is used as-is in latest.yml and as the GitHub asset name.

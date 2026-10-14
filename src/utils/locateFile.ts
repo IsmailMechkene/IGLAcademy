@@ -9,7 +9,7 @@ export function locateFileMessage(result: LocateFileResult): string {
   switch (result.status) {
     case 'outside-course':
       return (
-        `That file is outside the folder registered for "${result.courseTitle}", so IsmaLearn ` +
+        `That file is outside the folder registered for "${result.courseTitle}", so IGLAcademy ` +
         'cannot play it.\n\nPick a file inside the course folder, or use "Relocate folder" if the ' +
         'whole course has moved.'
       );

@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag like v1.1.0 (matching package.json "version") to build, test,
-# package and publish a GitHub Release. Installed copies of IsmaLearn pick it
+# package and publish a GitHub Release. Installed copies of IGLAcademy pick it
 # up through the in-app updater (latest.yml in the release).
 on:
   push:
@@ -67,9 +67,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "release/IsmaLearn-Setup-$VERSION.exe" \
-            "release/IsmaLearn-Setup-$VERSION.exe.blockmap" \
+            "release/IGLAcademy-Setup-$VERSION.exe" \
+            "release/IGLAcademy-Setup-$VERSION.exe.blockmap" \
             release/latest.yml \
-            --title "IsmaLearn $VERSION" \
+            --title "IGLAcademy $VERSION" \
             --generate-notes \
             --verify-tag

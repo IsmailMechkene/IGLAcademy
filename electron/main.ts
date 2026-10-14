@@ -25,6 +25,13 @@ import { initUpdates } from './services/updateService';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
+// The app was renamed from IsmaLearn to IGLAcademy. userData defaults to a
+// folder named after the product, so pin it to the original folder to keep
+// existing databases, backups and logs. --user-data-dir (tests) still wins.
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'IsmaLearn'));
+}
+
 // Custom schemes must be registered as privileged BEFORE the app is ready.
 // Without standard+secure privileges, Chromium silently refuses to load
 // media:// URLs in <video>/<img> tags (black player, no error surfaced).
@@ -85,7 +92,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1024,
     minHeight: 680,
-    title: 'IsmaLearn',
+    title: 'IGLAcademy',
     icon: path.join(__dirname, '../assets/icon.png'),
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
@@ -155,11 +162,11 @@ function openDatabaseOrRecover(): Database.Database | null {
       buttons: ['Start with a new database', 'Quit'],
       defaultId: 0,
       cancelId: 1,
-      title: 'IsmaLearn cannot open its database',
+      title: 'IGLAcademy cannot open its database',
       message: 'Your learning database could not be opened.',
       detail:
-        `${message}\n\nIsmaLearn can set the file aside (nothing is deleted) and start with a new, ` +
-        'empty database. Your existing file stays in the IsmaLearn folder, and backups are kept in ' +
+        `${message}\n\nIGLAcademy can set the file aside (nothing is deleted) and start with a new, ` +
+        'empty database. Your existing file stays in the app data folder, and backups are kept in ' +
         'its "backups" subfolder — both can be restored from Settings → Export / import data.',
     });
     if (choice !== 0) return null;
@@ -171,8 +178,8 @@ function openDatabaseOrRecover(): Database.Database | null {
     } catch (err2) {
       log('error', 'database still unusable after quarantine', err2 instanceof Error ? err2.message : String(err2));
       dialog.showErrorBox(
-        'IsmaLearn cannot start',
-        'A new database could not be created either. Check that the IsmaLearn folder is writable, then try again.',
+        'IGLAcademy cannot start',
+        'A new database could not be created either. Check that the app data folder is writable, then try again.',
       );
       return null;
     }
@@ -184,7 +191,7 @@ app.whenReady().then(() => {
   initLogger(userData);
   initThumbnailCache(userData);
   installCrashHandlers();
-  log('info', `IsmaLearn starting (v${app.getVersion()})`);
+  log('info', `IGLAcademy starting (v${app.getVersion()})`);
 
   // Packaging smoke test: verify boot + database, then exit without UI.
   if (process.argv.includes('--smoke-test')) {

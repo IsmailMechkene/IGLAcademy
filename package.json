@@ -1,9 +1,9 @@
 {
-  "name": "ismalearn",
+  "name": "iglacademy",
   "version": "1.0.0",
-  "description": "IsmaLearn — Your courses. Your pace. Your progress.",
+  "description": "IGLAcademy — Your courses. Your pace. Your progress.",
   "main": "dist-electron/main.js",
-  "author": "IsmaLearn",
+  "author": "IGLAcademy",
   "license": "MIT",
   "scripts": {
     "dev": "node scripts/ensure-abi.mjs electron && node scripts/dev.mjs",
