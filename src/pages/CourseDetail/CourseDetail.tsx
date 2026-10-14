@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeft, BookOpen, Check, ChevronDown, Clock, FileText, FileWarning, FolderInput, Layers, Pencil, Play,
+  ArrowLeft, BookOpen, Check, ChevronDown, Clock, ListChecks, FileWarning, FolderInput, Layers, Pencil, Play,
   RefreshCw,
 } from 'lucide-react';
 import type { CourseDetail as CourseDetailType, CourseHealth } from '../../types';
@@ -390,7 +390,7 @@ export default function CourseDetail({ courseId }: Props) {
                               ) : lesson.completed ? (
                                 <Check size={12} strokeWidth={3} />
                               ) : lesson.fileType === 'practice' ? (
-                                <FileText size={12} />
+                                <ListChecks size={12} />
                               ) : (
                                 <span>{firstNumber + i + 1}</span>
                               )}
@@ -406,7 +406,7 @@ export default function CourseDetail({ courseId }: Props) {
                               </span>
                             )}
                             <span className={styles.lessonType}>
-                              {lesson.fileType === 'practice' ? 'Practice' : lesson.duration !== null ? formatTime(lesson.duration) : 'Video'}
+                              {lesson.fileType === 'practice' ? 'Quiz' : lesson.duration !== null ? formatTime(lesson.duration) : 'Video'}
                             </span>
                             <span className={styles.lessonPlay} aria-hidden="true">
                               <Play size={12} fill="currentColor" />

@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, FileText, FileWarning, Play } from 'lucide-react';
+import { Check, ChevronDown, ListChecks, FileWarning, Play } from 'lucide-react';
 import type { CourseDetail, LessonWithProgress, SectionWithLessons } from '../../types';
 import { formatLength, formatTime } from '../../utils/format';
 import { splitOrdinal } from '../../utils/titles';
@@ -155,7 +155,7 @@ function LessonSidebar({ course, activeLessonId, onSelectLesson, className }: Pr
           ) : lesson.completed ? (
             <Check size={12} strokeWidth={3} />
           ) : lesson.fileType === 'practice' ? (
-            <FileText size={12} />
+            <ListChecks size={12} />
           ) : (
             <span className={styles.num}>{number}</span>
           )}
@@ -163,7 +163,7 @@ function LessonSidebar({ course, activeLessonId, onSelectLesson, className }: Pr
         <span className={styles.lessonText}>
           <span className={styles.lessonTitle}>{splitOrdinal(lesson.title).text}</span>
           <span className={styles.lessonMeta}>
-            {lesson.fileType === 'practice' ? 'Practice test' : 'Video'}
+            {lesson.fileType === 'practice' ? 'Quiz' : 'Video'}
             {lesson.duration !== null && ` · ${formatTime(lesson.duration)}`}
             {missing && ' · File missing'}
           </span>

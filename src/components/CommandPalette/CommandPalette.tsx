@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Brain, FileCheck2, FileText, Home, Layers, LibraryBig, PlayCircle, Search, Settings, StickyNote, CornerDownLeft,
+  Brain, FileCheck2, ListChecks, Home, Layers, LibraryBig, PlayCircle, Search, Settings, StickyNote, CornerDownLeft,
 } from 'lucide-react';
 import type { GlobalSearchResults } from '../../types';
 import type { Route } from '../../App';
@@ -50,7 +50,7 @@ function toItems(r: GlobalSearchResults): Item[] {
     ...r.lessons.map((l) => ({
       key: `l${l.id}`,
       group: 'Lessons',
-      icon: l.kind === 'practice' ? <FileText size={16} /> : <PlayCircle size={16} />,
+      icon: l.kind === 'practice' ? <ListChecks size={16} /> : <PlayCircle size={16} />,
       title: splitOrdinal(l.title).text,
       subtitle: `${cleanTitle(l.courseTitle)} · ${splitOrdinal(l.sectionTitle).text}`,
       route: { name: 'player', courseId: l.courseId, lessonId: l.id } as Route,

@@ -287,7 +287,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, Props>(function VideoPlayer(
       <div className={styles.player} ref={containerRef}>
         <div className={styles.errorState}>
           <AlertTriangle size={40} color="var(--warning)" />
-          <h3>{mediaKind === 'practice' ? 'Practice test not found' : 'Video file not found'}</h3>
+          <h3>{mediaKind === 'practice' ? 'Quiz file not found' : 'Video file not found'}</h3>
           <p>
             This lesson's file appears to have been moved or deleted. Your progress is saved —
             locate the file to keep {mediaKind === 'practice' ? 'studying' : 'watching'}.
