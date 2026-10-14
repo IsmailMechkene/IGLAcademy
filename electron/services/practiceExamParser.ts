@@ -80,10 +80,29 @@ export function htmlToRichText(html: string): string {
 
 interface RawQuestion {
   assessment_type?: unknown;
-  prompt?: { question?: unknown; answers?: unknown; explanation?: unknown };
+  prompt?: { question?: unknown; answers?: unknown; explanation?: unknown; feedbacks?: unknown };
   correct_response?: unknown;
   question_plain?: unknown;
   section?: unknown;
+}
+
+/**
+ * Lecture quizzes explain each option separately (`prompt.feedbacks`, one per
+ * answer) instead of giving one explanation. Writes them in the layout
+ * parseExplanation understands: the correct option(s), then why each other
+ * option is wrong. Options without feedback are left out.
+ */
+export function explanationFromFeedbacks(options: string[], feedbacks: string[], correctIndices: number[]): string {
+  const block = (i: number) => {
+    const text = htmlToRichText(feedbacks[i] ?? '');
+    return text ? [`**${options[i].replace(/\*/g, '')}**`, text] : [];
+  };
+  const correct = correctIndices.flatMap(block);
+  const incorrect = options.map((_, i) => i).filter((i) => !correctIndices.includes(i)).flatMap(block);
+  return [
+    ...(correct.length > 0 ? [correctIndices.length > 1 ? 'Correct answers:' : 'Correct answer:', ...correct] : []),
+    ...(incorrect.length > 0 ? ['Incorrect options:', ...incorrect] : []),
+  ].join('\n');
 }
 
 function letterToIndex(letter: unknown, optionCount: number): number | null {
@@ -247,10 +266,13 @@ export function parsePracticeExamHtml(content: string): ParsedPracticeExam | nul
       skipped++;
       continue;
     }
-    const options = (prompt.answers as unknown[])
-      .filter((a): a is string => typeof a === 'string')
-      .map((a) => htmlToText(a))
-      .filter((a) => a.length > 0);
+    // Keep each answer's feedback paired with it through the filtering.
+    const rawFeedbacks = Array.isArray(prompt.feedbacks) ? (prompt.feedbacks as unknown[]) : [];
+    const kept = (prompt.answers as unknown[])
+      .map((a, i) => ({ text: typeof a === 'string' ? htmlToText(a) : '', feedback: rawFeedbacks[i] }))
+      .filter((a) => a.text.length > 0);
+    const options = kept.map((a) => a.text);
+    const feedbacks = kept.map((a) => (typeof a.feedback === 'string' ? a.feedback : ''));
     if (options.length < 2 || !Array.isArray(raw.correct_response)) {
       skipped++;
       continue;
@@ -282,7 +304,9 @@ export function parsePracticeExamHtml(content: string): ParsedPracticeExam | nul
       question,
       options,
       correctIndices,
-      explanation: typeof prompt.explanation === 'string' ? htmlToRichText(prompt.explanation) : '',
+      explanation:
+        (typeof prompt.explanation === 'string' ? htmlToRichText(prompt.explanation) : '') ||
+        explanationFromFeedbacks(options, feedbacks, correctIndices),
       topic: typeof raw.section === 'string' ? raw.section.trim() : '',
     });
   }

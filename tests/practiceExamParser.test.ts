@@ -130,6 +130,37 @@ describe('parsePracticeExamHtml', () => {
     expect(parsed!.questions).toHaveLength(1);
     expect(parsed!.skipped).toBe(1);
   });
+
+  it('builds the explanation from per-answer feedbacks (lecture quizzes)', () => {
+    const lectureQuiz = {
+      assessment_type: 'multiple-choice',
+      prompt: {
+        question: '<p>Which tool shows when permissions were last used?</p>',
+        answers: ['<p>Credential checker</p>', '<p>Access viewer</p>', '', '<p>Policy log</p>'],
+        // One per answer, including the empty one that gets dropped.
+        feedbacks: ['Lists credentials, not usage.', 'It shows <strong>last access</strong>.', 'ignored', ''],
+      },
+      correct_response: ['b'],
+    };
+    const parsed = parsePracticeExamHtml(makeFile({ quiz_title: 'Lecture Quiz', questions: [lectureQuiz] }));
+    expect(parsed!.questions[0].options).toEqual(['Credential checker', 'Access viewer', 'Policy log']);
+    expect(parsed!.questions[0].explanation).toBe(
+      [
+        'Correct answer:',
+        '**Access viewer**',
+        'It shows **last access**.',
+        'Incorrect options:',
+        '**Credential checker**',
+        'Lists credentials, not usage.',
+      ].join('\n'),
+    );
+  });
+
+  it('prefers a real explanation over feedbacks', () => {
+    const both = { ...single, prompt: { ...single.prompt, feedbacks: ['a', 'b', 'c'] } };
+    const parsed = parsePracticeExamHtml(makeFile({ quiz_title: 'T', questions: [both] }));
+    expect(parsed!.questions[0].explanation).toBe('**Secrets Manager** - rotates credentials.');
+  });
 });
 
 describe('htmlToText', () => {

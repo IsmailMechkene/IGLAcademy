@@ -28,7 +28,8 @@ export const EXAM_QUESTIONS = [
   { q: 'Which service manages identities?', answers: ['AWS IAM', 'Amazon SNS', 'AWS Glue', 'Amazon EMR'], correct: ['a'] },
 ];
 
-function examHtml(title) {
+/** `feedbacks`: lecture-quiz style, one note per answer instead of an explanation. */
+function examHtml(title, { feedbacks = false } = {}) {
   return `<!doctype html><html><head><title>${title}</title></head><body><script>const quizData = ${JSON.stringify({
     quiz_title: title,
     questions: EXAM_QUESTIONS.map((x) => {
@@ -40,7 +41,9 @@ function examHtml(title) {
         prompt: {
           question: `<p>${x.q}</p>`,
           answers: x.answers.map((a) => `<p>${a}</p>`),
-          explanation: explanation(correctNames.join(' and '), incorrectNames),
+          ...(feedbacks
+            ? { feedbacks: x.answers.map((a) => (correctNames.includes(a) ? `${a} is right for this.` : `${a} does something else.`)) }
+            : { explanation: explanation(correctNames.join(' and '), incorrectNames) }),
         },
         correct_response: x.correct,
         section: 'Core services',
@@ -66,7 +69,7 @@ export function makeWorkspace() {
     '1\n00:00:00,000 --> 00:00:02,000\nHello from SRT\n\n2\n00:00:02,000 --> 00:00:04,000\nSecond cue\n',
   );
   fs.writeFileSync(path.join(course, '02 - Storage', 'Storage cheat sheet.md'), '# Storage\n\n- S3\n- EBS\n');
-  fs.writeFileSync(path.join(course, '02 - Storage', '04 - Practice Test #1.html'), examHtml('Storage quiz'));
+  fs.writeFileSync(path.join(course, '02 - Storage', '04 - Practice Test #1.html'), examHtml('Storage quiz', { feedbacks: true }));
 
   const exams = path.join(dir, 'Practice Exams AWS Certified Cloud Practitioner CLF-C02');
   fs.mkdirSync(exams, { recursive: true });

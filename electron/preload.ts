@@ -163,6 +163,9 @@ const api = {
     checkFile: (lessonId: number): Promise<boolean> => ipcRenderer.invoke('media:checkFile', lessonId),
     locateFile: (lessonId: number): Promise<LocateFileResult> => ipcRenderer.invoke('media:locateFile', lessonId),
     openExternal: (lessonId: number): Promise<void> => ipcRenderer.invoke('media:openExternal', lessonId),
+    /** The lesson's quiz when it is an HTML quiz page, else null. */
+    lessonQuiz: (lessonId: number): Promise<PracticeExamContent | null> =>
+      ipcRenderer.invoke('media:lessonQuiz', lessonId),
     subtitles: (lessonId: number): Promise<Array<{ index: number; label: string }>> =>
       ipcRenderer.invoke('media:subtitles', lessonId),
     subtitleText: (lessonId: number, index: number): Promise<string> =>

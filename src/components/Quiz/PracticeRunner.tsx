@@ -259,10 +259,17 @@ export default function PracticeRunner({ quiz, onClose, submitAnswers, passPerce
             </button>
           </div>
         ) : isLast ? (
-          <button className="btn btn-primary" disabled={!isRevealed || submitting} onClick={submit}>
-            <CheckCircle2 size={16} />
-            {submitting ? 'Submitting...' : 'See results'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!isRevealed && (
+              <button className="btn btn-ghost" onClick={skip}>
+                Skip
+              </button>
+            )}
+            <button className="btn btn-primary" disabled={!isRevealed || submitting} onClick={submit}>
+              <CheckCircle2 size={16} />
+              {submitting ? 'Submitting...' : 'See results'}
+            </button>
+          </div>
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
             {!isRevealed && (

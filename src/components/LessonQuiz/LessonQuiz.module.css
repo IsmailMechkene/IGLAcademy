@@ -1,0 +1,7 @@
+/* Fills the player stage (normally the black video area) and scrolls. */
+.wrap {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--bg);
+}

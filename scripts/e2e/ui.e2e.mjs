@@ -173,6 +173,51 @@ export async function run() {
         assert(r.hidden, 'panel did not hide');
       }],
 
+      ['a quiz lesson inside a course runs natively and completes the lesson', async () => {
+        await nav(app.page, 'Courses');
+        const r = await app.page.run(async () => {
+          await click('[aria-label^="Open course:"]');
+          await sleep(300);
+          if (!byText('main button', 'Practice Test #1')) await click('main button', 'Storage', 'Storage section');
+          await click('main button', 'Practice Test #1', 'quiz lesson');
+          await waitFor(() => /question 1 of 5/i.test(mainText()), 'native quiz');
+          const iframe = !!document.querySelector('main iframe');
+          // Answer the first question wrong: the per-answer feedback explains it.
+          const option = (text) => Array.from(document.querySelectorAll('main button[class*="optionBtn"]')).find((b) => b.textContent.includes(text));
+          option('Amazon EC2').click();
+          await waitFor(() => mainText().includes('Not quite'), 'verdict');
+          const feedback = mainText().includes('Amazon S3 is right for this.') && mainText().includes('Amazon EC2 does something else.');
+          // Skip the rest, then finish. Buttons are re-enabled a render after
+          // each answer, so wait for an enabled one before clicking.
+          const press = async (text) => {
+            const buttons = () => Array.from(document.querySelectorAll('main [class*="takerNav"] button'));
+            const b = await waitFor(
+              () => buttons().find((el) => el.textContent.includes(text) && !el.disabled),
+              `quiz button "${text}"`,
+            ).catch((err) => {
+              const shown = buttons().map((el) => el.textContent.trim() + (el.disabled ? ' (disabled)' : '')).join(', ');
+              throw new Error(`${err.message}; on ${(mainText().match(/question \d of 5/i) || ['?'])[0]} with [${shown}]`);
+            });
+            b.click();
+          };
+          for (let i = 1; i < 5; i++) {
+            await press('Next');
+            await waitFor(() => new RegExp(`question ${i + 1} of 5`, 'i').test(mainText()), `question ${i + 1}`);
+            await press('Skip');
+          }
+          await press('See results');
+          await waitFor(() => /0 of 5 questions correctly/.test(mainText()), 'results');
+          const lessonId = (await api.courses.list().then((cs) => api.courses.get(cs[0].id)))
+            .sections.flatMap((s) => s.lessons).find((l) => l.title.includes('Practice Test #1'));
+          await click('button[aria-label="Back to course"]');
+          await waitFor(() => document.querySelector('nav[aria-label="Main"]'), 'app chrome back');
+          return { iframe, feedback, completed: lessonId?.completed };
+        });
+        assert(!r.iframe, 'quiz lesson still shown as a page preview');
+        assert(r.feedback, 'per-answer feedback missing from the explanation');
+        assert(r.completed === true, 'finishing the quiz did not complete the lesson');
+      }],
+
       ['real playback time is recorded and shown on Home', async () => {
         await nav(app.page, 'Courses');
         const r = await app.page.run(async () => {

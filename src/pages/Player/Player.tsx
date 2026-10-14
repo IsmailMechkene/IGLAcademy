@@ -10,7 +10,7 @@ import { formatTime } from '../../utils/format';
 import { cleanTitle, splitOrdinal } from '../../utils/titles';
 import { locateFileMessage } from '../../utils/locateFile';
 import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlayer/VideoPlayer';
-import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
+import LessonQuiz from '../../components/LessonQuiz/LessonQuiz';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
 import WindowControls from '../../components/WindowControls/WindowControls';
 import NotesPanel from '../../components/NotesPanel/NotesPanel';
@@ -587,10 +587,14 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
           <div className={styles.videoWrap}>
             {mediaUrl || fileMissing ? (
               lessonKind === 'practice' && !fileMissing ? (
-                <PracticeViewer
+                <LessonQuiz
+                  key={currentLessonId}
                   src={mediaUrl ?? ''}
                   title={lessonTitle}
                   lessonId={currentLessonId}
+                  onFinished={() => {
+                    if (!completedRef.current) markCompleted(currentLessonId, true);
+                  }}
                 />
               ) : (
                 <VideoPlayer

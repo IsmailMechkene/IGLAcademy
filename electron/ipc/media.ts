@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type Database from 'better-sqlite3';
-import type { Course, LocateFileResult } from '../../src/types';
+import type { Course, LocateFileResult, PracticeExamContent } from '../../src/types';
 import { getDb } from '../database/connection';
 import {
   getMediaUrl, checkFileExists, listSubtitleTracks, resolveLessonFile, resolveSubtitleFile,
@@ -12,6 +12,7 @@ import { updateLessonFilePath, getLesson, getCourse } from '../database/reposito
 import { VIDEO_EXTENSIONS, PRACTICE_EXTENSIONS } from '../services/courseScanner';
 import { requireId, ValidationError } from '../services/validate';
 import { isInsideDir } from '../services/pathIdentity';
+import { parsePracticeExamHtml } from '../services/practiceExamParser';
 
 /** The course a lesson belongs to (lessons reach courses through sections). */
 function getCourseForLesson(db: Database.Database, lessonId: number): Course | null {
@@ -26,6 +27,21 @@ export function registerMediaIpc(): void {
 
   ipcMain.handle('media:getUrl', (_e, lessonId: unknown) => {
     return getMediaUrl(db, requireId(lessonId, 'lessonId'));
+  });
+
+  // An HTML lesson that is a quiz (embedded quizData), parsed for the native
+  // quiz runner. null when the page is something else: it is then shown as-is.
+  ipcMain.handle('media:lessonQuiz', async (_e, lessonId: unknown): Promise<PracticeExamContent | null> => {
+    const file = resolveLessonFile(db, requireId(lessonId, 'lessonId'));
+    if (!(PRACTICE_EXTENSIONS as readonly string[]).includes(path.extname(file).toLowerCase())) return null;
+    const parsed = parsePracticeExamHtml(await fs.promises.readFile(file, 'utf8'));
+    if (!parsed || parsed.questions.length === 0) return null;
+    return {
+      title: parsed.title || path.parse(file).name,
+      description: `${parsed.questions.length} questions`,
+      questions: parsed.questions,
+      contentHash: '',
+    };
   });
 
   ipcMain.handle('media:checkFile', (_e, lessonId: unknown) => {
