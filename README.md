@@ -1,3 +1,5 @@
+<img width="1983" height="793" alt="IGLAcademy Coral Teal Logo" src="https://github.com/user-attachments/assets/0c84b756-fe2a-45b4-819e-04e3527e8d1c" />
+
 # IGLAcademy
 
 **Your courses. Your pace. Your progress.**
