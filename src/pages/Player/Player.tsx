@@ -12,6 +12,7 @@ import { locateFileMessage } from '../../utils/locateFile';
 import VideoPlayer, { type VideoPlayerHandle } from '../../components/VideoPlayer/VideoPlayer';
 import PracticeViewer from '../../components/PracticeViewer/PracticeViewer';
 import LessonSidebar from '../../components/LessonSidebar/LessonSidebar';
+import WindowControls from '../../components/WindowControls/WindowControls';
 import NotesPanel from '../../components/NotesPanel/NotesPanel';
 import LoadError from '../../components/LoadError/LoadError';
 import Modal from '../../components/Modal/Modal';
@@ -506,12 +507,26 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
 
   if (!course) {
     return (
-      <div style={{ padding: 48, maxWidth: 560 }}>
-        {courseError ? (
-          <LoadError message="Could not load this course." onRetry={() => setRetryKey((k) => k + 1)} />
-        ) : (
-          <div className="muted">Loading player...</div>
-        )}
+      <div className={styles.page}>
+        <header className={`${styles.top} drag-region`}>
+          <button
+            className="iconBtn"
+            onClick={() => navigate({ name: 'course', courseId })}
+            aria-label="Back to course"
+            title="Back to course"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div className={styles.topTitles} />
+          <WindowControls />
+        </header>
+        <div style={{ padding: 48, maxWidth: 560 }}>
+          {courseError ? (
+            <LoadError message="Could not load this course." onRetry={() => setRetryKey((k) => k + 1)} />
+          ) : (
+            <div className="muted">Loading player...</div>
+          )}
+        </div>
       </div>
     );
   }
@@ -524,7 +539,7 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
 
   return (
     <div className={styles.page}>
-      <header className={styles.top}>
+      <header className={`${styles.top} drag-region`}>
         <button
           className="iconBtn"
           onClick={() => navigate({ name: 'course', courseId })}
@@ -564,6 +579,7 @@ export default function Player({ courseId, lessonId, startAt }: Props) {
         >
           {panel ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
         </button>
+        <WindowControls />
       </header>
 
       <div className={styles.body}>

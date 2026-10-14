@@ -205,6 +205,20 @@ const api = {
       };
     },
   },
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke('window:toggleMaximize'),
+    close: (): Promise<void> => ipcRenderer.invoke('window:close'),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+    /** Calls `listener` when the window is maximized or restored; returns an unsubscribe. */
+    onMaximizedChange: (listener: (maximized: boolean) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, maximized: boolean) => listener(maximized);
+      ipcRenderer.on('window:maximized', handler);
+      return () => {
+        ipcRenderer.removeListener('window:maximized', handler);
+      };
+    },
+  },
 };
 
 export type IsmaLearnApi = typeof api;

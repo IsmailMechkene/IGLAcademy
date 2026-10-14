@@ -17,6 +17,7 @@ import { registerPracticeIpc } from './ipc/practice';
 import { registerAppIpc } from './ipc/app';
 import { registerSearchIpc } from './ipc/search';
 import { registerUpdatesIpc } from './ipc/updates';
+import { registerWindowIpc, forwardMaximizedState } from './ipc/window';
 import { initLogger, installCrashHandlers, log, flushLogSync } from './services/logger';
 import { initThumbnailCache } from './services/thumbnailService';
 import { createAutoBackupAsync } from './services/backupService';
@@ -96,6 +97,8 @@ function createWindow(): void {
     icon: path.join(__dirname, '../assets/icon.png'),
     backgroundColor: '#0f1117',
     autoHideMenuBar: true,
+    // No native title bar: the app draws its own (Topbar / player header).
+    frame: false,
     // Shown on first paint, already maximized: no empty frame that then jumps.
     show: false,
     webPreferences: {
@@ -107,6 +110,8 @@ function createWindow(): void {
       spellcheck: false,
     },
   });
+
+  forwardMaximizedState(win);
 
   // Start maximized so the app fills the screen by default.
   win.once('ready-to-show', () => {
@@ -254,6 +259,7 @@ app.whenReady().then(() => {
   registerAppIpc();
   registerSearchIpc();
   registerUpdatesIpc();
+  registerWindowIpc();
 
   createWindow();
   initUpdates();

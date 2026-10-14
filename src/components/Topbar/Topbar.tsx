@@ -1,6 +1,7 @@
 import { ChevronRight, Moon, Search, Sun } from 'lucide-react';
 import { useApp } from '../../App';
 import type { Crumb, Route } from '../../App';
+import WindowControls from '../WindowControls/WindowControls';
 import styles from './Topbar.module.css';
 
 /** The trail shown when a page does not provide its own. */
@@ -40,7 +41,7 @@ export default function Topbar() {
       : settings.theme;
 
   return (
-    <header className={styles.topbar}>
+    <header className={`${styles.topbar} drag-region`}>
       <nav className={styles.crumbs} aria-label="Breadcrumb">
         {trail.map((crumb, i) => {
           const last = i === trail.length - 1;
@@ -78,6 +79,7 @@ export default function Topbar() {
       >
         {resolvedTheme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
       </button>
+      <WindowControls />
     </header>
   );
 }

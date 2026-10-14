@@ -132,7 +132,7 @@ export default function Sidebar() {
 
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
-      <div className={styles.brand}>
+      <div className={`${styles.brand} drag-region`}>
         <div className={styles.logoMark}>
           <img src={logo} alt="" draggable={false} />
         </div>

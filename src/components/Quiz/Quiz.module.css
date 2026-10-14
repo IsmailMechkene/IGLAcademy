@@ -45,6 +45,7 @@
 /* shared dialog */
 .overlay {
   position: fixed;
+  -webkit-app-region: no-drag; /* clickable over the title-bar drag area */
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
