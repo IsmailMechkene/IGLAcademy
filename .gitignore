@@ -12,3 +12,4 @@ scripts/.seed-bundle.cjs
 # Downloaded third-party practice tests are user data, not source. Keep them
 # outside the repo (or here, untracked) and register the folder in the app.
 data/practice_exams/
+data/quiz/
