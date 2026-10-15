@@ -4,6 +4,11 @@ What's new in each version. The app shows the newest entries once after an
 update, and the release workflow uses the same text for the GitHub release.
 Keep one `## <version>` heading per release and plain `- ` bullets under it.
 
+## 1.0.3
+
+- **Updates find you**: IGLAcademy now looks for new versions on its own every hour and when you come back to it. A card shows the download and its size, then lets you restart with one click.
+- **A new launch screen**: the IGLAcademy logo animates while the app opens.
+
 ## 1.0.2
 
 - **A fresh look**: the app now wears the IGLAcademy colours, coral for buttons and highlights and teal for your progress.

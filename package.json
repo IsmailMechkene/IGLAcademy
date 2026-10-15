@@ -1,6 +1,6 @@
 {
   "name": "iglacademy",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "IGLAcademy — Your courses. Your pace. Your progress.",
   "main": "dist-electron/main.js",
   "author": "IGLAcademy",
