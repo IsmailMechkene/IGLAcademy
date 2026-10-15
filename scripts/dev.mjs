@@ -4,7 +4,7 @@ import esbuild from 'esbuild';
 
 // 1. Initial one-shot build of electron main + preload
 await esbuild.build({
-  entryPoints: ['electron/main.ts', 'electron/preload.ts'],
+  entryPoints: ['electron/main.ts', 'electron/preload.ts', 'electron/splashPreload.ts'],
   bundle: true,
   platform: 'node',
   format: 'cjs',
@@ -16,7 +16,7 @@ await esbuild.build({
 
 // 2. Watch electron code for changes
 const ctx = await esbuild.context({
-  entryPoints: ['electron/main.ts', 'electron/preload.ts'],
+  entryPoints: ['electron/main.ts', 'electron/preload.ts', 'electron/splashPreload.ts'],
   bundle: true,
   platform: 'node',
   format: 'cjs',

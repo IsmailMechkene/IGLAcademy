@@ -4,7 +4,7 @@ const isWatch = process.argv.includes('--watch');
 
 /** @type {import('esbuild').BuildOptions} */
 const options = {
-  entryPoints: ['electron/main.ts', 'electron/preload.ts'],
+  entryPoints: ['electron/main.ts', 'electron/preload.ts', 'electron/splashPreload.ts'],
   bundle: true,
   platform: 'node',
   format: 'cjs',

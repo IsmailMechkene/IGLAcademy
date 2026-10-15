@@ -172,7 +172,11 @@ export async function launch(profileDir, { env = {} } = {}) {
     if (exited) throw new Error('Electron exited during startup');
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
-      target = (await res.json()).find((t) => t.type === 'page' && !t.url.startsWith('devtools://')) ?? null;
+      // The splash window opens first; the app is the other page.
+      target =
+        (await res.json()).find(
+          (t) => t.type === 'page' && !t.url.startsWith('devtools://') && !t.url.includes('splash.html'),
+        ) ?? null;
     } catch {
       // not listening yet
     }

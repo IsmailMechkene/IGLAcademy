@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>IGLAcademy</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0e0f;
+        user-select: none;
+        /* Frameless window: let the user drag it from anywhere. */
+        -webkit-app-region: drag;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The IGLAcademy mark, drawn in a 400×400 space. Everything starts
+         hidden; src/splash/splash.ts poses and animates it every frame. -->
+    <svg viewBox="0 0 400 400" aria-label="IGLAcademy is loading" role="img">
+      <defs>
+        <linearGradient id="bar-gradient" gradientUnits="userSpaceOnUse" x1="-80" y1="0" x2="80" y2="0">
+          <stop offset="0" stop-color="#2ba89c" />
+          <stop offset="1" stop-color="#f76440" />
+        </linearGradient>
+      </defs>
+      <g id="logo" opacity="0">
+        <polygon id="book-bottom" fill="#23857c" points="-82,-27 0,5 82,-27 82,-5 0,27 -82,-5" />
+        <polygon id="book-middle" fill="#f0dcc8" points="-82,-26.5 0,5.5 82,-26.5 82,-5.5 0,26.5 -82,-5.5" />
+        <g id="tassel" fill="#f76440">
+          <line x1="0" y1="0" x2="0" y2="44" stroke="#f76440" stroke-width="5" stroke-linecap="round" />
+          <circle cx="0" cy="52" r="11.5" />
+        </g>
+        <!-- 216.6 × 82.8 diamond with 10px rounded corners. -->
+        <path
+          id="cap"
+          fill="#f76440"
+          d="M -3.568 -40.033 Q 0 -41.397 3.568 -40.033 L 83.879 -9.339 Q 108.315 0 83.879 9.339 L 3.568 40.033 Q 0 41.397 -3.568 40.033 L -83.879 9.339 Q -108.315 0 -83.879 -9.339 Z"
+        />
+        <g transform="translate(2.5 98)">
+          <path id="track" d="M -80 0 H 80" stroke="#1c2627" stroke-width="4" stroke-linecap="round" fill="none" />
+          <path
+            id="bar"
+            d="M -80 0 H 80"
+            pathLength="100"
+            stroke="url(#bar-gradient)"
+            stroke-width="4"
+            stroke-linecap="round"
+            fill="none"
+          />
+        </g>
+      </g>
+    </svg>
+    <script type="module" src="/src/splash/splash.ts"></script>
+  </body>
+</html>

@@ -87,7 +87,82 @@ function registerMediaProtocol(): void {
   });
 }
 
-function createWindow(): void {
+/** Loads one of the renderer's HTML pages (Vite dev server or built bundle). */
+function loadPage(win: BrowserWindow, page: 'index.html' | 'splash.html'): void {
+  if (isDev) {
+    win.loadURL(new URL(page, process.env.VITE_DEV_SERVER_URL!).href);
+  } else {
+    win.loadFile(path.join(__dirname, '../dist', page));
+  }
+}
+
+/**
+ * A small frameless window playing the Rive launch animation while the app
+ * window loads behind it. It has no app API: only the two splash signals.
+ */
+function createSplash(): BrowserWindow {
+  const splash = new BrowserWindow({
+    width: 360,
+    height: 360,
+    title: 'IGLAcademy',
+    icon: path.join(__dirname, '../assets/icon.png'),
+    backgroundColor: '#0a0e0f',
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    center: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'splashPreload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      spellcheck: false,
+    },
+  });
+  splash.once('ready-to-show', () => splash.show());
+  splash.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  splash.webContents.on('will-navigate', (event) => event.preventDefault());
+  loadPage(splash, 'splash.html');
+  return splash;
+}
+
+// Upper bound on how long the splash may keep a ready app window hidden
+// (the intro plus exit normally take under two seconds).
+const SPLASH_MAX_WAIT_MS = 4000;
+
+/**
+ * Hands over from the splash to the app window: tells the splash the app is
+ * ready, waits for its exit animation, then reveals the app. Any failure on
+ * the splash side (crash, closed, never answers) still reveals the app.
+ */
+function revealAfterSplash(splash: BrowserWindow, show: () => void): void {
+  let revealed = false;
+  const readyAt = Date.now();
+  const reveal = (reason: string) => {
+    if (revealed) return;
+    revealed = true;
+    clearTimeout(fallback);
+    log('info', `splash handed over (${reason}) ${Date.now() - readyAt} ms after the app window was ready`);
+    show();
+    if (!splash.isDestroyed()) splash.destroy();
+  };
+  const fallback = setTimeout(() => reveal('timed out'), SPLASH_MAX_WAIT_MS);
+
+  splash.once('closed', () => reveal('splash closed'));
+  splash.webContents.once('render-process-gone', () => reveal('splash crashed'));
+  splash.webContents.ipc.once('splash:done', () => reveal('animation finished'));
+
+  const sendFinish = () => {
+    if (!splash.isDestroyed()) splash.webContents.send('splash:finish');
+  };
+  if (splash.webContents.isLoading()) splash.webContents.once('did-finish-load', sendFinish);
+  else sendFinish();
+}
+
+function createWindow(splash?: BrowserWindow): void {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -115,8 +190,12 @@ function createWindow(): void {
 
   // Start maximized so the app fills the screen by default.
   win.once('ready-to-show', () => {
-    win.maximize();
-    win.show();
+    const show = () => {
+      win.maximize();
+      win.show();
+    };
+    if (splash && !splash.isDestroyed()) revealAfterSplash(splash, show);
+    else show();
   });
 
   // Open external links in the system browser, never inside the app
@@ -149,11 +228,7 @@ function createWindow(): void {
     log(level === 'error' ? 'error' : 'warn', `renderer console: ${message.slice(0, 500)}`, `${sourceId}:${lineNumber}`);
   });
 
-  if (isDev) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL!);
-  } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
+  loadPage(win, 'index.html');
 }
 
 /**
@@ -220,9 +295,13 @@ app.whenReady().then(() => {
     return;
   }
 
+  // Up first, so the animation plays while the database opens and migrates.
+  const splash = createSplash();
+
   // Initialize database (runs migrations) before any IPC handler fires
   const db = openDatabaseOrRecover();
   if (!db) {
+    splash.destroy();
     flushLogSync();
     app.exit(1);
     return;
@@ -261,7 +340,7 @@ app.whenReady().then(() => {
   registerUpdatesIpc();
   registerWindowIpc();
 
-  createWindow();
+  createWindow(splash);
   initUpdates();
 
   app.on('activate', () => {
