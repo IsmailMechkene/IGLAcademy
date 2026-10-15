@@ -120,6 +120,28 @@ export async function run() {
         const cached = fs.readdirSync(path.join(CACHE_DIR, 'pending')).filter((f) => f.endsWith('.exe'));
         assert(cached.length === 1, `pending installers: ${cached.join(', ') || 'none'}`);
       }],
+      ['the ready update is announced on screen with its download size', async () => {
+        const r = await app.page.run(async () => {
+          const banner = await waitFor(() => document.querySelector('[data-testid="update-banner"]'), 'update banner');
+          const text = banner.textContent;
+          const status = document.querySelector('[data-testid="update-status"]')?.textContent ?? '';
+          const sidebar = byText('aside button', 'Restart to update')?.textContent ?? '';
+          byText('button', 'Later', banner).click();
+          await sleep(100);
+          return {
+            text,
+            status,
+            sidebar,
+            hidden: !document.querySelector('[data-testid="update-banner"]'),
+            sidebarKept: !!byText('aside button', 'Restart to update'),
+          };
+        });
+        // The test installer is 256 KB, downloaded whole (no blockmap).
+        assert(r.text.includes(`IGLAcademy ${NEXT} is ready`) && r.text.includes('256.0 KB'), r.text);
+        assert(r.status.includes('256.0 KB downloaded'), r.status);
+        assert(r.sidebar.includes('256.0 KB'), r.sidebar);
+        assert(r.hidden && r.sidebarKept, '"Later" should hide the banner but keep the sidebar card');
+      }],
       ['the automatic-check setting persists', async () => {
         const r = await app.page.run(async () => {
           const before = (await api.settings.getAll()).autoUpdate;

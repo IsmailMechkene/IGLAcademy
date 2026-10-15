@@ -9,6 +9,7 @@ import type { CourseWithProgress } from '../../types';
 import { api } from '../../services/api';
 import { useUpdateStatus } from '../../services/updates';
 import { cleanTitle } from '../../utils/titles';
+import { formatBytes } from '../../utils/format';
 import CourseCover from '../CourseCover/CourseCover';
 import logo from '../../../assets/icon.png';
 import styles from './Sidebar.module.css';
@@ -204,7 +205,9 @@ export default function Sidebar() {
             <Download size={16} aria-hidden="true" />
             <span className={styles.updateText}>
               <span className={styles.updateTitle}>Restart to update</span>
-              <span className={styles.updateMeta}>Version {update.version} is ready</span>
+              <span className={styles.updateMeta}>
+                Version {update.version} is ready{update.size ? ` · ${formatBytes(update.size)}` : ''}
+              </span>
             </span>
           </button>
         )}

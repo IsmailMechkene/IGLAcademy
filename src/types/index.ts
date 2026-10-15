@@ -361,8 +361,10 @@ export type UpdateStatus =
   | { state: 'idle' }
   | { state: 'checking' }
   | { state: 'up-to-date'; checkedAt: number }
-  | { state: 'downloading'; version: string; percent: number }
-  | { state: 'ready'; version: string }
+  /** `total`/`transferred` are the bytes actually fetched (only the changed parts of the installer), once known. */
+  | { state: 'downloading'; version: string; percent: number; transferred?: number; total?: number }
+  /** `size` is how much was downloaded, when known. */
+  | { state: 'ready'; version: string; size?: number }
   | { state: 'error'; message: string };
 
 export const DAILY_GOAL_OPTIONS = [10, 15, 20, 30, 45, 60, 90] as const;

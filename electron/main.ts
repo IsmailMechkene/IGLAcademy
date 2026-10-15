@@ -33,6 +33,11 @@ if (!app.commandLine.hasSwitch('user-data-dir')) {
   app.setPath('userData', path.join(app.getPath('appData'), 'IsmaLearn'));
 }
 
+// Windows only shows notifications (update ready) for an app whose ID matches
+// its Start-menu shortcut; the installer creates it with the appId from
+// electron-builder.yml.
+if (process.platform === 'win32') app.setAppUserModelId('com.ismalearn.app');
+
 // Custom schemes must be registered as privileged BEFORE the app is ready.
 // Without standard+secure privileges, Chromium silently refuses to load
 // media:// URLs in <video>/<img> tags (black player, no error surfaced).

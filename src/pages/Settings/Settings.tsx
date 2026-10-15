@@ -27,15 +27,17 @@ function updateText(status: UpdateStatus): string {
     case 'unsupported':
       return 'This is a development build. Installed releases update themselves.';
     case 'idle':
-      return 'New versions download in the background and install when you restart.';
+      return 'IGLAcademy looks for new versions on its own. They download in the background and install when you restart.';
     case 'checking':
       return 'Checking for updates…';
     case 'up-to-date':
       return `You have the latest version. Checked ${formatDateTime(new Date(status.checkedAt).toISOString())}.`;
     case 'downloading':
-      return `Downloading version ${status.version}… ${status.percent}%`;
+      return status.total && status.transferred !== undefined
+        ? `Downloading version ${status.version}… ${status.percent}% (${formatBytes(status.transferred)} of ${formatBytes(status.total)})`
+        : `Downloading version ${status.version}… ${status.percent}%`;
     case 'ready':
-      return `Version ${status.version} is ready. Restart IGLAcademy to finish updating, or it installs the next time you close the app.`;
+      return `Version ${status.version} is ready${status.size ? ` (${formatBytes(status.size)} downloaded)` : ''}. Restart IGLAcademy to finish updating, or it installs the next time you close the app.`;
     case 'error':
       return status.message;
   }
@@ -404,8 +406,8 @@ export default function Settings() {
           <div className={styles.settingInfo}>
             <div className={styles.settingLabel}>Check for updates automatically</div>
             <div className={styles.settingDesc}>
-              Look for a new version on GitHub when the app starts and every few hours. Nothing about
-              your library is sent.
+              Look for a new version on GitHub when the app starts, every hour, and when you come back to
+              it. Nothing about your library is sent.
             </div>
           </div>
           <SegmentedControl<'on' | 'off'>

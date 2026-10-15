@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar/Sidebar';
 import Topbar from './components/Topbar/Topbar';
 import CommandPalette from './components/CommandPalette/CommandPalette';
 import WhatsNew from './components/WhatsNew/WhatsNew';
+import UpdateBanner from './components/UpdateBanner/UpdateBanner';
 import { entriesSince, parseChangelog, type ChangelogEntry } from './utils/changelog';
 import changelogText from '../CHANGELOG.md?raw';
 import Dashboard from './pages/Dashboard/Dashboard';
@@ -266,6 +267,8 @@ export default function App() {
               {renderPage()}
             </main>
           </div>
+          {/* Not over the player: the sidebar card is there when the user leaves it. */}
+          <UpdateBanner />
         </div>
       )}
     </AppContext.Provider>
